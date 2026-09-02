@@ -1,0 +1,708 @@
+[
+  {
+    "id": "yt_-7eQkJEL4qY",
+    "youtubeId": "-7eQkJEL4qY",
+    "title": "YouTube Video (-7eQkJEL4qY)",
+    "channel": "YouTube",
+    "thumbnail": "https://img.youtube.com/vi/-7eQkJEL4qY/hqdefault.jpg",
+    "cefrLevel": "Standard",
+    "duration": "105s",
+    "segmentsCount": 40,
+    "savedAt": "2026-09-02T09:13:45.032Z",
+    "favorite": false,
+    "segments": [
+      {
+        "segment_id": "seg_001",
+        "text": "Hello everyone and welcome back to Mr.",
+        "start_time": 8.3,
+        "end_time": 13.9
+      },
+      {
+        "segment_id": "seg_002",
+        "text": "English Channel where learning English",
+        "start_time": 11.5,
+        "end_time": 17
+      },
+      {
+        "segment_id": "seg_003",
+        "text": "is easy and fun. I'm Emily. [music]",
+        "start_time": 13.9,
+        "end_time": 20.1
+      },
+      {
+        "segment_id": "seg_004",
+        "text": ">> Hello Emily. Hi everyone. I'm always so",
+        "start_time": 17,
+        "end_time": 21.8
+      },
+      {
+        "segment_id": "seg_005",
+        "text": "happy to sit down and chat with you",
+        "start_time": 20.1,
+        "end_time": 24.4
+      },
+      {
+        "segment_id": "seg_006",
+        "text": "guys. It's a beautiful day here and I'm",
+        "start_time": 21.8,
+        "end_time": 26.6
+      },
+      {
+        "segment_id": "seg_007",
+        "text": "really excited for today's chat.",
+        "start_time": 24.4,
+        "end_time": 29.4
+      },
+      {
+        "segment_id": "seg_008",
+        "text": ">> It really is a beautiful day. Yeah. And",
+        "start_time": 26.6,
+        "end_time": 32
+      },
+      {
+        "segment_id": "seg_009",
+        "text": "you know sometimes the best days come",
+        "start_time": 29.4,
+        "end_time": 35.1
+      },
+      {
+        "segment_id": "seg_010",
+        "text": "right after a really bad storm. That",
+        "start_time": 32,
+        "end_time": 36.9
+      },
+      {
+        "segment_id": "seg_011",
+        "text": "actually makes me think about what we",
+        "start_time": 35.1,
+        "end_time": 38.3
+      },
+      {
+        "segment_id": "seg_012",
+        "text": "are talking about today.",
+        "start_time": 36.9,
+        "end_time": 41.2
+      },
+      {
+        "segment_id": "seg_013",
+        "text": ">> Oh that's a great way to put it. Storms",
+        "start_time": 38.3,
+        "end_time": 43.5
+      },
+      {
+        "segment_id": "seg_014",
+        "text": "are just a normal part of life. We all",
+        "start_time": 41.2,
+        "end_time": 46
+      },
+      {
+        "segment_id": "seg_015",
+        "text": "face hard times or what we usually call",
+        "start_time": 43.5,
+        "end_time": 47.1
+      },
+      {
+        "segment_id": "seg_016",
+        "text": "struggles.",
+        "start_time": 46,
+        "end_time": 50
+      },
+      {
+        "segment_id": "seg_017",
+        "text": ">> Exactly. We all struggle with something.",
+        "start_time": 47.1,
+        "end_time": 52.3
+      },
+      {
+        "segment_id": "seg_018",
+        "text": "But today we want to look at those hard",
+        "start_time": 50,
+        "end_time": 55.2
+      },
+      {
+        "segment_id": "seg_019",
+        "text": "times in a totally new way. We want to",
+        "start_time": 52.3,
+        "end_time": 57.8
+      },
+      {
+        "segment_id": "seg_020",
+        "text": "see how your struggle is actually your",
+        "start_time": 55.2,
+        "end_time": 59.1
+      },
+      {
+        "segment_id": "seg_021",
+        "text": "secret power.",
+        "start_time": 57.8,
+        "end_time": 61
+      },
+      {
+        "segment_id": "seg_022",
+        "text": ">> That sounds a bit strange at first,",
+        "start_time": 59.1,
+        "end_time": 63.7
+      },
+      {
+        "segment_id": "seg_023",
+        "text": "doesn't it? Usually when we struggle, we",
+        "start_time": 61,
+        "end_time": 65.9
+      },
+      {
+        "segment_id": "seg_024",
+        "text": "feel really weak. We definitely don't",
+        "start_time": 63.7,
+        "end_time": 67.4
+      },
+      {
+        "segment_id": "seg_025",
+        "text": "feel powerful at all.",
+        "start_time": 65.9,
+        "end_time": 69.4
+      },
+      {
+        "segment_id": "seg_026",
+        "text": ">> I know, right? When you're in the middle",
+        "start_time": 67.4,
+        "end_time": 71.5
+      },
+      {
+        "segment_id": "seg_027",
+        "text": "of a hard problem, you just want it to",
+        "start_time": 69.4,
+        "end_time": 73.9
+      },
+      {
+        "segment_id": "seg_028",
+        "text": "end. You just sit there and think, why",
+        "start_time": 71.5,
+        "end_time": 75.8
+      },
+      {
+        "segment_id": "seg_029",
+        "text": "is this happening to me?",
+        "start_time": 73.9,
+        "end_time": 78.3
+      },
+      {
+        "segment_id": "seg_030",
+        "text": ">> Totally. It's just human nature to want",
+        "start_time": 75.8,
+        "end_time": 80.8
+      },
+      {
+        "segment_id": "seg_031",
+        "text": "things to be easy. We all want the easy",
+        "start_time": 78.3,
+        "end_time": 83.3
+      },
+      {
+        "segment_id": "seg_032",
+        "text": "road. But the easy road doesn't really",
+        "start_time": 80.8,
+        "end_time": 85.4
+      },
+      {
+        "segment_id": "seg_033",
+        "text": "teach us very much, does it?",
+        "start_time": 83.3,
+        "end_time": 87.9
+      },
+      {
+        "segment_id": "seg_034",
+        "text": ">> Yep. That's the hard truth. Think about",
+        "start_time": 85.4,
+        "end_time": 90.2
+      },
+      {
+        "segment_id": "seg_035",
+        "text": "going to the gym, for example. If you",
+        "start_time": 87.9,
+        "end_time": 92.9
+      },
+      {
+        "segment_id": "seg_036",
+        "text": "lift a very light weight, it's easy, but",
+        "start_time": 90.2,
+        "end_time": 95.3
+      },
+      {
+        "segment_id": "seg_037",
+        "text": "your muscles don't grow at all.",
+        "start_time": 92.9,
+        "end_time": 98
+      },
+      {
+        "segment_id": "seg_038",
+        "text": ">> For sure. To get stronger, you have to",
+        "start_time": 95.3,
+        "end_time": 100.4
+      },
+      {
+        "segment_id": "seg_039",
+        "text": "lift something heavy. Your muscles have",
+        "start_time": 98,
+        "end_time": 102.8
+      },
+      {
+        "segment_id": "seg_040",
+        "text": "to struggle a little bit. The physical",
+        "start_time": 100.4,
+        "end_time": 104.6
+      }
+    ],
+    "analysis": {
+      "segments_enhancement": [
+        {
+          "segment_id": "seg_001",
+          "thought_groups_text": "Hello everyone and welcome back / to Mr.",
+          "ipa_transcription": "",
+          "stress_words": [
+            "Hello",
+            "everyone",
+            "welcome",
+            "back"
+          ]
+        },
+        {
+          "segment_id": "seg_002",
+          "thought_groups_text": "English Channel where learning English",
+          "ipa_transcription": "",
+          "stress_words": [
+            "English",
+            "Channel",
+            "where",
+            "learning"
+          ]
+        },
+        {
+          "segment_id": "seg_003",
+          "thought_groups_text": "is easy and fun. I'm Emily. [music]",
+          "ipa_transcription": "",
+          "stress_words": [
+            "easy",
+            "fun",
+            "I'm",
+            "Emily",
+            "music"
+          ]
+        },
+        {
+          "segment_id": "seg_004",
+          "thought_groups_text": ">> Hello Emily. Hi everyone. I'm always so",
+          "ipa_transcription": "",
+          "stress_words": [
+            "Hello",
+            "Emily",
+            "everyone",
+            "I'm",
+            "always"
+          ]
+        },
+        {
+          "segment_id": "seg_005",
+          "thought_groups_text": "happy to sit down and chat / with you",
+          "ipa_transcription": "",
+          "stress_words": [
+            "happy",
+            "sit",
+            "down",
+            "chat"
+          ]
+        },
+        {
+          "segment_id": "seg_006",
+          "thought_groups_text": "guys. It's a beautiful day here and I'm",
+          "ipa_transcription": "",
+          "stress_words": [
+            "guys",
+            "It's",
+            "beautiful",
+            "day",
+            "here",
+            "I'm"
+          ]
+        },
+        {
+          "segment_id": "seg_007",
+          "thought_groups_text": "really excited for today's chat.",
+          "ipa_transcription": "",
+          "stress_words": [
+            "really",
+            "excited",
+            "today's",
+            "chat"
+          ]
+        },
+        {
+          "segment_id": "seg_008",
+          "thought_groups_text": ">> It really is a beautiful day. Yeah. And",
+          "ipa_transcription": "",
+          "stress_words": [
+            "really",
+            "beautiful",
+            "day",
+            "Yeah"
+          ]
+        },
+        {
+          "segment_id": "seg_009",
+          "thought_groups_text": "you know sometimes the best days come",
+          "ipa_transcription": "",
+          "stress_words": [
+            "know",
+            "sometimes",
+            "best",
+            "days",
+            "come"
+          ]
+        },
+        {
+          "segment_id": "seg_010",
+          "thought_groups_text": "right after a really bad storm. That",
+          "ipa_transcription": "",
+          "stress_words": [
+            "right",
+            "really",
+            "bad",
+            "storm"
+          ]
+        },
+        {
+          "segment_id": "seg_011",
+          "thought_groups_text": "actually makes me think / about what we",
+          "ipa_transcription": "",
+          "stress_words": [
+            "actually",
+            "makes",
+            "think",
+            "what"
+          ]
+        },
+        {
+          "segment_id": "seg_012",
+          "thought_groups_text": "are talking about today.",
+          "ipa_transcription": "",
+          "stress_words": [
+            "talking",
+            "today"
+          ]
+        },
+        {
+          "segment_id": "seg_013",
+          "thought_groups_text": ">> Oh that's a great way / to put it. Storms",
+          "ipa_transcription": "",
+          "stress_words": [
+            "that's",
+            "great",
+            "way",
+            "put",
+            "Storms"
+          ]
+        },
+        {
+          "segment_id": "seg_014",
+          "thought_groups_text": "are just a normal part / of life. We all",
+          "ipa_transcription": "",
+          "stress_words": [
+            "just",
+            "normal",
+            "part",
+            "life",
+            "all"
+          ]
+        },
+        {
+          "segment_id": "seg_015",
+          "thought_groups_text": "face hard times or what we usually call",
+          "ipa_transcription": "",
+          "stress_words": [
+            "face",
+            "hard",
+            "times",
+            "what",
+            "usually",
+            "call"
+          ]
+        },
+        {
+          "segment_id": "seg_016",
+          "thought_groups_text": "struggles.",
+          "ipa_transcription": "",
+          "stress_words": [
+            "struggles"
+          ]
+        },
+        {
+          "segment_id": "seg_017",
+          "thought_groups_text": ">> Exactly. We all struggle / with something.",
+          "ipa_transcription": "",
+          "stress_words": [
+            "Exactly",
+            "all",
+            "struggle",
+            "something"
+          ]
+        },
+        {
+          "segment_id": "seg_018",
+          "thought_groups_text": "But today we want / to look at those hard",
+          "ipa_transcription": "",
+          "stress_words": [
+            "today",
+            "want",
+            "look",
+            "hard"
+          ]
+        },
+        {
+          "segment_id": "seg_019",
+          "thought_groups_text": "times in a totally new way. We want / to",
+          "ipa_transcription": "",
+          "stress_words": [
+            "times",
+            "totally",
+            "new",
+            "way",
+            "want"
+          ]
+        },
+        {
+          "segment_id": "seg_020",
+          "thought_groups_text": "see how your struggle is actually your",
+          "ipa_transcription": "",
+          "stress_words": [
+            "see",
+            "how",
+            "struggle",
+            "actually"
+          ]
+        },
+        {
+          "segment_id": "seg_021",
+          "thought_groups_text": "secret power.",
+          "ipa_transcription": "",
+          "stress_words": [
+            "secret",
+            "power"
+          ]
+        },
+        {
+          "segment_id": "seg_022",
+          "thought_groups_text": ">> That sounds a bit strange / at first,",
+          "ipa_transcription": "",
+          "stress_words": [
+            "sounds",
+            "bit",
+            "strange",
+            "first"
+          ]
+        },
+        {
+          "segment_id": "seg_023",
+          "thought_groups_text": "doesn't it? Usually / when we struggle, / we",
+          "ipa_transcription": "",
+          "stress_words": [
+            "doesn't",
+            "Usually",
+            "when",
+            "struggle"
+          ]
+        },
+        {
+          "segment_id": "seg_024",
+          "thought_groups_text": "feel really weak. We definitely don't",
+          "ipa_transcription": "",
+          "stress_words": [
+            "feel",
+            "really",
+            "weak",
+            "definitely",
+            "don't"
+          ]
+        },
+        {
+          "segment_id": "seg_025",
+          "thought_groups_text": "feel powerful at all.",
+          "ipa_transcription": "",
+          "stress_words": [
+            "feel",
+            "powerful",
+            "all"
+          ]
+        },
+        {
+          "segment_id": "seg_026",
+          "thought_groups_text": ">> I know, / right? When you're in the middle",
+          "ipa_transcription": "",
+          "stress_words": [
+            "know",
+            "right",
+            "When",
+            "you're",
+            "middle"
+          ]
+        },
+        {
+          "segment_id": "seg_027",
+          "thought_groups_text": "of a hard problem, / you just want it / to",
+          "ipa_transcription": "",
+          "stress_words": [
+            "hard",
+            "problem",
+            "just",
+            "want"
+          ]
+        },
+        {
+          "segment_id": "seg_028",
+          "thought_groups_text": "end. You just sit there and think, / why",
+          "ipa_transcription": "",
+          "stress_words": [
+            "end",
+            "just",
+            "sit",
+            "there",
+            "think",
+            "why"
+          ]
+        },
+        {
+          "segment_id": "seg_029",
+          "thought_groups_text": "is this happening to me?",
+          "ipa_transcription": "",
+          "stress_words": [
+            "happening"
+          ]
+        },
+        {
+          "segment_id": "seg_030",
+          "thought_groups_text": ">> Totally. It's just human nature / to want",
+          "ipa_transcription": "",
+          "stress_words": [
+            "Totally",
+            "It's",
+            "just",
+            "human",
+            "nature",
+            "want"
+          ]
+        },
+        {
+          "segment_id": "seg_031",
+          "thought_groups_text": "things to be easy. We all want the easy",
+          "ipa_transcription": "",
+          "stress_words": [
+            "things",
+            "easy",
+            "all",
+            "want"
+          ]
+        },
+        {
+          "segment_id": "seg_032",
+          "thought_groups_text": "road. But the easy road doesn't really",
+          "ipa_transcription": "",
+          "stress_words": [
+            "road",
+            "easy",
+            "doesn't",
+            "really"
+          ]
+        },
+        {
+          "segment_id": "seg_033",
+          "thought_groups_text": "teach us very much, / does it?",
+          "ipa_transcription": "",
+          "stress_words": [
+            "teach",
+            "very",
+            "much"
+          ]
+        },
+        {
+          "segment_id": "seg_034",
+          "thought_groups_text": ">> Yep. That's the hard truth. Think / about",
+          "ipa_transcription": "",
+          "stress_words": [
+            "Yep",
+            "That's",
+            "hard",
+            "truth",
+            "Think"
+          ]
+        },
+        {
+          "segment_id": "seg_035",
+          "thought_groups_text": "going to the gym, / for example. If you",
+          "ipa_transcription": "",
+          "stress_words": [
+            "going",
+            "gym",
+            "example"
+          ]
+        },
+        {
+          "segment_id": "seg_036",
+          "thought_groups_text": "lift a very light weight, / it's easy, / but",
+          "ipa_transcription": "",
+          "stress_words": [
+            "lift",
+            "very",
+            "light",
+            "weight",
+            "it's",
+            "easy"
+          ]
+        },
+        {
+          "segment_id": "seg_037",
+          "thought_groups_text": "your muscles don't grow / at all.",
+          "ipa_transcription": "",
+          "stress_words": [
+            "muscles",
+            "don't",
+            "grow",
+            "all"
+          ]
+        },
+        {
+          "segment_id": "seg_038",
+          "thought_groups_text": ">> For sure. To get stronger, / you have to",
+          "ipa_transcription": "",
+          "stress_words": [
+            "sure",
+            "get",
+            "stronger"
+          ]
+        },
+        {
+          "segment_id": "seg_039",
+          "thought_groups_text": "lift something heavy. Your muscles have",
+          "ipa_transcription": "",
+          "stress_words": [
+            "lift",
+            "something",
+            "heavy",
+            "muscles"
+          ]
+        },
+        {
+          "segment_id": "seg_040",
+          "thought_groups_text": "to struggle a little bit. The physical",
+          "ipa_transcription": "",
+          "stress_words": [
+            "struggle",
+            "little",
+            "bit",
+            "physical"
+          ]
+        }
+      ],
+      "vocabulary": [],
+      "connected_speech_highlights": [],
+      "natural_expressions": []
+    }
+  }
+]
