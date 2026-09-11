@@ -117,13 +117,13 @@ export async function generateExercise(
   const provider = opts?.provider || "gemini";
   const model = opts?.model || "auto";
 
-  // Mock fast path
-  if (provider === "mock" || process.env.MOCK_AI === "true" && provider === "gemini" && !process.env.GEMINI_API_KEY) {
-    // Will fallback to mock if API fails anyway; but allow explicit mock
-    if (provider === "mock") return mockExercise({ ...params, difficulty, level });
+  // Mock fast path strictly for unit tests
+  if (provider === "mock") {
+    return mockExercise({ ...params, difficulty, level });
   }
 
   const userPrompt = buildExerciseUserPrompt({ ...params, difficulty, level });
+  let lastErrorMsg = "";
 
   const attemptOnce = async (): Promise<FoundationExercise | null> => {
     try {
@@ -138,19 +138,32 @@ export async function generateExercise(
         },
       });
       const parsed = extractJson(res.text);
-      if (!parsed) return null;
+      if (!parsed) {
+        lastErrorMsg = "AI trả về nội dung không phải JSON hợp lệ";
+        return null;
+      }
       // Ensure id exists
       const withId = parsed as Record<string, unknown>;
       if (!withId.id) withId.id = `ex_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
       if (!withId.source) withId.source = "ai";
       // Validate
       const validated = foundationExerciseSchema.safeParse(withId);
-      if (!validated.success) return null;
+      if (!validated.success) {
+        lastErrorMsg = `Dữ liệu không khớp schema: ${validated.error.message.slice(0, 150)}`;
+        return null;
+      }
       // Quality check §57
-      if (!validated.data.instruction || validated.data.evaluationCriteria.length === 0) return null;
-      if (validated.data.difficulty < 1 || validated.data.difficulty > 10) return null;
+      if (!validated.data.instruction || validated.data.evaluationCriteria.length === 0) {
+        lastErrorMsg = "Thiếu instruction hoặc evaluationCriteria";
+        return null;
+      }
+      if (validated.data.difficulty < 1 || validated.data.difficulty > 10) {
+        lastErrorMsg = "Difficulty ngoài khoảng 1-10";
+        return null;
+      }
       return validated.data as unknown as FoundationExercise;
-    } catch {
+    } catch (err: any) {
+      lastErrorMsg = err?.message || String(err);
       return null;
     }
   };
@@ -159,9 +172,9 @@ export async function generateExercise(
   if (!exercise) exercise = await attemptOnce(); // regenerate once §57
 
   if (!exercise) {
-    // Graceful fallback to mock instead of crashing UI
-    if (process.env.NODE_ENV !== "production") console.warn("[exercise-generator] AI failed, fallback to mock");
-    return mockExercise({ ...params, difficulty, level });
+    throw new Error(
+      `Không thể tạo bài tập Foundation Exercise từ AI: ${lastErrorMsg || "AI không phản hồi hoặc phản hồi không hợp lệ"}. Vui lòng thử lại hoặc đổi AI Model / Provider.`
+    );
   }
 
   // Normalize: ensure scalar difficulty consistent with dims (future)

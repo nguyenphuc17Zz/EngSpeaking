@@ -11,6 +11,7 @@ import { Menu, Mic, Moon, Sun, Volume2, Sparkles, Keyboard } from "lucide-react"
 import Link from "next/link";
 import { KeybindingsModal } from "@/components/common/KeybindingsModal";
 import { GlobalAiSelector } from "@/components/common/GlobalAiSelector";
+import { cn } from "@/lib/utils";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -80,6 +81,12 @@ export function AppShell({ children }: AppShellProps) {
     NAV_ITEMS.find((item) =>
       item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)
     ) || { label: "EngSpeak", description: "AI Speaking Coach" };
+
+  const isStudioPage =
+    pathname === "/session" ||
+    pathname === "/conversation/session" ||
+    pathname === "/advanced/session" ||
+    pathname.startsWith("/foundation/");
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
@@ -172,8 +179,20 @@ export function AppShell({ children }: AppShellProps) {
         </header>
 
         {/* Scrollable Viewport */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 lg:p-8">
-          <div className="mx-auto max-w-6xl w-full animate-in fade-in-0 duration-200">{children}</div>
+        <main
+          className={cn(
+            "flex-1 overflow-y-auto overflow-x-hidden",
+            isStudioPage ? "p-2 sm:p-3 md:p-4" : "p-4 md:p-6 lg:p-8"
+          )}
+        >
+          <div
+            className={cn(
+              "mx-auto w-full animate-in fade-in-0 duration-200",
+              isStudioPage ? "max-w-[1500px] h-full" : "max-w-6xl"
+            )}
+          >
+            {children}
+          </div>
         </main>
       </div>
 

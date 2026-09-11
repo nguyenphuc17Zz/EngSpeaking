@@ -44,3 +44,8 @@ next-env.d.ts
 dev*.log
 *.log
 .env.local
+
+# local AI models weights
+models/**
+!models/README.md
+!models/**/README.md

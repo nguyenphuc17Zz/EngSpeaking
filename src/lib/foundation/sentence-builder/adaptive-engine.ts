@@ -17,6 +17,8 @@ export interface AdaptiveState {
   recentScores: number[];
   recentErrors: string[];
   recentPrompts: string[];
+  irtTheta?: number; // IRT ability parameter (0.1 to 1.0)
+  optimalZpdDifficulty?: number; // Zone of Proximal Development target difficulty (1-10)
 }
 
 export const INITIAL_ADAPTIVE_STATE: AdaptiveState = {
@@ -28,6 +30,8 @@ export const INITIAL_ADAPTIVE_STATE: AdaptiveState = {
   recentScores: [],
   recentErrors: [],
   recentPrompts: [],
+  irtTheta: 0.5,
+  optimalZpdDifficulty: 3,
 };
 
 export const INITIAL_SKILL_MASTERY: SentenceBuilderSkillMastery = {
@@ -43,6 +47,27 @@ export const INITIAL_SKILL_MASTERY: SentenceBuilderSkillMastery = {
   updatedAt: new Date().toISOString(),
 };
 
+/**
+ * Calculates IRT Rasch expected success probability P(Success | theta, difficulty)
+ */
+export function calculateIrtExpectedProbability(theta: number, difficulty: number): number {
+  const normDiff = Math.min(1.0, Math.max(0.1, difficulty / 10));
+  // Logistic function with discrimination scaling k = 2.5
+  const exponent = -2.5 * (theta - normDiff);
+  return 1 / (1 + Math.exp(exponent));
+}
+
+/**
+ * Calculates ZPD (Zone of Proximal Development) optimal target difficulty
+ * Targets ~75% expected success probability to maintain flow state without frustration
+ */
+export function calculateZpdDifficulty(theta: number): number {
+  // Solve for beta when P = 0.75 -> theta - beta = ln(3)/2.5 ~ 0.44
+  // Target difficulty = (theta - 0.15) * 10, clamped between 1 and 10
+  const idealDifficulty = Math.round(theta * 10);
+  return Math.min(10, Math.max(1, idealDifficulty));
+}
+
 export function updateAdaptiveProgression(
   state: AdaptiveState,
   evaluation: SentenceBuilderEvaluation,
@@ -53,6 +78,18 @@ export function updateAdaptiveProgression(
 
   const consecutiveSuccesses = isHighPerformance ? state.consecutiveSuccesses + 1 : 0;
   const consecutiveFailures = isFailure ? state.consecutiveFailures + 1 : 0;
+
+  // 1. Update IRT ability theta
+  const prevTheta = state.irtTheta ?? 0.5;
+  const taskDiff = task.difficulty?.overall || state.currentDifficulty || 3;
+  const expectedProb = calculateIrtExpectedProbability(prevTheta, taskDiff);
+  const actualOutcome = (evaluation.overallScore / 100) * (evaluation.independenceScore / 100);
+
+  // Bayesian/Stochastic Gradient step with learning rate gamma = 0.1
+  const gamma = 0.1;
+  const rawNextTheta = prevTheta + gamma * (actualOutcome - expectedProb);
+  const nextTheta = Math.min(0.98, Math.max(0.15, Math.round(rawNextTheta * 100) / 100));
+  const optimalZpdDifficulty = calculateZpdDifficulty(nextTheta);
 
   let nextLevel = state.currentLevel;
   let nextDifficulty = state.currentDifficulty;
@@ -108,6 +145,8 @@ export function updateAdaptiveProgression(
     recentScores: [...state.recentScores.slice(-9), evaluation.overallScore],
     recentErrors: updatedErrors,
     recentPrompts: updatedPrompts,
+    irtTheta: nextTheta,
+    optimalZpdDifficulty,
   };
 }
 

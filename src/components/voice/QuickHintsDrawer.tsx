@@ -11,6 +11,7 @@ export interface DynamicScaffoldingHints {
   tier1Keywords: Array<{ term: string; meaning: string }>;
   tier2Starters: Array<{ starter: string; meaning: string }>;
   tier3FullAnswer: { en: string; vi: string };
+  directStarter?: string;
 }
 
 export interface TacticalGuide {
@@ -63,7 +64,18 @@ export function QuickHintsDrawer({
 
   const activeKeywords = hints?.tier1Keywords?.length ? hints.tier1Keywords : DEFAULT_TIER_1;
   const activeStarters = hints?.tier2Starters?.length ? hints.tier2Starters : DEFAULT_TIER_2;
-  const activeFullAnswer = hints?.tier3FullAnswer?.en ? hints.tier3FullAnswer : DEFAULT_TIER_3;
+  const cleanAnswer = (enText?: string): string => {
+    if (!enText) return "";
+    return enText
+      .replace(/^(câu trả lời gợi ý|câu trả lời mẫu|câu mẫu|sample answer|model answer):\s*/i, "")
+      .trim();
+  };
+
+  const rawFullAnswer = hints?.tier3FullAnswer?.en ? hints.tier3FullAnswer : DEFAULT_TIER_3;
+  const activeFullAnswer = {
+    ...rawFullAnswer,
+    en: cleanAnswer(rawFullAnswer.en) || DEFAULT_TIER_3.en,
+  };
 
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);

@@ -1,5 +1,6 @@
 // Master Personal Error Bank Service — Function 5
 // Universal longitudinal memory layer, priority calculation, and spaced review scheduler
+// Powered by FSRS Spaced Repetition, Bayesian Knowledge Tracing (BKT), and L1 Fossilization Risk Index.
 
 import type {
   MasterErrorRecord,
@@ -9,24 +10,26 @@ import type {
   ErrorStatus,
   ErrorTrend,
 } from "@/types/error-bank";
+import { calculateRetrievability, computeFSRSUpdate } from "./fsrs-engine";
+import { computeBKTUpdate } from "./bkt-engine";
+import { assessFossilizationRisk } from "./fossilization-engine";
 
 const MASTER_STORAGE_KEY = "speaking_coach_master_error_bank_v2";
-
-const SPACED_REVIEW_INTERVALS_HOURS = [
-  0.16, // Stage 1: 10 mins
-  24, // Stage 2: 1 day
-  72, // Stage 3: 3 days
-  168, // Stage 4: 7 days
-  336, // Stage 5: 14 days
-  720, // Stage 6: 30 days
-];
 
 export function getMasterErrorBank(): MasterErrorRecord[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(MASTER_STORAGE_KEY);
     if (!raw) return [];
-    return JSON.parse(raw);
+    const records: MasterErrorRecord[] = JSON.parse(raw);
+    // Dynamically recalculate retrievability based on elapsed time since last review
+    return records.map((r) => {
+      const currentR = calculateRetrievability(r.fsrsStability ?? 1.0, r.lastReviewAt || r.lastSeenAt);
+      return {
+        ...r,
+        retrievability: currentR,
+      };
+    });
   } catch {
     return [];
   }
@@ -39,6 +42,10 @@ export function saveMasterErrorBank(records: MasterErrorRecord[]): void {
   } catch {}
 }
 
+/**
+ * Calculates dynamic priority score for curriculum ranking and review urgency.
+ * Combines severity, repetition, recency, FSRS decay, fossilization risk, and BKT mastery.
+ */
 export function calculatePriorityScore(record: MasterErrorRecord): number {
   const severityWeights = { minor: 1.0, moderate: 1.5, major: 2.2, critical: 3.0 };
   const sevWeight = severityWeights[record.severity] || 1.5;
@@ -51,6 +58,16 @@ export function calculatePriorityScore(record: MasterErrorRecord): number {
   const persistenceMultiplier = record.frequency >= 5 ? 1.8 : record.frequency >= 3 ? 1.3 : 1.0;
   const failureRate = Math.max(0.1, 1 - record.recoveryRate / 100);
 
+  // FSRS Retrievability urgency: If retrievability dropped below 90%, prioritize for review
+  const currentR = record.retrievability ?? 90;
+  const fsrsUrgency = currentR < 90 ? 1.0 + (90 - currentR) * 0.03 : 1.0;
+
+  // Fossilization boost: 0-100 score adds up to 1.5x urgency
+  const fossilizationBoost = 1.0 + (record.fossilizationScore || 0) * 0.005;
+
+  // BKT mastery damping: if user has high mastery (>=0.85), lower the priority
+  const masteryDamping = record.pMastery ? Math.max(0.3, 1.2 - record.pMastery) : 1.0;
+
   // Confidence & False Positive suppression
   const confidenceMultiplier = record.userFlaggedAsFalsePositive ? 0.1 : record.confidenceScore;
 
@@ -61,6 +78,9 @@ export function calculatePriorityScore(record: MasterErrorRecord): number {
     persistenceMultiplier *
     failureRate *
     confidenceMultiplier *
+    fsrsUrgency *
+    fossilizationBoost *
+    masteryDamping *
     10;
 
   return Math.round(rawScore * 10) / 10;
@@ -86,6 +106,7 @@ export function ingestErrorOccurrence(params: {
   const records = getMasterErrorBank();
   const now = new Date().toISOString();
   const existingIdx = records.findIndex((r) => r.patternKey === params.patternKey);
+  const existing = existingIdx >= 0 ? records[existingIdx] : undefined;
 
   const newExample: ErrorExample = {
     id: `ex_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -100,47 +121,76 @@ export function ingestErrorOccurrence(params: {
     timestamp: now,
   };
 
-  if (existingIdx >= 0) {
-    const r = records[existingIdx];
-    const frequency = r.frequency + 1;
-    const retryTriggeredCount = r.retryTriggeredCount + (params.wasRetried ? 1 : 0);
-    const retrySuccessCount = r.retrySuccessCount + (params.retrySucceeded ? 1 : 0);
-    const selfCorrectionCount = r.selfCorrectionCount + (params.wasSelfCorrected ? 1 : 0);
+  // 1. Compute Bayesian Knowledge Tracing (BKT) update
+  const bktResult = computeBKTUpdate({
+    currentPMastery: existing?.pMastery,
+    correct: !!params.retrySucceeded,
+    category: params.category,
+    responseLatencyMs: params.responseLatencyMs,
+    wasSelfCorrected: params.wasSelfCorrected,
+    retrySucceeded: params.retrySucceeded,
+  });
+
+  // 2. Compute FSRS Spaced Repetition update
+  const fsrsState = computeFSRSUpdate({
+    currentStability: existing?.fsrsStability,
+    currentDifficulty: existing?.fsrsDifficulty,
+    lastReviewAt: existing?.lastReviewAt,
+    passed: !!params.retrySucceeded,
+    responseLatencyMs: params.responseLatencyMs,
+    wasSelfCorrected: params.wasSelfCorrected,
+  });
+
+  if (existingIdx >= 0 && existing) {
+    const frequency = existing.frequency + 1;
+    const retryTriggeredCount = existing.retryTriggeredCount + (params.wasRetried ? 1 : 0);
+    const retrySuccessCount = existing.retrySuccessCount + (params.retrySucceeded ? 1 : 0);
+    const selfCorrectionCount = existing.selfCorrectionCount + (params.wasSelfCorrected ? 1 : 0);
 
     const recoveryRate =
       retryTriggeredCount > 0
         ? Math.round((retrySuccessCount / retryTriggeredCount) * 100)
-        : r.recoveryRate;
+        : existing.recoveryRate;
 
-    const totalAttempts = r.totalAttempts + 1;
-    const firstAttemptSuccesses = r.firstAttemptSuccesses + (params.retrySucceeded ? 0 : 0);
+    const totalAttempts = existing.totalAttempts + 1;
+    const firstAttemptSuccesses = existing.firstAttemptSuccesses + (params.retrySucceeded ? 0 : 0);
     const accuracy = Math.round((firstAttemptSuccesses / totalAttempts) * 100);
 
     // Latencies
     const lat = params.responseLatencyMs ?? 3000;
-    const averageLatencyMs = Math.round((r.averageLatencyMs * r.frequency + lat) / frequency);
-    const latencyWhenWrongMs = params.retrySucceeded ? r.latencyWhenWrongMs : lat;
-    const latencyWhenCorrectMs = params.retrySucceeded ? lat : r.latencyWhenCorrectMs;
+    const averageLatencyMs = Math.round((existing.averageLatencyMs * existing.frequency + lat) / frequency);
+    const latencyWhenWrongMs = params.retrySucceeded ? existing.latencyWhenWrongMs : lat;
+    const latencyWhenCorrectMs = params.retrySucceeded ? lat : existing.latencyWhenCorrectMs;
+
+    // 3. Assess Fossilization Risk
+    const fossilization = assessFossilizationRisk({
+      frequency,
+      recoveryRate,
+      patternKey: params.patternKey,
+      category: params.category,
+      averageLatencyMs,
+      userText: params.userText,
+    });
 
     // Trend & Status Lifecycle
-    let trend: ErrorTrend = r.trend;
+    let trend: ErrorTrend = existing.trend;
     if (recoveryRate >= 80 || selfCorrectionCount >= 2) trend = "improving";
     else if (recoveryRate < 45 && frequency >= 4) trend = "worsening";
     else trend = "stable";
 
-    let status: ErrorStatus = r.status;
-    if (frequency >= 6 && recoveryRate < 60) status = "persistent";
-    else if (recoveryRate >= 85 && selfCorrectionCount >= 3) status = "recovering";
-    else if (status === "new") status = "active";
-
-    // Spaced Review Next Due
-    const nextIntervalHours = SPACED_REVIEW_INTERVALS_HOURS[Math.min(r.reviewStage, SPACED_REVIEW_INTERVALS_HOURS.length - 1)];
-    const nextReviewDueAt = new Date(Date.now() + nextIntervalHours * 3600 * 1000).toISOString();
+    let status: ErrorStatus = existing.status;
+    if (fossilization.fossilizationLevel === "fossilized" || (frequency >= 6 && recoveryRate < 60)) {
+      status = "persistent";
+    } else if (recoveryRate >= 85 && selfCorrectionCount >= 3) {
+      status = "recovering";
+    } else if (status === "new") {
+      status = "active";
+    }
 
     const updated: MasterErrorRecord = {
-      ...r,
+      ...existing,
       frequency,
-      recentFrequency: r.recentFrequency + 1,
+      recentFrequency: existing.recentFrequency + 1,
       totalAttempts,
       accuracy,
       retryTriggeredCount,
@@ -152,16 +202,37 @@ export function ingestErrorOccurrence(params: {
       latencyWhenCorrectMs,
       trend,
       status,
+      gapType: bktResult.gapType,
       lastSeenAt: now,
-      nextReviewDueAt,
-      examples: [...r.examples.slice(-5), newExample],
-      priorityScore: 0, // will calculate below
+      examples: [...existing.examples.slice(-5), newExample],
+
+      // Math engines
+      fsrsStability: fsrsState.stability,
+      fsrsDifficulty: fsrsState.difficulty,
+      retrievability: fsrsState.retrievability,
+      lastReviewAt: fsrsState.lastReviewAt,
+      nextReviewDueAt: fsrsState.nextReviewDueAt,
+      pMastery: bktResult.pMastery,
+      isSlip: bktResult.isSlip,
+      fossilizationScore: fossilization.fossilizationScore,
+      fossilizationLevel: fossilization.fossilizationLevel,
+      l1InterferenceType: fossilization.l1Type,
+
+      priorityScore: 0,
     };
 
     updated.priorityScore = calculatePriorityScore(updated);
     records[existingIdx] = updated;
   } else {
-    const nextReviewDueAt = new Date(Date.now() + SPACED_REVIEW_INTERVALS_HOURS[0] * 3600 * 1000).toISOString();
+    // 3. Assess Fossilization Risk for new error
+    const fossilization = assessFossilizationRisk({
+      frequency: 1,
+      recoveryRate: params.retrySucceeded ? 100 : 0,
+      patternKey: params.patternKey,
+      category: params.category,
+      averageLatencyMs: params.responseLatencyMs,
+      userText: params.userText,
+    });
 
     const created: MasterErrorRecord = {
       id: `err_rec_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -171,7 +242,7 @@ export function ingestErrorOccurrence(params: {
       labelVi: params.labelVi,
       descriptionVi: params.descriptionVi,
       severity: params.severity || "moderate",
-      gapType: (params.responseLatencyMs ?? 0) > 3500 ? "retrieval_gap" : "knowledge_gap",
+      gapType: bktResult.gapType,
 
       frequency: 1,
       recentFrequency: 1,
@@ -197,8 +268,19 @@ export function ingestErrorOccurrence(params: {
 
       firstSeenAt: now,
       lastSeenAt: now,
-      nextReviewDueAt,
       reviewStage: 1,
+
+      // Math engines
+      fsrsStability: fsrsState.stability,
+      fsrsDifficulty: fsrsState.difficulty,
+      retrievability: fsrsState.retrievability,
+      lastReviewAt: fsrsState.lastReviewAt,
+      nextReviewDueAt: fsrsState.nextReviewDueAt,
+      pMastery: bktResult.pMastery,
+      isSlip: bktResult.isSlip,
+      fossilizationScore: fossilization.fossilizationScore,
+      fossilizationLevel: fossilization.fossilizationLevel,
+      l1InterferenceType: fossilization.l1Type,
 
       examples: [newExample],
       priorityScore: 0,
@@ -225,20 +307,59 @@ export function flagErrorAsFalsePositive(recordId: string): MasterErrorRecord[] 
   return records;
 }
 
-export function advanceSpacedReviewStage(recordId: string, passed: boolean): MasterErrorRecord[] {
+export function advanceSpacedReviewStage(
+  recordId: string,
+  passed: boolean,
+  responseLatencyMs?: number
+): MasterErrorRecord[] {
   const records = getMasterErrorBank();
   const idx = records.findIndex((r) => r.id === recordId);
   if (idx >= 0) {
     const r = records[idx];
+
+    // 1. Update FSRS state
+    const fsrs = computeFSRSUpdate({
+      currentStability: r.fsrsStability,
+      currentDifficulty: r.fsrsDifficulty,
+      lastReviewAt: r.lastReviewAt || r.lastSeenAt,
+      passed,
+      responseLatencyMs,
+    });
+
+    // 2. Update BKT mastery
+    const bkt = computeBKTUpdate({
+      currentPMastery: r.pMastery,
+      correct: passed,
+      category: r.category,
+      responseLatencyMs,
+    });
+
+    // 3. Update Fossilization
+    const fossilization = assessFossilizationRisk({
+      frequency: r.frequency,
+      recoveryRate: passed ? Math.min(100, r.recoveryRate + 15) : Math.max(0, r.recoveryRate - 15),
+      patternKey: r.patternKey,
+      category: r.category,
+      averageLatencyMs: responseLatencyMs ?? r.averageLatencyMs,
+    });
+
     const nextStage = passed ? Math.min(6, r.reviewStage + 1) : Math.max(1, r.reviewStage - 1);
-    const nextIntervalHours = SPACED_REVIEW_INTERVALS_HOURS[Math.min(nextStage, SPACED_REVIEW_INTERVALS_HOURS.length - 1)];
-    const nextReviewDueAt = new Date(Date.now() + nextIntervalHours * 3600 * 1000).toISOString();
 
     records[idx] = {
       ...r,
       reviewStage: nextStage,
-      status: nextStage >= 5 ? "mastered" : nextStage >= 3 ? "stable" : "active",
-      nextReviewDueAt,
+      status: bkt.pMastery >= 0.85 && fsrs.stability >= 7 ? "mastered" : nextStage >= 3 ? "stable" : "active",
+      fsrsStability: fsrs.stability,
+      fsrsDifficulty: fsrs.difficulty,
+      retrievability: fsrs.retrievability,
+      lastReviewAt: fsrs.lastReviewAt,
+      nextReviewDueAt: fsrs.nextReviewDueAt,
+      pMastery: bkt.pMastery,
+      isSlip: bkt.isSlip,
+      gapType: bkt.gapType,
+      fossilizationScore: fossilization.fossilizationScore,
+      fossilizationLevel: fossilization.fossilizationLevel,
+      l1InterferenceType: fossilization.l1Type,
     };
     records[idx].priorityScore = calculatePriorityScore(records[idx]);
     saveMasterErrorBank(records);
@@ -262,12 +383,16 @@ export function getCompactErrorContextPack(): CompactErrorContextPack {
   }));
 
   const reviewDueList = records
-    .filter((r) => r.nextReviewDueAt && new Date(r.nextReviewDueAt).getTime() <= now)
+    .filter((r) => {
+      const isDue = r.nextReviewDueAt && new Date(r.nextReviewDueAt).getTime() <= now;
+      const isLowR = (r.retrievability || 100) < 90;
+      return isDue || isLowR;
+    })
     .slice(0, 8)
     .map((r) => ({
       patternKey: r.patternKey,
       labelVi: r.labelVi,
-      nextReviewDueAt: r.nextReviewDueAt!,
+      nextReviewDueAt: r.nextReviewDueAt || new Date().toISOString(),
     }));
 
   const totalRecovery = records.reduce((acc, r) => acc + r.recoveryRate, 0);
@@ -279,4 +404,40 @@ export function getCompactErrorContextPack(): CompactErrorContextPack {
     overallRecoveryRate,
     totalActiveErrors: records.filter((r) => r.status !== "mastered").length,
   };
+}
+
+/**
+ * Generates an LLM Pedagogical Constraint prompt from high-priority/due errors.
+ * Re-injects genuine learner weaknesses dynamically into exercise generators.
+ */
+export function buildErrorBankPedagogicalPrompt(records?: MasterErrorRecord[]): string | null {
+  const list = records || getMasterErrorBank();
+  if (!list.length) return null;
+
+  const now = Date.now();
+  // Filter for errors due for review or with high fossilization risk
+  const dueErrors = list
+    .filter((r) => !r.userFlaggedAsFalsePositive && r.status !== "mastered")
+    .filter((r) => {
+      const isDue = r.nextReviewDueAt && new Date(r.nextReviewDueAt).getTime() <= now;
+      const isLowR = (r.retrievability || 100) < 90;
+      const isFossilized = r.fossilizationLevel === "fossilized" || r.fossilizationScore >= 60;
+      return isDue || isLowR || isFossilized;
+    })
+    .sort((a, b) => b.priorityScore - a.priorityScore)
+    .slice(0, 3);
+
+  if (!dueErrors.length) return null;
+
+  const errorDescriptions = dueErrors
+    .map(
+      (e, idx) =>
+        `${idx + 1}. [${e.category.toUpperCase()}] "${e.labelVi}" (Target rule: ${e.canonicalName}; Example error: "${e.examples[0]?.userText || ""}" -> "${e.examples[0]?.correction || ""}")`
+    )
+    .join("\n");
+
+  return `PEDAGOGICAL CONSTRAINT (Targeted Personal Error Bank Review):
+The user has active review-due weaknesses that need reinforcement:
+${errorDescriptions}
+Strategically craft this exercise to naturally challenge ONE of these specific weak points while keeping the scenario creative, dynamic, and realistic.`;
 }

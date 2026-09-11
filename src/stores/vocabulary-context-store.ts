@@ -7,7 +7,7 @@ import type {
   WordPronunciationEvaluation,
   SentenceContextEvaluation,
 } from "@/types/vocabulary-context";
-import { INITIAL_DEFAULT_WORD } from "@/lib/foundation/vocabulary/vocabulary.service";
+import { INITIAL_DEFAULT_WORD } from "@/lib/foundation/vocabulary/default-word";
 
 interface VocabularyStoreState {
   activeStep: 1 | 2;

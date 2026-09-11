@@ -9,6 +9,12 @@ export type LatencyQuadrant =
   | "fast_incorrect" // ⚠️ Speed good, accuracy slips (latency < target & correct < 70%)
   | "slow_incorrect"; // 🧩 Cognitive overload / gap (latency >= target & correct < 70%)
 
+export interface BufferChunkCandidate {
+  phrase: string;
+  meaningVi: string;
+  category: "buying_time" | "framing_opinion" | "immediate_reaction";
+}
+
 export interface LatencyTask {
   id: string;
   drillMode: LatencyDrillMode;
@@ -21,6 +27,8 @@ export interface LatencyTask {
   difficulty: number; // 1-10
   category: "daily_conversation" | "workplace" | "opinions" | "past_events" | "reactions" | "buffer_phrases";
   bufferPhraseSuggestion?: string; // e.g. "Let me think for a second..."
+  bufferChunks?: BufferChunkCandidate[]; // 2-3 structured conversational buffer phrases
+  staircaseTargetMs?: number; // Adaptive staircase target
   isBaseline?: boolean;
   hints?: Array<{
     tier: number;
@@ -43,6 +51,9 @@ export interface HesitationProfile {
   selfCorrectionDetected: boolean;
 }
 
+export type LatencyStatus = "excellent" | "strong" | "moderate" | "slow" | "very_slow";
+export type LatencyLikelyCause = "automatic" | "spoken_retrieval" | "grammar_calculation" | "vocabulary_search" | "hesitation";
+
 export interface LatencyEvaluation {
   overallScore: number;
   accuracyScore: number;
@@ -55,8 +66,8 @@ export interface LatencyEvaluation {
   latencyRatio: number; // actual / target
   
   quadrant: LatencyQuadrant;
-  latencyStatus: "excellent" | "strong" | "moderate" | "slow" | "very_slow";
-  likelyCause: "automatic" | "spoken_retrieval" | "grammar_calculation" | "vocabulary_search" | "hesitation";
+  latencyStatus: LatencyStatus;
+  likelyCause: LatencyLikelyCause;
   
   hesitation: HesitationProfile;
   
@@ -67,6 +78,10 @@ export interface LatencyEvaluation {
   coachFeedbackVi: string;
   betterResponse: string;
   praisePoints: string[];
+  
+  isFastPass?: boolean;
+  bufferUsed?: string;
+  speechOnsetMs?: number;
 }
 
 export interface LatencySessionSummary {

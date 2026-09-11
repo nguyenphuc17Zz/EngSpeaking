@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useSettingsStore } from "@/stores/settings-store";
 import { ModelSelector } from "@/components/settings/ModelSelector";
 import { ApiKeyManager } from "@/components/settings/ApiKeyManager";
+import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,10 +29,15 @@ import {
   Repeat,
   Flame,
   Mic,
+  MicOff,
+  Trash2,
   Volume2,
   MessageSquare,
 } from "lucide-react";
 import Link from "next/link";
+import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import { useAudioRecorder } from "@/hooks/useAudioRecorder";
+import { transcribeViaServer } from "@/lib/stt/service";
 
 export default function SettingsPage() {
   const settings = useSettingsStore();
@@ -40,6 +46,106 @@ export default function SettingsPage() {
     Array<{ id: string; configured: boolean; displayName: string }>
   >([]);
   const [loading, setLoading] = useState(true);
+  const ttsPlayer = useBrowserTTS();
+  const [isPreviewingVoice, setIsPreviewingVoice] = useState(false);
+  const [previewText, setPreviewText] = useState(
+    "Hello! I am your AI speaking tutor. Nice to practice English with you today!"
+  );
+  const [previewSpeed, setPreviewSpeed] = useState(1.0);
+  const speechTest = useSpeechRecognition("en-US");
+  const audioRecorder = useAudioRecorder();
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [serverTranscript, setServerTranscript] = useState("");
+  const [sttDurationMs, setSttDurationMs] = useState<number | null>(null);
+  const [lastAmpInfo, setLastAmpInfo] = useState<{
+    originalPeak: number;
+    amplifiedPeak: number;
+    appliedGainDb: number;
+    appliedGainFactor: number;
+  } | null>(null);
+
+  const ttsProviderDisplay = useMemo(() => {
+    if (settings.tts.provider === "edge-tts") return "Microsoft Edge Neural";
+    if (settings.tts.provider === "kokoro-tts" || settings.tts.provider === "kokoro") return "Kokoro-82M (Offline)";
+    if (settings.tts.provider === "browser") return "Trình duyệt (Web Speech)";
+    return "Tự động (Edge Neural / Kokoro)";
+  }, [settings.tts.provider]);
+
+  const ttsVoiceDisplay = useMemo(() => {
+    if (!settings.tts.model || settings.tts.model === "auto") return "Mặc định";
+    return settings.tts.model;
+  }, [settings.tts.model]);
+
+  const sttProviderDisplay = useMemo(() => {
+    if (settings.stt.provider === "whisper-local" || settings.stt.provider === "whisper-onnx") return "Whisper ONNX (Offline)";
+    if (settings.stt.provider === "browser") return "Trình duyệt (Web Speech API)";
+    if (settings.stt.provider === "groq") return "Groq Whisper Large V3";
+    if (settings.stt.provider === "auto") return "Tự động (Whisper ONNX / Groq)";
+    return settings.stt.provider.toUpperCase();
+  }, [settings.stt.provider]);
+
+  const isServerSTT = settings.stt.provider !== "browser";
+  const isMicListening = isServerSTT ? audioRecorder.status === "recording" : speechTest.isListening;
+
+  const handleToggleMicTest = async () => {
+    if (isServerSTT) {
+      if (audioRecorder.status === "recording") {
+        setIsTranscribing(true);
+        const startTime = Date.now();
+        try {
+          const recording = await audioRecorder.stop();
+          const res = await transcribeViaServer(recording.blob, {
+            provider: settings.stt.provider === "auto" ? "whisper-local" : settings.stt.provider,
+            model: settings.stt.model,
+            language: "en-US",
+          });
+          setServerTranscript(res.text);
+          setSttDurationMs(Date.now() - startTime);
+          if (res.amplification) {
+            setLastAmpInfo(res.amplification);
+          }
+          const ampNote = res.amplification ? ` | Gain: +${res.amplification.appliedGainDb}dB` : "";
+          toast.success("Nhận dạng thành công!", `Thời gian: ${Date.now() - startTime}ms${ampNote}`);
+        } catch (err) {
+          toast.error("Lỗi nhận dạng giọng nói", err instanceof Error ? err.message : String(err));
+        } finally {
+          setIsTranscribing(false);
+        }
+      } else {
+        setServerTranscript("");
+        setSttDurationMs(null);
+        try {
+          await audioRecorder.start();
+        } catch {
+          toast.error("Không thể mở Microphone", "Vui lòng cấp quyền truy cập mic cho trình duyệt.");
+        }
+      }
+    } else {
+      if (speechTest.isListening) {
+        speechTest.stopListening();
+      } else {
+        speechTest.startListening();
+      }
+    }
+  };
+
+  const handlePreviewVoice = async () => {
+    if (ttsPlayer.isSpeaking) {
+      ttsPlayer.stop();
+      return;
+    }
+    setIsPreviewingVoice(true);
+    try {
+      await ttsPlayer.speak(previewText, {
+        rate: previewSpeed,
+        voice: settings.tts.model !== "auto" ? settings.tts.model : undefined,
+      });
+    } catch {
+      toast.error("Không thể phát âm thanh thử nghiệm");
+    } finally {
+      setIsPreviewingVoice(false);
+    }
+  };
 
   const fetchProviders = () => {
     fetch("/api/ai/providers")
@@ -103,18 +209,19 @@ export default function SettingsPage() {
               {isGeminiActive ? <Sparkles className="size-6" /> : <Cpu className="size-6" />}
             </div>
             <div className="space-y-1">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Động cơ AI đang hoạt động:
+                  Động cơ AI chính:
                 </span>
                 <Badge
-                  className={`text-[10px] font-mono font-bold ${
+                  className={`text-xs font-mono font-bold gap-1 px-2.5 py-0.5 ${
                     isGeminiActive
-                      ? "bg-primary/20 text-primary border border-primary/30"
+                      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
                       : "bg-orange-500/20 text-orange-600 dark:text-orange-400 border border-orange-500/30"
                   }`}
                 >
-                  {isGeminiActive ? "GOOGLE GEMINI" : "GROQ AI"}
+                  <CheckCircle2 className="size-3.5 text-emerald-500" />
+                  <span>ĐANG ÁP DỤNG: {isGeminiActive ? "GOOGLE GEMINI" : "GROQ AI"}</span>
                 </Badge>
               </div>
               <div className="flex items-center gap-2">
@@ -122,7 +229,7 @@ export default function SettingsPage() {
                   {activeModel}
                 </span>
                 <span className="text-xs text-muted-foreground hidden md:inline">
-                  • Đang cấp quyền cho toàn bộ phòng tập nói
+                  • Đang cấp quyền xử lý ngôn ngữ cho toàn bộ ứng dụng
                 </span>
               </div>
             </div>
@@ -225,6 +332,352 @@ export default function SettingsPage() {
                   <SelectItem value="on">BẬT — Tự đổi provider</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 🎙️ Dedicated Speech-to-Text Section */}
+      <Card className="rounded-3xl border border-border/80 bg-card shadow-xs overflow-hidden">
+        <CardHeader className="p-5 pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-base font-bold flex items-center gap-2.5">
+              <span className="flex size-7 items-center justify-center rounded-xl bg-blue-500/10 text-blue-500">
+                <Mic className="size-4" />
+              </span>
+              <span>🎙️ Nhận dạng giọng nói (Speech-to-Text)</span>
+            </CardTitle>
+            <div className="flex items-center gap-1.5">
+              <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-xs font-semibold px-2.5 py-1 gap-1.5 font-mono">
+                <CheckCircle2 className="size-3.5 text-emerald-500" />
+                <span>Đang áp dụng: {sttProviderDisplay}</span>
+              </Badge>
+            </div>
+          </div>
+          <CardDescription className="text-xs text-muted-foreground mt-1">
+            Cấu hình công nghệ chuyển đổi âm thanh giọng nói của bạn thành văn bản tiếng Anh, áp dụng cho toàn bộ các bài học phát âm, shadowing và hội thoại.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="p-5 pt-2 space-y-4">
+          {/* Summary Callout Banner */}
+          <div className="rounded-2xl bg-blue-500/10 border border-blue-500/20 p-3.5 text-xs text-foreground flex items-center gap-2.5">
+            <Zap className="size-4 shrink-0 text-blue-500" />
+            <div className="leading-relaxed">
+              <span>Hệ thống đang sử dụng </span>
+              <strong className="text-blue-600 dark:text-blue-400 font-semibold">{sttProviderDisplay}</strong>
+              <span> để nhận dạng giọng nói tiếng Anh của bạn trong tất cả bài luyện nói, shadowing và đối thoại AI.</span>
+            </div>
+          </div>
+
+          <ModelSelector
+            label="Bộ nhận diện giọng nói (STT Engine)"
+            description="Whisper ONNX (Offline trong thư mục models/), Groq Whisper V3 (SOTA siêu tốc 200ms) hoặc Web Speech API."
+            providerValue={settings.stt.provider}
+            modelValue={settings.stt.model}
+            capability="speechToText"
+            onChange={(p, m) => settings.setStt({ provider: p, model: m })}
+          />
+
+          {/* Voice Amplification & DSP Normalization Controls */}
+          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="flex size-6 items-center justify-center rounded-lg bg-primary/20 text-primary">
+                  <Volume2 className="size-3.5" />
+                </span>
+                <span className="text-xs font-bold text-foreground">
+                  Khuếch đại giọng nói & Chuẩn hóa âm lượng (DSP Voice Booster)
+                </span>
+              </div>
+              <Badge variant="outline" className="text-[10px] font-mono border-primary/30 text-primary">
+                Auto Normalization + Soft Limiter
+              </Badge>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              {/* Auto Normalization Toggle */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-card border border-border/70">
+                <div className="space-y-0.5 pr-2">
+                  <Label className="text-xs font-semibold cursor-pointer" htmlFor="auto-normalize-switch">
+                    Tự động chuẩn hóa âm lượng
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground leading-tight">
+                    Tự động nâng giọng nói nhỏ/thì thầm về chuẩn -1.5 dBFS
+                  </p>
+                </div>
+                <input
+                  id="auto-normalize-switch"
+                  type="checkbox"
+                  checked={settings.audioEnhancement?.autoNormalize ?? true}
+                  onChange={(e) =>
+                    settings.setAudioEnhancement({ autoNormalize: e.target.checked })
+                  }
+                  className="size-4 rounded accent-primary cursor-pointer"
+                />
+              </div>
+
+              {/* Mic Gain Slider */}
+              <div className="space-y-1.5 p-3 rounded-xl bg-card border border-border/70">
+                <div className="flex items-center justify-between text-xs">
+                  <Label className="text-xs font-semibold">Độ nhạy Micro (Gain Boost)</Label>
+                  <span className="font-mono font-bold text-primary">
+                    {(settings.audioEnhancement?.micGain ?? 1.5).toFixed(1)}x (+{(20 * Math.log10(settings.audioEnhancement?.micGain ?? 1.5)).toFixed(1)} dB)
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="1.0"
+                  max="3.0"
+                  step="0.1"
+                  value={settings.audioEnhancement?.micGain ?? 1.5}
+                  onChange={(e) =>
+                    settings.setAudioEnhancement({ micGain: parseFloat(e.target.value) })
+                  }
+                  className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                />
+                <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
+                  <span>1.0x (Gốc)</span>
+                  <span>1.5x (+3.5 dB)</span>
+                  <span>2.0x (+6.0 dB)</span>
+                  <span>3.0x (+9.5 dB)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Live Mic Test Panel */}
+          <div className="rounded-2xl border border-border/60 bg-muted/30 p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
+                  <Radio className="size-3.5 text-primary" />
+                  <span>Thử nghiệm Microphone & Nhận diện ({isServerSTT ? "Audio Recording & AI Processing" : "Real-time Streaming"})</span>
+                </Label>
+                {isMicListening ? (
+                  <Badge variant="destructive" className="animate-pulse text-[10px] h-5 px-2 font-mono gap-1">
+                    <span className="size-1.5 rounded-full bg-white animate-ping" />
+                    <span>Đang lắng nghe...</span>
+                  </Badge>
+                ) : isTranscribing ? (
+                  <Badge className="bg-primary/20 text-primary border border-primary/30 text-[10px] h-5 px-2 font-mono gap-1">
+                    <Loader2 className="size-2.5 animate-spin" />
+                    <span>Đang xử lý Whisper...</span>
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[10px] h-5 px-2 font-mono text-muted-foreground">
+                    Sẵn sàng thử nghiệm
+                  </Badge>
+                )}
+
+                {sttDurationMs !== null && (
+                  <Badge variant="secondary" className="text-[10px] h-5 px-2 font-mono text-emerald-600 dark:text-emerald-400">
+                    ⚡ {sttDurationMs}ms
+                  </Badge>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                {(serverTranscript || speechTest.transcript) && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      speechTest.resetTranscript();
+                      setServerTranscript("");
+                      setSttDurationMs(null);
+                      setLastAmpInfo(null);
+                    }}
+                    className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground rounded-lg"
+                  >
+                    <Trash2 className="size-3 mr-1" />
+                    <span>Xoá kết quả</span>
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={isMicListening ? "destructive" : "default"}
+                  disabled={isTranscribing}
+                  onClick={handleToggleMicTest}
+                  className="h-8 px-3 rounded-xl text-xs font-semibold gap-1.5"
+                >
+                  {isTranscribing ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" />
+                      <span>Đang nhận diện...</span>
+                    </>
+                  ) : isMicListening ? (
+                    <>
+                      <MicOff className="size-3.5" />
+                      <span>Dừng nói & Nhận dạng</span>
+                    </>
+                  ) : (
+                    <>
+                      <Mic className="size-3.5" />
+                      <span>Bắt đầu nói thử (Test Mic)</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Transcript Result Box */}
+            <div className="min-h-[56px] rounded-xl border border-input/60 bg-background/80 p-3 text-xs">
+              {isTranscribing ? (
+                <div className="flex items-center gap-2 text-muted-foreground py-2 font-mono text-xs">
+                  <Loader2 className="size-4 animate-spin text-primary" />
+                  <span>Model AI đang giải mã âm thanh và chuyển đổi sang văn bản tiếng Anh...</span>
+                </div>
+              ) : isServerSTT ? (
+                serverTranscript ? (
+                  <p className="leading-relaxed">
+                    <span className="text-foreground font-medium">{serverTranscript}</span>
+                  </p>
+                ) : (
+                  <p className="text-muted-foreground italic">
+                    {isMicListening
+                      ? "Đang ghi âm giọng nói của bạn... Hãy nói một câu tiếng Anh rồi bấm 'Dừng nói & Nhận dạng'!"
+                      : "Bấm 'Bắt đầu nói thử' để thu âm microphone và nhận diện chính xác bằng Whisper ONNX / Groq."}
+                  </p>
+                )
+              ) : speechTest.transcript || speechTest.interimTranscript ? (
+                <p className="leading-relaxed">
+                  <span className="text-foreground font-medium">{speechTest.transcript}</span>
+                  {speechTest.interimTranscript && (
+                    <span className="text-muted-foreground italic"> {speechTest.interimTranscript}</span>
+                  )}
+                </p>
+              ) : (
+                <p className="text-muted-foreground italic">
+                  {isMicListening
+                    ? "Hãy nói một câu tiếng Anh bất kỳ (ví dụ: 'Hello, I want to practice English speaking today')..."
+                    : "Bấm 'Bắt đầu nói thử' để kiểm tra kết nối microphone và độ nhạy nhận diện giọng nói tiếng Anh."}
+                </p>
+              )}
+
+              {/* Amplification Gain & Peak Metrics Readout */}
+              {lastAmpInfo && (
+                <div className="mt-2.5 pt-2 border-t border-border/50 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground font-mono">
+                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="size-3 text-emerald-500" />
+                    <span>Đã khuếch đại: +{lastAmpInfo.appliedGainDb} dB ({lastAmpInfo.appliedGainFactor}x)</span>
+                  </span>
+                  <span>•</span>
+                  <span>Biên độ gốc: {lastAmpInfo.originalPeak}</span>
+                  <span>→</span>
+                  <span className="font-semibold text-foreground">Sau chuẩn hóa: {lastAmpInfo.amplifiedPeak}</span>
+                </div>
+              )}
+            </div>
+
+            {speechTest.error && (
+              <p className="text-[11px] text-destructive flex items-center gap-1">
+                <AlertCircle className="size-3 shrink-0" />
+                <span>{speechTest.error}</span>
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 🔊 Dedicated Text-to-Speech (TTS) Section */}
+      <Card className="rounded-3xl border border-border/80 bg-card shadow-xs overflow-hidden">
+        <CardHeader className="p-5 pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-base font-bold flex items-center gap-2.5">
+              <span className="flex size-7 items-center justify-center rounded-xl bg-purple-500/10 text-purple-500">
+                <Volume2 className="size-4" />
+              </span>
+              <span>🔊 Giọng đọc AI & Phát âm mẫu (Text-to-Speech)</span>
+            </CardTitle>
+            <div className="flex items-center gap-1.5">
+              <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-xs font-semibold px-2.5 py-1 gap-1.5 font-mono">
+                <CheckCircle2 className="size-3.5 text-emerald-500" />
+                <span>Đang áp dụng: {ttsProviderDisplay} ({ttsVoiceDisplay})</span>
+              </Badge>
+            </div>
+          </div>
+          <CardDescription className="text-xs text-muted-foreground mt-1">
+            Cấu hình công nghệ tổng hợp giọng nói phát âm chuẩn bản xứ, áp dụng cho toàn bộ các mẫu câu, bài luyện nghe và gia sư ảo trong phòng tập nói.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="p-5 pt-2 space-y-4">
+          {/* Summary Callout Banner */}
+          <div className="rounded-2xl bg-purple-500/10 border border-purple-500/20 p-3.5 text-xs text-foreground flex items-center gap-2.5">
+            <Zap className="size-4 shrink-0 text-purple-500" />
+            <div className="leading-relaxed">
+              <span>Hệ thống đang phát âm bằng </span>
+              <strong className="text-purple-600 dark:text-purple-400 font-semibold">{ttsProviderDisplay}</strong>
+              {settings.tts.model !== "auto" && (
+                <span> với giọng <code className="px-1.5 py-0.5 rounded-md bg-purple-500/15 font-mono text-[11px] text-purple-700 dark:text-purple-300 font-semibold">{settings.tts.model}</code></span>
+              )}
+              <span> ở tốc độ <strong>{previewSpeed}x</strong>. Đã sẵn sàng phục vụ các bài học phát âm và shadowing!</span>
+            </div>
+          </div>
+
+          <ModelSelector
+            label="Bộ máy phát âm & Giọng đọc (TTS Engine)"
+            description="Microsoft Edge Neural (Online - chuẩn phòng thu 9.5/10), Kokoro-82M (Offline trong thư mục models/) hoặc Web Speech API."
+            providerValue={settings.tts.provider}
+            modelValue={settings.tts.model}
+            capability="textToSpeech"
+            onChange={(p, m) => settings.setTts({ provider: p, model: m })}
+          />
+
+          {/* Live Voice Preview Interactive Panel */}
+          <div className="rounded-2xl border border-border/60 bg-muted/30 p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
+                <Radio className="size-3.5 text-purple-500" />
+                <span>Thử nghiệm Giọng đọc & Tốc độ phát âm (Voice Preview)</span>
+              </Label>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">Tốc độ:</span>
+                {[0.8, 1.0, 1.2].map((s) => (
+                  <Button
+                    key={s}
+                    type="button"
+                    variant={previewSpeed === s ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setPreviewSpeed(s)}
+                    className="h-7 px-2.5 text-[11px] rounded-lg font-mono font-semibold"
+                  >
+                    {s}x
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <input
+                type="text"
+                value={previewText}
+                onChange={(e) => setPreviewText(e.target.value)}
+                placeholder="Nhập câu tiếng Anh để nghe thử..."
+                className="flex-1 h-9 rounded-xl border border-input/80 bg-background/90 px-3 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/40"
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant={ttsPlayer.isSpeaking || isPreviewingVoice ? "destructive" : "default"}
+                onClick={handlePreviewVoice}
+                className="h-9 px-4 rounded-xl text-xs font-semibold gap-2 shrink-0 btn-spring bg-purple-600 hover:bg-purple-700 text-white"
+              >
+                {ttsPlayer.isSpeaking || isPreviewingVoice ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" />
+                    <span>Dừng phát âm</span>
+                  </>
+                ) : (
+                  <>
+                    <Volume2 className="size-3.5" />
+                    <span>Nghe thử phát âm</span>
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         </CardContent>
@@ -334,26 +787,6 @@ export default function SettingsPage() {
             modelValue={settings.evaluation.model}
             capability="textGeneration"
             onChange={(p, m) => settings.setEvaluation({ provider: p, model: m })}
-          />
-
-          {/* 7. Speech-to-Text */}
-          <ModelSelector
-            label="🎙️ Nhận dạng giọng nói (Speech-to-Text)"
-            description="Web Speech API trình duyệt (miễn phí, nhanh) hoặc Groq Whisper Large V3 tốc độ cao và nhận diện tiếng Anh cực chuẩn."
-            providerValue={settings.stt.provider}
-            modelValue={settings.stt.model}
-            capability="speechToText"
-            onChange={(p, m) => settings.setStt({ provider: p, model: m })}
-          />
-
-          {/* 8. Text-to-Speech */}
-          <ModelSelector
-            label="🔊 Giọng đọc AI (Text-to-Speech)"
-            description="Mặc định: SpeechSynthesis trên trình duyệt (hoạt động offline mượt mà, phát âm chuẩn bản xứ)."
-            providerValue={settings.tts.provider}
-            modelValue={settings.tts.model}
-            capability="textToSpeech"
-            onChange={(p, m) => settings.setTts({ provider: p, model: m })}
           />
         </div>
       </div>

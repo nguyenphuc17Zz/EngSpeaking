@@ -11,14 +11,17 @@ import {
   Volume2,
   RotateCcw,
   ArrowRight,
-  ThumbsUp,
   Clock,
   Layers,
   ChevronDown,
   ChevronUp,
   Zap,
+  Briefcase,
+  Coffee,
+  Lightbulb,
+  Mic,
 } from "lucide-react";
-import type { VNToENEvaluation } from "@/types/vn-to-en";
+import type { VNToENEvaluation, SayItBetterSet } from "@/types/vn-to-en";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 
 interface VNFeedbackCardProps {
@@ -26,6 +29,7 @@ interface VNFeedbackCardProps {
   onRetry: () => void;
   onContinue: () => void;
   onSayItBetter: () => void;
+  onPracticeVariant?: (variant: string) => void;
 }
 
 export function VNFeedbackCard({
@@ -33,12 +37,19 @@ export function VNFeedbackCard({
   onRetry,
   onContinue,
   onSayItBetter,
+  onPracticeVariant,
 }: VNFeedbackCardProps) {
   const tts = useBrowserTTS();
   const [showExpressions, setShowExpressions] = useState(false);
+  const [playingText, setPlayingText] = useState<string | null>(null);
 
-  const handlePlayTTS = (text: string) => {
-    tts.speak(text);
+  const handlePlayTTS = async (text: string) => {
+    setPlayingText(text);
+    try {
+      await tts.speak(text);
+    } finally {
+      setPlayingText(null);
+    }
   };
 
   const getGapBadge = (gap: string) => {
@@ -68,12 +79,63 @@ export function VNFeedbackCard({
 
   const gapInfo = getGapBadge(evaluation.gapType);
 
+  // Synthesize Say It Better set if not explicitly passed
+  const sayItBetter: SayItBetterSet = evaluation.sayItBetter || {
+    professional: evaluation.betterVersion || "",
+    casual: evaluation.naturalAlternatives?.[0]?.expression || evaluation.betterVersion || "",
+    idiomatic: evaluation.naturalAlternatives?.[1]?.expression || evaluation.betterVersion || "",
+  };
+
+  const sayItBetterVariants = [
+    {
+      id: "professional",
+      title: "Công sở & Trang trọng",
+      label: "Professional",
+      icon: Briefcase,
+      text: sayItBetter.professional,
+      color: "border-sky-500/30 bg-sky-500/5 text-sky-700 dark:text-sky-300",
+      badgeColor: "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30",
+      desc: "Thích hợp cho email, họp dự án, giao tiếp với đối tác & sếp.",
+    },
+    {
+      id: "casual",
+      title: "Đời thường & Tự nhiên",
+      label: "Casual & Friendly",
+      icon: Coffee,
+      text: sayItBetter.casual,
+      color: "border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300",
+      badgeColor: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+      desc: "Trò chuyện thân mật, bạn bè quốc tế, giao tiếp đời thường.",
+    },
+    {
+      id: "idiomatic",
+      title: "Khẩu ngữ Bản xứ",
+      label: "Native & Idiomatic",
+      icon: Lightbulb,
+      text: sayItBetter.idiomatic,
+      color: "border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-300",
+      badgeColor: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
+      desc: "Dùng cụm từ & quán ngữ đặc trưng của người bản xứ.",
+    },
+  ].filter((v) => Boolean(v.text && v.text.trim().length > 0));
+
   return (
     <Card className="rounded-3xl border border-border/80 bg-card shadow-md overflow-hidden animate-in fade-in-0 slide-in-from-bottom-3 duration-300">
       <CardContent className="p-6 md:p-8 space-y-6">
         {/* Top Badges */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/40 pb-4">
           <div className="flex flex-wrap items-center gap-2">
+            {/* Fast-Pass Badge */}
+            {evaluation.isFastPass && (
+              <Badge
+                variant="outline"
+                className="text-xs font-bold px-2.5 py-1 rounded-full border bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/40 shadow-sm flex items-center gap-1"
+              >
+                <Zap className="size-3.5 fill-amber-500 text-amber-500" />
+                ⚡ Fast-Pass (&lt;100ms)
+              </Badge>
+            )}
+
             <Badge
               variant="outline"
               className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
@@ -83,7 +145,7 @@ export function VNFeedbackCard({
               }`}
             >
               <CheckCircle2 className="size-3 mr-1" />
-              Ý nghĩa (Meaning): {evaluation.meaningScore}%
+              Ý nghĩa: {evaluation.meaningScore}%
             </Badge>
 
             <Badge
@@ -138,40 +200,14 @@ export function VNFeedbackCard({
           </div>
         </div>
 
-        {/* User Said vs Native Model */}
-        <div className="grid md:grid-cols-2 gap-4">
-          {/* User Transcript */}
-          <div className="p-4 rounded-2xl bg-muted/40 border border-border/60 space-y-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-              Bạn đã nói:
-            </span>
-            <p className="font-mono text-sm font-semibold text-foreground">
-              "{evaluation.userTranscript}"
-            </p>
-          </div>
-
-          {/* Better Native Version */}
-          <div className="p-4 rounded-2xl bg-primary/10 border border-primary/20 space-y-1.5 relative">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1">
-                <Sparkles className="size-3" />
-                Câu bản xứ chuẩn xác:
-              </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => handlePlayTTS(evaluation.betterVersion)}
-                className="size-7 p-0 rounded-full text-primary hover:bg-primary/20"
-                title="Nghe mẫu phát âm"
-              >
-                <Volume2 className="size-3.5" />
-              </Button>
-            </div>
-            <p className="font-mono text-sm font-bold text-foreground">
-              "{evaluation.betterVersion}"
-            </p>
-          </div>
+        {/* User Said */}
+        <div className="p-4 rounded-2xl bg-muted/40 border border-border/60 space-y-1.5">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            Bạn đã nói:
+          </span>
+          <p className="font-mono text-sm font-semibold text-foreground">
+            "{evaluation.userTranscript}"
+          </p>
         </div>
 
         {/* Actionable Errors (if any) */}
@@ -194,7 +230,85 @@ export function VNFeedbackCard({
           </div>
         )}
 
-        {/* "One Meaning -> Many Expressions" Drawer */}
+        {/* Bộ 3 "Say It Better" (Native Reformulation) */}
+        {sayItBetterVariants.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="size-4 text-primary" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                  Bộ 3 Cách Diễn Đạt Bản Xứ (Say It Better)
+                </h4>
+              </div>
+              <span className="text-[11px] text-muted-foreground hidden sm:inline">
+                Bấm loa để nghe mẫu phát âm hoặc luyện nói trực tiếp
+              </span>
+            </div>
+
+            <div className="grid gap-3">
+              {sayItBetterVariants.map((variant) => {
+                const IconComponent = variant.icon;
+                const isThisPlaying = playingText === variant.text;
+                return (
+                  <div
+                    key={variant.id}
+                    className={`p-3.5 rounded-2xl border transition-all duration-200 hover:shadow-sm ${variant.color}`}
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${variant.badgeColor} flex items-center gap-1`}
+                        >
+                          <IconComponent className="size-3" />
+                          {variant.title}
+                        </Badge>
+                        <span className="text-[11px] text-muted-foreground hidden md:inline">
+                          {variant.desc}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handlePlayTTS(variant.text)}
+                          className={`size-7 p-0 rounded-full hover:bg-background/80 ${
+                            isThisPlaying ? "text-primary animate-pulse" : "text-muted-foreground"
+                          }`}
+                          title="Nghe mẫu phát âm"
+                        >
+                          <Volume2 className="size-3.5" />
+                        </Button>
+
+                        {onPracticeVariant && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => onPracticeVariant(variant.text)}
+                            className="h-7 px-2.5 rounded-lg text-[11px] font-semibold gap-1 shadow-2xs hover:bg-background"
+                            title="Luyện phát âm câu này"
+                          >
+                            <Mic className="size-3 text-primary" />
+                            <span>Luyện nói bản này</span>
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    <p className="font-mono text-sm font-bold text-foreground pl-0.5">
+                      "{variant.text}"
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Additional "One Meaning -> Many Expressions" Drawer */}
         {evaluation.naturalAlternatives && evaluation.naturalAlternatives.length > 0 && (
           <div className="rounded-2xl border border-border/80 bg-muted/20 overflow-hidden">
             <button
@@ -204,7 +318,7 @@ export function VNFeedbackCard({
             >
               <div className="flex items-center gap-2">
                 <Layers className="size-3.5 text-primary" />
-                <span>Nhiều cách diễn đạt tự nhiên khác (One Meaning → Many Expressions)</span>
+                <span>Thêm các biến thể khẩu ngữ khác (Other Expressions)</span>
                 <Badge variant="secondary" className="text-[10px] font-mono">
                   {evaluation.naturalAlternatives.length}
                 </Badge>
@@ -223,14 +337,26 @@ export function VNFeedbackCard({
                       <p className="font-mono font-semibold text-foreground">"{alt.expression}"</p>
                       <span className="text-[11px] text-muted-foreground">{alt.explanationVi || alt.tone}</span>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handlePlayTTS(alt.expression)}
-                      className="size-7 p-0 rounded-full text-muted-foreground hover:text-foreground"
-                    >
-                      <Volume2 className="size-3.5" />
-                    </Button>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handlePlayTTS(alt.expression)}
+                        className="size-7 p-0 rounded-full text-muted-foreground hover:text-foreground"
+                      >
+                        <Volume2 className="size-3.5" />
+                      </Button>
+                      {onPracticeVariant && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onPracticeVariant(alt.expression)}
+                          className="h-7 px-2 rounded-lg text-[10px] text-primary hover:bg-primary/10"
+                        >
+                          Luyện nói
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Clock, Flame, Zap, Target, HelpCircle, Volume2, Lightbulb } from "lucide-react";
+import { Sparkles, Clock, Flame, Zap, Target, HelpCircle, Volume2, Lightbulb, ChevronDown } from "lucide-react";
 import type { VNToENTask } from "@/types/vn-to-en";
 import { sanitizeTextForTTS } from "@/lib/tts/browser";
+import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 
 interface VNPromptCardProps {
   task: VNToENTask;
@@ -30,15 +32,14 @@ export function VNPromptCard({
   onSelectHintTier,
   onPlayTerm,
 }: VNPromptCardProps) {
+  const tts = useBrowserTTS();
+  const [isHintsExpanded, setIsHintsExpanded] = useState(true);
+
   const handlePlayVocab = (term: string) => {
     if (onPlayTerm) {
       onPlayTerm(term);
-    } else if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(sanitizeTextForTTS(term));
-      u.lang = "en-US";
-      u.rate = 0.9;
-      window.speechSynthesis.speak(u);
+    } else {
+      tts.speak(sanitizeTextForTTS(term));
     }
   };
 
@@ -63,7 +64,29 @@ export function VNPromptCard({
   };
 
   const modeInfo = getModeBadge(task.retrievalMode);
-  const activeHint = currentHintTier > 0 ? task.hints?.find((h) => h.tier === currentHintTier) : null;
+
+  const vocabTerms = new Set(
+    (task.suggestedVocabulary || []).map((v) => v.term.trim().toLowerCase())
+  );
+  const isFullSentence = (text?: string | null): boolean => {
+    if (!text) return false;
+    const clean = text.trim();
+    if (!clean || vocabTerms.has(clean.toLowerCase())) return false;
+    return clean.split(/\s+/).length >= 3;
+  };
+
+  const targetIntent = task.targetIntent?.trim();
+  const tier4Content = task.hints?.find((h) => h.tier === 4)?.content?.trim();
+  const fullExpected = task.expectedResponses?.find((r) => isFullSentence(r));
+
+  const fullEnglishSentence =
+    (isFullSentence(targetIntent) && targetIntent) ||
+    (isFullSentence(tier4Content) && tier4Content) ||
+    fullExpected ||
+    targetIntent ||
+    tier4Content ||
+    task.expectedResponses?.[0] ||
+    "";
 
   return (
     <Card className="rounded-3xl border border-border/80 bg-gradient-to-br from-card via-card to-primary/5 shadow-sm overflow-hidden flex flex-col h-full">
@@ -98,9 +121,24 @@ export function VNPromptCard({
         {/* Vietnamese Prompt Heading & Dynamic Content */}
         <div className="space-y-3 flex-1 overflow-y-auto pr-1">
           <div className="space-y-1 text-left">
-            <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-              <Target className="size-3.5 text-primary" />
-              <span>Hãy nói câu sau sang tiếng Anh:</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                <Target className="size-3.5 text-primary" />
+                <span>Hãy nói câu sau sang tiếng Anh:</span>
+              </div>
+              {fullEnglishSentence && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handlePlayVocab(fullEnglishSentence)}
+                  className="h-6 px-2 text-[10px] font-semibold gap-1 rounded-lg border border-primary/20 text-primary hover:bg-primary/10 btn-spring shrink-0"
+                  title="Nghe phát âm câu mẫu tiếng Anh hoàn chỉnh"
+                >
+                  <Volume2 className="size-3" />
+                  <span>Nghe câu mẫu</span>
+                </Button>
+              )}
             </div>
 
             <h2 className="text-lg md:text-xl font-bold tracking-tight text-foreground leading-snug">
@@ -143,45 +181,99 @@ export function VNPromptCard({
             </div>
           )}
 
-          {/* Active Hint Card (if unlocked) */}
-          {activeHint && (
-            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-1.5 mt-1 animate-in fade-in-0 duration-150">
-              <div className="flex items-center justify-between text-[11px] font-bold text-amber-700 dark:text-amber-300">
-                <span className="flex items-center gap-1.5">
-                  <HelpCircle className="size-3.5" />
-                  <span>Gợi ý Tầng {activeHint.tier}: {activeHint.title}</span>
-                </span>
+          {/* 4-Tier Progressive Scaffolding Hints (Stack List - Open by Default) */}
+          {task.hints && task.hints.length > 0 && (
+            <div className="rounded-2xl border border-amber-500/25 bg-amber-500/5 p-3 space-y-2.5 mt-1 transition-all">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                  <Sparkles className="size-3.5 text-amber-500" />
+                  <span>Gợi ý nấc thang (T1 - T4):</span>
+                </div>
                 <button
                   type="button"
-                  onClick={() => onSelectHintTier?.(0)}
-                  className="text-[10px] text-muted-foreground hover:text-foreground underline cursor-pointer"
+                  onClick={() => setIsHintsExpanded(!isHintsExpanded)}
+                  className="text-[11px] font-semibold text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer transition-colors"
                 >
-                  Thu gọn [Esc]
+                  <span>{isHintsExpanded ? "Thu gọn gợi ý" : "Hiện tất cả (T1 - T4)"}</span>
+                  <ChevronDown className={`size-3.5 transition-transform duration-200 ${isHintsExpanded ? "rotate-180" : ""}`} />
                 </button>
               </div>
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-mono text-xs md:text-sm font-semibold text-foreground">
-                  {activeHint.content}
-                </p>
-                {activeHint.tier === 4 && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handlePlayVocab(activeHint.content)}
-                    className="h-6 px-2 text-[10px] gap-1 rounded-lg border border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 shrink-0"
-                    title="Nghe phát âm câu mẫu"
-                  >
-                    <Volume2 className="size-3" />
-                    <span>Nghe</span>
-                  </Button>
-                )}
-              </div>
+
+              {isHintsExpanded && (
+                <div className="space-y-1.5 pt-0.5 animate-in fade-in-0 duration-150">
+                  {task.hints
+                    .filter((h) => h.tier >= 1 && h.tier <= 4)
+                    .map((h) => {
+                      const tierStyles = [
+                        {
+                          badge: "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30",
+                          border: "border-sky-500/20 bg-card/90",
+                        },
+                        {
+                          badge: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30",
+                          border: "border-indigo-500/20 bg-card/90",
+                        },
+                        {
+                          badge: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
+                          border: "border-amber-500/20 bg-card/90",
+                        },
+                        {
+                          badge: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+                          border: "border-emerald-500/20 bg-card/90",
+                        },
+                      ];
+                      const style = tierStyles[h.tier - 1] || tierStyles[0];
+                      const isFullSentenceTier = h.tier === 3 || h.tier === 4;
+
+                      return (
+                        <div
+                          key={h.tier}
+                          className={`p-2.5 rounded-xl border ${style.border} shadow-2xs space-y-1`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold border ${style.badge}`}>
+                                T{h.tier}
+                              </span>
+                              <span className="text-xs font-bold text-foreground">
+                                {h.title}
+                              </span>
+                            </div>
+
+                            {isFullSentenceTier && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  if (fullEnglishSentence) {
+                                    handlePlayVocab(fullEnglishSentence);
+                                  } else if (!h.content.includes("______")) {
+                                    handlePlayVocab(h.content);
+                                  }
+                                }}
+                                className="h-6 px-2 text-[10px] gap-1 rounded-lg border border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 shrink-0 font-semibold btn-spring"
+                                title={h.tier === 3 ? "Nghe câu hoàn chỉnh" : "Nghe câu mẫu"}
+                              >
+                                <Volume2 className="size-3" />
+                                <span>{h.tier === 3 ? "Nghe câu hoàn chỉnh" : "Nghe câu mẫu"}</span>
+                              </Button>
+                            )}
+                          </div>
+
+                          <p className="font-mono text-xs md:text-sm font-medium text-foreground/90 pl-0.5 leading-relaxed">
+                            {h.content}
+                          </p>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
             </div>
           )}
         </div>
 
-        {/* Bottom Bar: Prep Timer & Inline 4-Tier Hint Stepper */}
+        {/* Bottom Bar: Prep Timer & Inline 4-Tier Hint Status */}
         <div className="pt-2 border-t border-border/40 flex flex-wrap items-center justify-between gap-2">
           {isCountingDown && prepCountdown !== null ? (
             <div className="flex items-center gap-1.5 text-primary text-xs font-semibold font-mono animate-pulse">
@@ -195,33 +287,17 @@ export function VNPromptCard({
             </div>
           )}
 
-          {/* 4-Tier Progressive Hint Buttons Directly on Card */}
+          {/* 4-Tier Quick Pill Status Bar */}
           <div className="flex items-center gap-1 shrink-0">
-            {[
-              { tier: 1, label: "T1: Từ khoá" },
-              { tier: 2, label: "T2: Cấu trúc" },
-              { tier: 3, label: "T3: Mở đầu" },
-              { tier: 4, label: "T4: Câu mẫu" },
-            ].map(({ tier, label }) => {
-              const isActive = currentHintTier === tier;
-              return (
-                <Button
-                  key={tier}
-                  type="button"
-                  variant={isActive ? "secondary" : "outline"}
-                  size="sm"
-                  onClick={() => onSelectHintTier?.((isActive ? 0 : tier) as 0 | 1 | 2 | 3 | 4)}
-                  className={`h-7 px-2 text-[10px] sm:text-[11px] font-mono rounded-lg transition-all btn-spring ${
-                    isActive
-                      ? "bg-amber-500/25 border-amber-500/70 text-amber-700 dark:text-amber-300 font-bold shadow-xs scale-102"
-                      : "border-border/70 text-muted-foreground hover:text-foreground hover:border-amber-500/40"
-                  }`}
-                  title={`Bấm để mở/ẩn gợi ý ${label}`}
-                >
-                  <span>{label}</span>
-                </Button>
-              );
-            })}
+            <button
+              type="button"
+              onClick={() => setIsHintsExpanded(!isHintsExpanded)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 hover:bg-amber-500/20 transition-all cursor-pointer"
+              title="Bấm để ẩn hoặc hiện toàn bộ gợi ý T1-T4"
+            >
+              <Sparkles className="size-3 text-amber-500" />
+              <span>{isHintsExpanded ? "Gợi ý T1-T4: Đang hiện" : "Gợi ý T1-T4: Đã ẩn (Bấm mở)"}</span>
+            </button>
           </div>
         </div>
       </CardContent>

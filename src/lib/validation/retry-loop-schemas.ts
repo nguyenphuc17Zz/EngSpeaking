@@ -1,5 +1,17 @@
 import { z } from "zod";
 
+export const repairDiffTokenSchema = z.object({
+  text: z.string(),
+  status: z.enum(["repaired", "unchanged", "error_persisted", "inserted", "deleted"]),
+  isTargetFix: z.boolean().optional(),
+});
+
+export const conversationalTrapSchema = z.object({
+  partnerUtterance: z.string(),
+  reactionPromptVi: z.string(),
+  suggestedStarter: z.string().optional(),
+});
+
 export const targetedCorrectionSchema = z.object({
   errorType: z.enum(["grammar", "vocabulary", "article", "preposition", "word_order", "omission", "naturalness"]).default("grammar"),
   priority: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]).default(2),
@@ -11,6 +23,7 @@ export const targetedCorrectionSchema = z.object({
   betterSentence: z.string(),
   skeletonHint: z.string().optional(),
   simplifiedSentence: z.string().optional(),
+  conversationalTrap: conversationalTrapSchema.optional(),
   hints: z
     .array(
       z.object({
@@ -44,6 +57,7 @@ export const repairChallengeSchema = z.object({
   betterSentence: z.string(),
   skeletonHint: z.string().optional(),
   simplifiedSentence: z.string().optional(),
+  conversationalTrap: conversationalTrapSchema.optional(),
   hints: z
     .array(
       z.object({
@@ -76,6 +90,9 @@ export const repairEvaluationResultSchema = z.object({
   isSuccessful: z.boolean(),
   shouldEscalateSupport: z.boolean().default(false),
   canAdvance: z.boolean().default(false),
+  isFastPass: z.boolean().optional(),
+  isMidSpeechSelfCorrection: z.boolean().optional(),
+  diffTokens: z.array(repairDiffTokenSchema).optional(),
 });
 
 export const simplificationResultSchema = z.object({

@@ -195,26 +195,16 @@ export async function normalizeErrorPattern(params: {
     });
 
     const parsed = cleanJson(res.text);
-    if (!parsed) throw new Error("Could not parse JSON from Error Normalizer");
+    if (!parsed) throw new Error("Không thể phân tích phản hồi JSON chuẩn hóa lỗi từ AI");
 
     const validated = normalizedErrorSchema.safeParse(parsed);
     if (!validated.success) {
-      throw new Error("Invalid normalized error schema");
+      throw new Error(`Dữ liệu cấu trúc lỗi từ AI không hợp lệ: ${validated.error.message}`);
     }
 
     return validated.data as NormalizedErrorResult;
-  } catch {
-    const fallback = DETERMINISTIC_PATTERN_MAP.collocation;
-    return {
-      patternKey: "collocation",
-      canonicalName: fallback.canonicalName,
-      category: fallback.category,
-      labelVi: fallback.labelVi,
-      descriptionVi: fallback.descriptionVi,
-      severity: fallback.severity,
-      gapType: fallback.gapType,
-      confidenceScore: 0.85,
-      explanationVi: fallback.descriptionVi,
-    };
+  } catch (err) {
+    if (err instanceof Error) throw err;
+    throw new Error(`Chuẩn hóa lỗi thất bại: ${String(err)}`);
   }
 }

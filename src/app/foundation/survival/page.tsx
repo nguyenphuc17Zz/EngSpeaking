@@ -18,11 +18,13 @@ import {
   Mic,
   Square,
   Volume2,
+  Settings2,
 } from "lucide-react";
 
 import { useSurvivalStore } from "@/stores/survival-store";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import { transcribeViaServer } from "@/lib/stt/service";
 import { soundEffects } from "@/lib/audio/audio-chimes";
 import { GlobalAiSelector } from "@/components/common/GlobalAiSelector";
 import { SpeakingController } from "@/components/foundation/sentence-builder/SpeakingController";
@@ -60,6 +62,8 @@ export default function SurvivalSpeakingPage() {
   const [promptDisplayTime, setPromptDisplayTime] = useState<number>(Date.now());
   const [recordingDurationMs, setRecordingDurationMs] = useState(0);
   const [autoStartMic, setAutoStartMic] = useState(false);
+  const [pendingSpokenText, setPendingSpokenText] = useState<string | null>(null);
+  const [pendingLatencyMs, setPendingLatencyMs] = useState<number>(2000);
 
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
   const durationRef = useRef<NodeJS.Timeout | null>(null);
@@ -78,6 +82,7 @@ export default function SurvivalSpeakingPage() {
     setPromptDisplayTime(Date.now());
     setCountdownSeconds(5);
     setCurrentHintTier(0);
+    setPendingSpokenText(null);
 
     if (countdownRef.current) clearInterval(countdownRef.current);
     countdownRef.current = setInterval(() => {
@@ -115,9 +120,19 @@ export default function SurvivalSpeakingPage() {
   const handleStartRecord = useCallback(async () => {
     soundEffects.playMicStart();
     speechRec.resetTranscript();
+    setPendingSpokenText(null);
+
+    let sttProvider = "browser";
+    try {
+      const { useSettingsStore } = await import("@/stores/settings-store");
+      sttProvider = useSettingsStore.getState().stt?.provider || "browser";
+    } catch {}
+
     try {
       await recorder.start();
-      speechRec.startListening();
+      if (sttProvider === "browser") {
+        speechRec.startListening();
+      }
     } catch {
       toast.error("Không thể mở Micro", "Vui lòng cấp quyền truy cập micro.");
     }
@@ -163,27 +178,73 @@ export default function SurvivalSpeakingPage() {
       toast.error("Lỗi đánh giá", "Không thể hoàn tất đánh giá lúc này.");
     } finally {
       useSurvivalStore.setState({ isEvaluating: false });
+      setPendingSpokenText(null);
     }
   }, [mode, currentCircumTask, currentScenarioTask, processEvaluation]);
 
-  // Stop recording and evaluate
+  // Stop recording -> Do NOT send immediately, store in pending review state
   const handleStopRecord = useCallback(async () => {
     if (recorder.status !== "recording") return;
 
     soundEffects.playMicStop();
-    speechRec.stopListening();
+    let sttProvider = "browser";
+    let sttModel = "auto";
+    try {
+      const { useSettingsStore } = await import("@/stores/settings-store");
+      const settings = useSettingsStore.getState();
+      sttProvider = settings.stt?.provider || "browser";
+      sttModel = settings.stt?.model || "auto";
+    } catch {}
+
+    if (sttProvider === "browser") {
+      speechRec.stopListening();
+    }
 
     const measuredLatency = Math.max(500, Date.now() - promptDisplayTime);
 
     try {
-      await recorder.stop();
-      await new Promise((r) => setTimeout(r, 400));
-      const spokenText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
-      await executeEvaluation(spokenText, measuredLatency);
+      const recording = await recorder.stop();
+      let spokenText = "";
+
+      if (sttProvider !== "browser" && recording?.blob) {
+        try {
+          const res = await transcribeViaServer(recording.blob, {
+            provider: sttProvider === "auto" ? "whisper-local" : sttProvider,
+            model: sttModel,
+            language: "en-US",
+          });
+          spokenText = res.text.trim();
+        } catch {
+          spokenText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
+        }
+      } else {
+        await new Promise((r) => setTimeout(r, 250));
+        spokenText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
+      }
+
+      if (!spokenText) {
+        toast.error("Chưa ghi nhận được âm thanh", "Vui lòng bấm mic và nói lại câu.");
+        return;
+      }
+
+      setPendingSpokenText(spokenText);
+      setPendingLatencyMs(measuredLatency);
     } catch {
       toast.error("Lỗi xử lý", "Không thể dừng micro.");
     }
-  }, [recorder, speechRec, promptDisplayTime, executeEvaluation]);
+  }, [recorder, speechRec, promptDisplayTime]);
+
+  // Confirm submit pending speech
+  const handleConfirmSubmit = useCallback(async () => {
+    if (!pendingSpokenText) return;
+    await executeEvaluation(pendingSpokenText, pendingLatencyMs);
+  }, [pendingSpokenText, pendingLatencyMs, executeEvaluation]);
+
+  // Re-record
+  const handleReRecord = useCallback(() => {
+    setPendingSpokenText(null);
+    handleStartRecord();
+  }, [handleStartRecord]);
 
   // Submit fallback text
   const handleSubmitTextFallback = useCallback(async (text: string) => {
@@ -193,6 +254,7 @@ export default function SurvivalSpeakingPage() {
 
   // Continue to next challenge
   const handleContinue = useCallback(() => {
+    setPendingSpokenText(null);
     speechRec.resetTranscript();
     setCurrentHintTier(0);
     if (mode === "circumlocution") {
@@ -205,6 +267,7 @@ export default function SurvivalSpeakingPage() {
   // Retry current challenge
   const handleRetryCurrent = useCallback(() => {
     useSurvivalStore.setState({ lastEvaluation: null });
+    setPendingSpokenText(null);
     speechRec.resetTranscript();
     setPromptDisplayTime(Date.now());
   }, [speechRec]);
@@ -220,19 +283,27 @@ export default function SurvivalSpeakingPage() {
           handleRetryCurrent();
         } else if (recorder.status === "recording") {
           handleStopRecord();
+        } else if (pendingSpokenText) {
+          handleReRecord();
         } else if (!isEvaluating && !isGenerating) {
           handleStartRecord();
         }
       } else if (e.code === "Backspace" && recorder.status === "recording") {
         e.preventDefault();
         speechRec.resetTranscript();
+        setPendingSpokenText(null);
         toast.info("Đã xóa câu nói dở", "Tiếp tục nói lại từ đầu...");
-      } else if (e.code === "KeyH" && !lastEvaluation) {
+      } else if (e.code === "KeyH" && !lastEvaluation && !isEvaluating) {
         e.preventDefault();
         setCurrentHintTier((prev) => (prev >= 4 ? 0 : prev + 1));
-      } else if (e.code === "Enter" && lastEvaluation) {
-        e.preventDefault();
-        handleContinue();
+      } else if (e.code === "Enter") {
+        if (pendingSpokenText && !isEvaluating) {
+          e.preventDefault();
+          handleConfirmSubmit();
+        } else if (lastEvaluation) {
+          e.preventDefault();
+          handleContinue();
+        }
       } else if (e.code === "Escape") {
         e.preventDefault();
         router.push("/foundation");
@@ -246,8 +317,11 @@ export default function SurvivalSpeakingPage() {
     isEvaluating,
     isGenerating,
     lastEvaluation,
+    pendingSpokenText,
     handleStartRecord,
     handleStopRecord,
+    handleConfirmSubmit,
+    handleReRecord,
     handleRetryCurrent,
     handleContinue,
     router,
@@ -255,7 +329,7 @@ export default function SurvivalSpeakingPage() {
   ]);
 
   return (
-    <div className="fixed inset-0 h-screen w-screen bg-background text-foreground flex flex-col justify-between overflow-hidden z-40 select-none">
+    <div className="w-full min-h-[calc(100vh-8rem)] bg-card text-foreground flex flex-col justify-between overflow-hidden rounded-3xl border border-border/80 shadow-xs select-none">
       {/* Studio Header */}
       <header className="h-14 border-b border-border/60 px-4 sm:px-6 flex items-center justify-between bg-card/60 backdrop-blur-md shrink-0">
         <div className="flex items-center gap-3">
@@ -353,18 +427,26 @@ export default function SurvivalSpeakingPage() {
                 <h3 className="text-sm font-bold text-foreground">Không thể tạo thử thách từ AI</h3>
                 <p className="text-xs text-muted-foreground max-w-sm">{generationError}</p>
               </div>
-              <Button
-                size="sm"
-                onClick={() => {
-                  clearGenerationError();
-                  if (mode === "circumlocution") fetchNextCircumTask();
-                  else fetchNextScenarioTask();
-                }}
-                className="rounded-xl font-bold text-xs gap-1.5 h-9 px-4 btn-spring"
-              >
-                <RotateCcw className="size-3.5" />
-                <span>Thử lại ngay</span>
-              </Button>
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    clearGenerationError();
+                    if (mode === "circumlocution") fetchNextCircumTask();
+                    else fetchNextScenarioTask();
+                  }}
+                  className="rounded-xl font-bold text-xs gap-1.5 h-9 px-4 btn-spring"
+                >
+                  <RotateCcw className="size-3.5" />
+                  <span>Thử lại ngay</span>
+                </Button>
+                <Link href="/settings">
+                  <Button variant="outline" size="sm" className="rounded-xl text-xs h-9 px-3 gap-1.5">
+                    <Settings2 className="size-3.5" />
+                    <span>Cài đặt AI Model</span>
+                  </Button>
+                </Link>
+              </div>
             </Card>
           ) : (
             <SurvivalPromptCard
@@ -405,7 +487,13 @@ export default function SurvivalSpeakingPage() {
               onSubmitTextFallback={handleSubmitTextFallback}
               onOpenHints={() => setCurrentHintTier((prev) => (prev >= 4 ? 0 : prev + 1))}
               isEvaluating={isEvaluating}
-              onResetLiveTranscript={() => speechRec.resetTranscript()}
+              onResetLiveTranscript={() => {
+                speechRec.resetTranscript();
+                setPendingSpokenText(null);
+              }}
+              pendingText={pendingSpokenText}
+              onConfirmSubmit={handleConfirmSubmit}
+              onReRecord={handleReRecord}
             />
           )}
         </div>
@@ -416,7 +504,7 @@ export default function SurvivalSpeakingPage() {
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1">
             <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono font-bold">Space</kbd>
-            <span>{lastEvaluation ? "Nói lại" : recorder.status === "recording" ? "Dừng & Chấm" : "Bật mic"}</span>
+            <span>{lastEvaluation ? "Nói lại" : pendingSpokenText ? "Thu âm lại" : recorder.status === "recording" ? "Dừng nói" : "Bật mic"}</span>
           </span>
           {recorder.status === "recording" && (
             <span className="flex items-center gap-1 text-red-500 font-semibold animate-pulse">
@@ -428,6 +516,12 @@ export default function SurvivalSpeakingPage() {
             <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono font-bold">H</kbd>
             <span>Nấc gợi ý ({currentHintTier}/4)</span>
           </span>
+          {pendingSpokenText && !isEvaluating && (
+            <span className="flex items-center gap-1 text-primary font-bold">
+              <kbd className="px-1.5 py-0.5 rounded bg-primary text-primary-foreground text-[10px] font-mono">Enter</kbd>
+              <span>Nộp bài chấm điểm</span>
+            </span>
+          )}
           {lastEvaluation && (
             <span className="flex items-center gap-1 text-primary font-bold">
               <kbd className="px-1.5 py-0.5 rounded bg-primary/20 text-[10px] font-mono">Enter</kbd>

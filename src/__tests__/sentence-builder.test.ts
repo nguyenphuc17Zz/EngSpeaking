@@ -7,7 +7,10 @@ import {
   updateSkillMastery,
   INITIAL_ADAPTIVE_STATE,
   INITIAL_SKILL_MASTERY,
+  calculateIrtExpectedProbability,
+  calculateZpdDifficulty,
 } from "@/lib/foundation/sentence-builder/adaptive-engine";
+import { calculateHesitationMetrics } from "@/lib/foundation/sentence-builder/fast-pass.service";
 import {
   recordErrorsFromEvaluation,
   getStoredErrors,
@@ -180,5 +183,82 @@ describe("Sentence Builder (Function 1) Domain & Engine", () => {
     expect(mastery.successfulFirstAttempts).toBe(1);
     expect(mastery.streakCount).toBe(1);
     expect(mastery.overallMastery).toBeGreaterThanOrEqual(50);
+  });
+
+  it("evaluates with 0ms Fast-Pass engine on exact or canonical contraction matches", async () => {
+    const testTask: SentenceBuilderTask = {
+      id: "task_fast_pass_1",
+      taskType: "translation_output",
+      controlLevel: "controlled",
+      instruction: "Say in English",
+      promptVi: "Tôi không thích thức dậy sớm vào cuối tuần.",
+      targetIntent: "I do not like waking up early on weekends.",
+      expectedResponses: [
+        "I don't like waking up early on weekends.",
+        "I do not like waking up early on weekends.",
+        "I hate waking up early on weekends.",
+      ],
+      requiredElements: ["waking up early", "weekends"],
+      scaffold: { level: 1 },
+      hints: [],
+      difficulty: { overall: 3, grammarComplexity: 2, retrievalDemand: 0.3, lengthScore: 2 },
+      skills: ["present_simple"],
+      grammarTargets: ["present_simple"],
+      vocabularyTargets: ["wake up early"],
+      topic: "daily_routine",
+      prepTimeSec: 3.0,
+    };
+
+    // 1. Spoken with contraction variation: "I don't like waking up early on weekends" vs "I do not like..."
+    const evalResult = await evaluateSentenceBuilderAttempt({
+      task: testTask,
+      userTranscript: "I don't like waking up early on weekends.",
+      latencyMs: 1200,
+      speechDurationMs: 2200,
+      hintTierUsed: 0,
+      attemptNumber: 1,
+    });
+
+    expect(evalResult.evaluationSource).toBe("fast_pass");
+    expect(evalResult.overallScore).toBeGreaterThanOrEqual(90);
+    expect(evalResult.isSuccessful).toBe(true);
+    expect(evalResult.errors.length).toBe(0);
+    expect(evalResult.hesitationMetrics).toBeDefined();
+    expect(evalResult.hesitationMetrics?.wpm).toBeGreaterThan(60);
+  });
+
+  it("calculates speech hesitation metrics accurately based on WPM and pauses", () => {
+    // Fast, smooth speech: 8 words in 2.5 seconds ~ 192 WPM
+    const smoothMetrics = calculateHesitationMetrics({
+      userTranscript: "I usually drink coffee before I start work",
+      speechDurationMs: 2500,
+    });
+    expect(smoothMetrics.hesitationLevel).toBe("smooth");
+    expect(smoothMetrics.wpm).toBeGreaterThanOrEqual(130);
+
+    // Hesitant speech: 4 words in 6.0 seconds ~ 40 WPM
+    const hesitantMetrics = calculateHesitationMetrics({
+      userTranscript: "I... went... to gym",
+      speechDurationMs: 6000,
+    });
+    expect(hesitantMetrics.hesitationLevel).toBe("hesitant");
+    expect(hesitantMetrics.wpm).toBeLessThan(75);
+  });
+
+  it("computes IRT expected success probability and adapts ZPD difficulty", () => {
+    // When learner ability theta = 0.7 and difficulty is 3 (low difficulty), expected probability is high (> 0.7)
+    const probEasy = calculateIrtExpectedProbability(0.7, 3);
+    expect(probEasy).toBeGreaterThan(0.7);
+
+    // When difficulty is 9 (high difficulty), expected probability is lower
+    const probHard = calculateIrtExpectedProbability(0.7, 9);
+    expect(probHard).toBeLessThan(probEasy);
+
+    // ZPD target difficulty scales with theta
+    const zpdNovice = calculateZpdDifficulty(0.3);
+    const zpdExpert = calculateZpdDifficulty(0.8);
+    expect(zpdNovice).toBeLessThan(zpdExpert);
+    expect(zpdNovice).toBeGreaterThanOrEqual(1);
+    expect(zpdExpert).toBeLessThanOrEqual(10);
   });
 });

@@ -20,6 +20,18 @@ export type RepairPriority = 1 | 2 | 3 | 4 | 5;
 // Priority 4: Unnatural phrasing
 // Priority 5: Minor grammar (articles/prepositions)
 
+export interface RepairDiffToken {
+  text: string;
+  status: "repaired" | "unchanged" | "error_persisted" | "inserted" | "deleted";
+  isTargetFix?: boolean;
+}
+
+export interface ConversationalTrap {
+  partnerUtterance: string;
+  reactionPromptVi: string;
+  suggestedStarter?: string;
+}
+
 export interface TargetedCorrection {
   errorType: "grammar" | "vocabulary" | "article" | "preposition" | "word_order" | "omission" | "naturalness";
   priority: RepairPriority;
@@ -31,6 +43,7 @@ export interface TargetedCorrection {
   betterSentence: string; // Ideal native sentence
   skeletonHint?: string; // e.g. "Yesterday, I ______ to the gym."
   simplifiedSentence?: string; // Shorter cognitive reduction sentence
+  conversationalTrap?: ConversationalTrap;
   hints?: Array<{
     tier: number;
     title: string;
@@ -70,6 +83,9 @@ export interface RepairEvaluationResult {
   isSuccessful: boolean;
   shouldEscalateSupport: boolean;
   canAdvance: boolean;
+  isFastPass?: boolean;
+  isMidSpeechSelfCorrection?: boolean;
+  diffTokens?: RepairDiffToken[];
 }
 
 export interface RetrySession {

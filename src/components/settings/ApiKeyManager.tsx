@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +27,7 @@ import {
   Radio,
 } from "lucide-react";
 import type { AIModel } from "@/types/ai";
+import { SearchableSelect, type SearchableOption } from "@/components/ui/searchable-select";
 
 interface ProviderStatus {
   providerId: string;
@@ -57,6 +58,56 @@ export function ApiKeyManager({ onKeyUpdated }: { onKeyUpdated?: () => void }) {
     gemini?: AIModel[];
     groq?: AIModel[];
   }>({});
+
+  const geminiOptions: SearchableOption[] = useMemo(() => {
+    let list: SearchableOption[] = [];
+    if (discoveredModels.gemini && discoveredModels.gemini.length > 0) {
+      list = discoveredModels.gemini.map((m) => ({
+        value: m.id,
+        label: m.displayName || m.id,
+      }));
+    } else {
+      list = [
+        { value: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite (Mặc định)" },
+        { value: "gemini-3.7-flash", label: "Gemini 3.7 Flash" },
+        { value: "gemini-3.6-flash", label: "Gemini 3.6 Flash" },
+      ];
+    }
+
+    if (settings.preferredGeminiModel && !list.some((o) => o.value === settings.preferredGeminiModel)) {
+      list.unshift({
+        value: settings.preferredGeminiModel,
+        label: settings.preferredGeminiModel,
+        description: "Custom model đã chọn",
+      });
+    }
+    return list;
+  }, [discoveredModels.gemini, settings.preferredGeminiModel]);
+
+  const groqOptions: SearchableOption[] = useMemo(() => {
+    let list: SearchableOption[] = [];
+    if (discoveredModels.groq && discoveredModels.groq.length > 0) {
+      list = discoveredModels.groq.map((m) => ({
+        value: m.id,
+        label: m.displayName || m.id,
+      }));
+    } else {
+      list = [
+        { value: "llama-3.3-70b-versatile", label: "llama-3.3-70b-versatile (Mặc định)" },
+        { value: "llama-3.1-8b-instant", label: "llama-3.1-8b-instant (Siêu tốc)" },
+        { value: "mixtral-8x7b-32768", label: "mixtral-8x7b-32768" },
+      ];
+    }
+
+    if (settings.preferredGroqModel && !list.some((o) => o.value === settings.preferredGroqModel)) {
+      list.unshift({
+        value: settings.preferredGroqModel,
+        label: settings.preferredGroqModel,
+        description: "Custom model đã chọn",
+      });
+    }
+    return list;
+  }, [discoveredModels.groq, settings.preferredGroqModel]);
 
   const fetchStatuses = async () => {
     try {
@@ -409,28 +460,14 @@ export function ApiKeyManager({ onKeyUpdated }: { onKeyUpdated?: () => void }) {
                   ✓ Lưu độc lập
                 </span>
               </div>
-              <div className="relative">
-                <select
-                  value={settings.preferredGeminiModel}
-                  onChange={(e) => handleGeminiModelChange(e.target.value)}
-                  className="w-full h-9 rounded-xl bg-background border border-input px-3 pr-8 text-xs font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 appearance-none cursor-pointer"
-                >
-                  {discoveredModels.gemini && discoveredModels.gemini.length > 0 ? (
-                    discoveredModels.gemini.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.displayName || m.id}
-                      </option>
-                    ))
-                  ) : (
-                    <>
-                      <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite (Mặc định)</option>
-                      <option value="gemini-3.7-flash">Gemini 3.7 Flash</option>
-                      <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
-                    </>
-                  )}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-              </div>
+              <SearchableSelect
+                value={settings.preferredGeminiModel}
+                onChange={handleGeminiModelChange}
+                options={geminiOptions}
+                placeholder="Chọn model Gemini..."
+                searchPlaceholder="Tìm kiếm model Gemini (flash, pro, lite...)"
+                triggerClassName="h-9"
+              />
 
               {/* Action Button: Set as Primary Engine */}
               {!isGeminiActive ? (
@@ -603,28 +640,14 @@ export function ApiKeyManager({ onKeyUpdated }: { onKeyUpdated?: () => void }) {
                   ✓ Lưu độc lập
                 </span>
               </div>
-              <div className="relative">
-                <select
-                  value={settings.preferredGroqModel}
-                  onChange={(e) => handleGroqModelChange(e.target.value)}
-                  className="w-full h-9 rounded-xl bg-background border border-input px-3 pr-8 text-xs font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 appearance-none cursor-pointer"
-                >
-                  {discoveredModels.groq && discoveredModels.groq.length > 0 ? (
-                    discoveredModels.groq.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.id}
-                      </option>
-                    ))
-                  ) : (
-                    <>
-                      <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (Mặc định)</option>
-                      <option value="llama-3.1-8b-instant">llama-3.1-8b-instant (Siêu tốc)</option>
-                      <option value="mixtral-8x7b-32768">mixtral-8x7b-32768</option>
-                    </>
-                  )}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-              </div>
+              <SearchableSelect
+                value={settings.preferredGroqModel}
+                onChange={handleGroqModelChange}
+                options={groqOptions}
+                placeholder="Chọn model Groq..."
+                searchPlaceholder="Tìm kiếm model Groq (llama, mixtral...)"
+                triggerClassName="h-9"
+              />
 
               {/* Action Button: Set as Primary Engine */}
               {!isGroqActive ? (

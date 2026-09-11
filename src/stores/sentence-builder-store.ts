@@ -66,6 +66,7 @@ interface SentenceBuilderStoreState {
   setAutoStartMic: (val: boolean) => void;
   setPrepCountdown: (val: number | null) => void;
   setIsCountingDown: (val: boolean) => void;
+  setIsEvaluating: (val: boolean) => void;
   clearGenerationError: () => void;
   resetSession: () => void;
 }
@@ -153,9 +154,6 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
             body: JSON.stringify({
               controlLevel: adaptiveState.currentLevel,
               targetDifficulty: adaptiveState.currentDifficulty,
-              weakSkills: sessionConfig.weaknessFocusSkill ? [sessionConfig.weaknessFocusSkill] : adaptiveState.recentErrors,
-              recentErrors: adaptiveState.recentErrors,
-              recentPrompts: adaptiveState.recentPrompts,
               prepTimeSec: adaptiveState.prepTimeSec,
               provider,
               model,
@@ -172,8 +170,8 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
               attemptCount: 1,
               lastEvaluation: null,
             });
-            // Preload the next task in background
-            get().preloadNextTask();
+            // Do NOT immediately preload to avoid Groq 429 TPM burst limits.
+            // Next task is generated on-demand when user continues.
           } else {
             set({
               isGenerating: false,
@@ -189,41 +187,7 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
       },
 
       preloadNextTask: async () => {
-        const { adaptiveState, isPreloadingNext, sessionConfig, currentTaskIndex } = get();
-        if (isPreloadingNext || currentTaskIndex + 1 >= sessionConfig.targetCount) return;
-
-        set({ isPreloadingNext: true });
-        const settings = typeof window !== "undefined" ? (await import("@/stores/settings-store")).useSettingsStore.getState() : null;
-        const provider = settings?.sentenceBuilderGen?.provider || settings?.activeProvider || "gemini";
-        const model =
-          settings?.sentenceBuilderGen?.model ||
-          (provider === "groq" ? settings?.preferredGroqModel : settings?.preferredGeminiModel) ||
-          "auto";
-
-        try {
-          const res = await fetch("/api/foundation/sentence-builder/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              controlLevel: adaptiveState.currentLevel,
-              targetDifficulty: adaptiveState.currentDifficulty,
-              weakSkills: adaptiveState.recentErrors,
-              recentErrors: adaptiveState.recentErrors,
-              recentPrompts: adaptiveState.recentPrompts,
-              prepTimeSec: adaptiveState.prepTimeSec,
-              provider,
-              model,
-            }),
-          });
-          const data = await res.json();
-          if (data.task) {
-            set({ nextTask: data.task, isPreloadingNext: false });
-          } else {
-            set({ isPreloadingNext: false });
-          }
-        } catch {
-          set({ isPreloadingNext: false });
-        }
+        // Kept for interface compatibility, but kept no-op to prevent Groq 429 rate limits
       },
 
       processEvaluation: (evaluation: SentenceBuilderEvaluation) => {
@@ -341,6 +305,7 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
       setAutoStartMic: (val) => set({ autoStartMic: val }),
       setPrepCountdown: (val) => set({ prepCountdown: val }),
       setIsCountingDown: (val) => set({ isCountingDown: val }),
+      setIsEvaluating: (val) => set({ isEvaluating: val }),
       clearGenerationError: () => set({ generationError: null }),
       resetSession: () =>
         set({

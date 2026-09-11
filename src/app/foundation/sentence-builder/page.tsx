@@ -25,13 +25,14 @@ import {
   HelpCircle,
   X,
   AlertCircle,
+  AlertTriangle,
   RefreshCw,
+  Settings2,
 } from "lucide-react";
 
 import { useSentenceBuilderStore } from "@/stores/sentence-builder-store";
 import { useSettingsStore } from "@/stores/settings-store";
-import { useAudioRecorder } from "@/hooks/useAudioRecorder";
-import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import { useUnifiedSTT } from "@/hooks/useUnifiedSTT";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 import { soundEffects } from "@/lib/audio/audio-chimes";
 
@@ -40,6 +41,10 @@ import { SpeakingController } from "@/components/foundation/sentence-builder/Spe
 import { FeedbackCard } from "@/components/foundation/sentence-builder/FeedbackCard";
 import { SessionSummaryModal } from "@/components/foundation/sentence-builder/SessionSummaryModal";
 import { GlobalAiSelector } from "@/components/common/GlobalAiSelector";
+import {
+  computeFastPassMatch,
+  buildFastPassEvaluation,
+} from "@/lib/foundation/sentence-builder/fast-pass.service";
 
 import type { SessionMode } from "@/types/sentence-builder";
 
@@ -72,6 +77,7 @@ export default function SentenceBuilderPage() {
     setAutoStartMic,
     setPrepCountdown,
     setIsCountingDown,
+    setIsEvaluating,
     resetSession,
   } = useSentenceBuilderStore();
 
@@ -81,22 +87,21 @@ export default function SentenceBuilderPage() {
     (settings.activeProvider === "groq" ? settings.preferredGroqModel : settings.preferredGeminiModel) ||
     "gemini-3.5-flash-lite";
 
-  const recorder = useAudioRecorder();
-  const speechRec = useSpeechRecognition("en-US");
+  const unifiedSTT = useUnifiedSTT({ lang: "en-US" });
   const tts = useBrowserTTS();
 
   const [hasStartedSession, setHasStartedSession] = useState(false);
   const [isHintDrawerOpen, setIsHintDrawerOpen] = useState(false);
   const [recordingStartTime, setRecordingStartTime] = useState<number>(0);
   const [hasListenedBaseSentence, setHasListenedBaseSentence] = useState(false);
+  const [pendingSpokenText, setPendingSpokenText] = useState<string | null>(null);
+  const [pendingDurationMs, setPendingDurationMs] = useState<number>(2000);
 
   const prepTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Keep stable refs for recorder and speechRec to avoid infinite render cascades
-  const recorderRef = useRef(recorder);
-  recorderRef.current = recorder;
-  const speechRecRef = useRef(speechRec);
-  speechRecRef.current = speechRec;
+  // Keep stable ref for unifiedSTT to avoid render cascades
+  const unifiedSTTRef = useRef(unifiedSTT);
+  unifiedSTTRef.current = unifiedSTT;
 
   // Reset base sentence listen state when task changes
   useEffect(() => {
@@ -115,12 +120,13 @@ export default function SentenceBuilderPage() {
       clearInterval(prepTimerRef.current);
       prepTimerRef.current = null;
     }
-    if (recorderRef.current.status === "recording") {
-      recorderRef.current.stop();
-      speechRecRef.current.stopListening();
+    if (unifiedSTTRef.current.isListening) {
+      unifiedSTTRef.current.stopListening();
     }
     setIsCountingDown(false);
     setPrepCountdown(null);
+    setIsEvaluating(false);
+    setPendingSpokenText(null);
     resetSession();
     setHasStartedSession(false);
   };
@@ -133,14 +139,14 @@ export default function SentenceBuilderPage() {
     }
     setIsCountingDown(false);
     setPrepCountdown(null);
+    setPendingSpokenText(null);
 
     soundEffects.playMicStart();
-    speechRecRef.current.resetTranscript();
+    unifiedSTTRef.current.resetTranscript();
     setRecordingStartTime(Date.now());
 
     try {
-      await recorderRef.current.start();
-      speechRecRef.current.startListening();
+      await unifiedSTTRef.current.startListening();
     } catch {
       toast.error("Không thể mở Micro", "Vui lòng cấp quyền truy cập micro trong trình duyệt.");
     }
@@ -151,18 +157,47 @@ export default function SentenceBuilderPage() {
     async (spokenText: string, speechDurationMs: number) => {
       if (!currentTask) return;
 
-      const latencyMs = Math.max(
-        500,
-        recordingStartTime ? Date.now() - recordingStartTime - speechDurationMs : 2000
-      );
-
-      const provider = settings.sentenceBuilderEval?.provider || settings.activeProvider || "gemini";
-      const model =
-        settings.sentenceBuilderEval?.model ||
-        (provider === "groq" ? settings.preferredGroqModel : settings.preferredGeminiModel) ||
-        "auto";
-
+      setIsEvaluating(true);
       try {
+        const latencyMs = Math.max(
+          500,
+          recordingStartTime ? Date.now() - recordingStartTime - speechDurationMs : 2000
+        );
+
+        // 1. FAST-PASS 0ms EVALUATION (Client/Edge)
+        // If user formulated an exact or near-exact match to expected models, return instant result
+        if (currentTask.expectedResponses && currentTask.expectedResponses.length > 0) {
+          const match = computeFastPassMatch(
+            spokenText,
+            currentTask.expectedResponses,
+            currentTask.requiredElements
+          );
+
+          if (match.isMatch && match.matchedResponse && hintTier <= 2) {
+            const fastEval = buildFastPassEvaluation({
+              task: currentTask,
+              userTranscript: spokenText,
+              matchedResponse: match.matchedResponse,
+              confidence: match.confidence,
+              latencyMs,
+              speechDurationMs,
+              hintTierUsed: hintTier,
+              attemptNumber: attemptCount,
+            });
+
+            soundEffects.playAIReady();
+            processEvaluation(fastEval);
+            return;
+          }
+        }
+
+        // 2. DEEP AI EVALUATION FALLTHROUGH
+        const provider = settings.sentenceBuilderEval?.provider || settings.activeProvider || "gemini";
+        const model =
+          settings.sentenceBuilderEval?.model ||
+          (provider === "groq" ? settings.preferredGroqModel : settings.preferredGeminiModel) ||
+          "auto";
+
         const res = await fetch("/api/foundation/sentence-builder/evaluate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -185,34 +220,54 @@ export default function SentenceBuilderPage() {
         }
       } catch {
         toast.error("Lỗi đánh giá câu", "Không thể hoàn thành chấm điểm lúc này.");
+      } finally {
+        setIsEvaluating(false);
+        setPendingSpokenText(null);
       }
     },
-    [currentTask, recordingStartTime, hintTier, attemptCount, processEvaluation]
+    [currentTask, recordingStartTime, hintTier, attemptCount, processEvaluation, settings, setIsEvaluating]
   );
 
-  // Stop Recording and Evaluate
+  // Stop Recording -> Do NOT send immediately, store in pending review state
   const handleStopRecord = useCallback(async () => {
-    if (recorderRef.current.status !== "recording") return;
+    if (!unifiedSTTRef.current.isListening) return;
 
     soundEffects.playMicStop();
-    speechRecRef.current.stopListening();
     const durationMs = Math.max(800, Date.now() - recordingStartTime);
 
     try {
-      await recorderRef.current.stop();
-      // Brief pause for Web Speech chunk
-      await new Promise((r) => setTimeout(r, 400));
-      const spokenText = speechRecRef.current.fullTranscript.trim() || speechRecRef.current.transcript.trim();
+      const { text: spokenText } = await unifiedSTTRef.current.stopListening();
 
-      await submitAttemptForEvaluation(spokenText, durationMs);
+      if (!spokenText) {
+        toast.error("Chưa ghi nhận được âm thanh", "Vui lòng bấm mic và nói lại câu.");
+        return;
+      }
+
+      setPendingSpokenText(spokenText);
+      setPendingDurationMs(durationMs);
     } catch {
       toast.error("Lỗi hoàn thành thu âm", "Hãy thử nói lại câu.");
     }
-  }, [recordingStartTime, submitAttemptForEvaluation]);
+  }, [recordingStartTime]);
+
+  // User confirms submitting the recorded answer for AI evaluation
+  const handleConfirmSubmit = useCallback(async () => {
+    if (!pendingSpokenText) return;
+    const text = pendingSpokenText;
+    const dur = pendingDurationMs;
+    await submitAttemptForEvaluation(text, dur);
+  }, [pendingSpokenText, pendingDurationMs, submitAttemptForEvaluation]);
+
+  // User decides to re-record
+  const handleReRecord = useCallback(() => {
+    setPendingSpokenText(null);
+    handleStartRecord();
+  }, [handleStartRecord]);
 
   // Reset Live Transcript during recording (Backspace / Undo)
   const handleResetLiveTranscript = useCallback(() => {
-    speechRecRef.current.resetTranscript();
+    unifiedSTTRef.current.resetTranscript();
+    setPendingSpokenText(null);
     toast.info("Đã xoá câu nói", "Micro vẫn mở, hãy nói lại từ đầu trôi chảy.");
   }, []);
 
@@ -232,7 +287,8 @@ export default function SentenceBuilderPage() {
   // Retry same task (Say Again)
   const handleRetryTask = useCallback(() => {
     incrementAttempt();
-    speechRecRef.current.resetTranscript();
+    setPendingSpokenText(null);
+    unifiedSTTRef.current.resetTranscript();
     if (autoStartMic) {
       handleStartRecord();
     }
@@ -240,7 +296,8 @@ export default function SentenceBuilderPage() {
 
   // Continue to Next Task
   const handleContinueTask = useCallback(() => {
-    speechRecRef.current.resetTranscript();
+    setPendingSpokenText(null);
+    unifiedSTTRef.current.resetTranscript();
     advanceToNextTask();
   }, [advanceToNextTask]);
 
@@ -248,6 +305,11 @@ export default function SentenceBuilderPage() {
   const handleStartRecordRef = useRef(handleStartRecord);
   handleStartRecordRef.current = handleStartRecord;
   const handleStopRecordRef = useRef(handleStopRecord);
+  handleStopRecordRef.current = handleStopRecord;
+  const handleConfirmSubmitRef = useRef(handleConfirmSubmit);
+  handleConfirmSubmitRef.current = handleConfirmSubmit;
+  const handleReRecordRef = useRef(handleReRecord);
+  handleReRecordRef.current = handleReRecord;
   handleStopRecordRef.current = handleStopRecord;
   const handleResetLiveTranscriptRef = useRef(handleResetLiveTranscript);
   handleResetLiveTranscriptRef.current = handleResetLiveTranscript;
@@ -313,22 +375,29 @@ export default function SentenceBuilderPage() {
 
       if (e.code === "Space") {
         e.preventDefault();
-        if (recorderRef.current.status === "recording") {
+        if (unifiedSTTRef.current.status === "recording") {
           handleStopRecordRef.current();
         } else if (lastEvaluation) {
           handleRetryTaskRef.current();
+        } else if (pendingSpokenText) {
+          handleReRecordRef.current();
         } else if (!isEvaluating) {
           handleStartRecordRef.current();
         }
-      } else if (e.code === "Backspace" && recorderRef.current.status === "recording") {
+      } else if (e.code === "Backspace" && unifiedSTTRef.current.status === "recording") {
         e.preventDefault();
         handleResetLiveTranscriptRef.current();
       } else if (e.code === "KeyH" && !isEvaluating) {
         e.preventDefault();
         setHintTier(((hintTier + 1) % 5) as 0 | 1 | 2 | 3 | 4);
-      } else if (e.code === "Enter" && lastEvaluation) {
-        e.preventDefault();
-        handleContinueTaskRef.current();
+      } else if (e.code === "Enter") {
+        if (pendingSpokenText && !isEvaluating) {
+          e.preventDefault();
+          handleConfirmSubmitRef.current();
+        } else if (lastEvaluation) {
+          e.preventDefault();
+          handleContinueTaskRef.current();
+        }
       } else if (e.code === "Escape") {
         setHintTier(0);
       }
@@ -336,7 +405,7 @@ export default function SentenceBuilderPage() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isEvaluating, !!lastEvaluation]);
+  }, [isEvaluating, !!lastEvaluation, pendingSpokenText, hintTier, setHintTier]);
 
   // 1. Session Setup Screen (Lobby View)
   if (!hasStartedSession || (!currentTask && !isGenerating)) {
@@ -353,7 +422,7 @@ export default function SentenceBuilderPage() {
             <div className="flex items-center gap-2">
               <GlobalAiSelector size="sm" />
               <Badge variant="outline" className="text-xs font-mono border-primary/30 text-primary hidden sm:inline-flex">
-                Nâng phản xạ từ Thụ động $\rightarrow$ Tự động
+                Nâng phản xạ từ Thụ động → Tự động
               </Badge>
             </div>
           </div>
@@ -363,7 +432,7 @@ export default function SentenceBuilderPage() {
               Sentence Builder & Controlled Speaking
             </h1>
             <p className="text-xs md:text-sm text-muted-foreground leading-relaxed">
-              Khai mở phản xạ nói tức thì từ kiến thức từ vựng/ngữ pháp sẵn có. Luyện tập theo cơ chế thích ứng đa tầng (Level A $\rightarrow$ C).
+              Khai mở phản xạ nói tức thì từ kiến thức từ vựng/ngữ pháp sẵn có. Luyện tập theo cơ chế thích ứng đa tầng (Level A → C).
             </p>
           </div>
 
@@ -458,7 +527,7 @@ export default function SentenceBuilderPage() {
               </div>
               <div>
                 <h3 className="text-sm font-bold text-foreground">Standard (~10')</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">10 câu chuẩn: Khởi động $\rightarrow$ Tăng tốc $\rightarrow$ Sửa lỗi.</p>
+                <p className="text-xs text-muted-foreground mt-0.5">10 câu chuẩn: Khởi động → Tăng tốc → Sửa lỗi.</p>
               </div>
               <Badge variant="outline" className="text-[10px] font-mono text-primary border-primary/40">
                 10 tasks • Thích ứng toàn diện
@@ -504,7 +573,52 @@ export default function SentenceBuilderPage() {
     );
   }
 
-  // 2. Loading State while generating task
+  // 2. Error State View (if AI generation fails and no task loaded)
+  if (generationError && !currentTask) {
+    return (
+      <div className="p-8 rounded-3xl border border-destructive/30 bg-destructive/5 space-y-5 max-w-xl mx-auto my-16 text-center animate-in fade-in-0 shadow-sm">
+        <div className="size-12 rounded-2xl bg-destructive/15 text-destructive flex items-center justify-center mx-auto">
+          <AlertTriangle className="size-6" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-base font-bold text-foreground">Không thể tạo bài tập từ AI</h2>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed">
+            {generationError}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+          <Button
+            onClick={() => {
+              clearGenerationError();
+              fetchFirstTask();
+            }}
+            className="gap-2 rounded-xl btn-spring"
+          >
+            <RefreshCw className="size-4" />
+            <span>Thử lại ngay</span>
+          </Button>
+          <Link href="/settings">
+            <Button variant="outline" className="gap-2 rounded-xl">
+              <Settings2 className="size-4" />
+              <span>Kiểm tra API Key & Model</span>
+            </Button>
+          </Link>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              clearGenerationError();
+              setHasStartedSession(false);
+            }}
+            className="rounded-xl"
+          >
+            Quay lại chọn chế độ
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. Loading State while generating task
   if (isGenerating && !currentTask) {
     return (
       <div className="p-8 rounded-3xl border border-border/80 bg-card space-y-4 max-w-lg mx-auto my-16 text-center animate-in fade-in-0 shadow-sm">
@@ -514,7 +628,7 @@ export default function SentenceBuilderPage() {
         <div className="space-y-1">
           <h2 className="text-base font-bold text-foreground">AI đang thiết kế bài tập phản xạ...</h2>
           <p className="text-xs text-muted-foreground">
-            Cá nhân hoá theo hồ sơ và lịch sử lỗi của bạn.
+            Tình huống giao tiếp tự nhiên trong đời sống & công việc.
           </p>
         </div>
         <Skeleton className="h-20 w-full rounded-2xl" />
@@ -524,7 +638,7 @@ export default function SentenceBuilderPage() {
 
   // 3. Immersive Studio View (Zero-Scroll 2-Column Split Studio)
   return (
-    <div className="fixed inset-0 z-50 bg-background/98 backdrop-blur-xl p-3 md:p-5 flex flex-col justify-between overflow-hidden animate-in fade-in-0 duration-200">
+    <div className="w-full min-h-[calc(100vh-8rem)] flex flex-col justify-between overflow-hidden rounded-3xl border border-border/80 bg-card p-3 md:p-5 shadow-xs animate-in fade-in-0 duration-200">
       {/* Top Header Bar */}
       <header className="flex items-center justify-between gap-3 border-b border-border/40 pb-3 shrink-0">
         {/* Left: Exit Studio & Mode Info */}
@@ -599,6 +713,7 @@ export default function SentenceBuilderPage() {
               hasListenedBaseSentence={hasListenedBaseSentence}
               onPlayBaseSentence={handlePlayBaseSentence}
               isSpeakingBaseSentence={tts.isSpeaking}
+              onPlayTerm={(term) => tts.speak(term)}
             />
           )}
         </div>
@@ -613,18 +728,27 @@ export default function SentenceBuilderPage() {
             />
           ) : (
             <SpeakingController
-              status={recorder.status === "recording" ? "recording" : "idle"}
-              isListening={speechRec.isListening}
-              liveTranscript={speechRec.fullTranscript}
-              durationMs={recorder.durationMs}
+              status={
+                isEvaluating || unifiedSTT.isTranscribing
+                  ? "processing"
+                  : unifiedSTT.isListening
+                  ? "recording"
+                  : "idle"
+              }
+              isListening={unifiedSTT.isListening}
+              liveTranscript={unifiedSTT.fullTranscript}
+              durationMs={unifiedSTT.audioRecorder.durationMs}
               autoStartMic={autoStartMic}
               onToggleAutoStartMic={setAutoStartMic}
               onStartRecord={handleStartRecord}
               onStopRecord={handleStopRecord}
               onSubmitTextFallback={handleTextFallbackSubmit}
               onOpenHints={() => setIsHintDrawerOpen(true)}
-              isEvaluating={isEvaluating}
+              isEvaluating={isEvaluating || unifiedSTT.isTranscribing}
               onResetLiveTranscript={handleResetLiveTranscript}
+              pendingText={pendingSpokenText}
+              onConfirmSubmit={handleConfirmSubmit}
+              onReRecord={handleReRecord}
             />
           )}
         </div>
@@ -633,11 +757,17 @@ export default function SentenceBuilderPage() {
       {/* Bottom Footer Dock */}
       <footer className="flex items-center justify-between border-t border-border/40 pt-2 shrink-0 text-[11px] font-mono text-muted-foreground">
         <div className="flex items-center gap-3">
-          <span>[Space]: {lastEvaluation ? "Nói lại" : "Thu âm/Dừng"}</span>
+          <span>[Space]: {lastEvaluation ? "Nói lại" : pendingSpokenText ? "Thu âm lại" : "Thu âm/Dừng"}</span>
           <span>•</span>
           <span>[Backspace]: Xoá nói lại</span>
           <span>•</span>
           <span>[H]: Gợi ý</span>
+          {pendingSpokenText && !isEvaluating && (
+            <>
+              <span>•</span>
+              <span className="text-primary font-bold">[Enter]: Nộp bài chấm điểm</span>
+            </>
+          )}
           {lastEvaluation && (
             <>
               <span>•</span>

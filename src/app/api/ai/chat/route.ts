@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     temperature?: number;
     maxOutputTokens?: number;
     turns?: Array<{ role: "user" | "assistant" | "system"; content: string }>;
-    mode?: "opening" | "opening_pedagogical" | "reply" | "pedagogical_reply";
+    mode?: "opening" | "opening_pedagogical" | "reply" | "pedagogical_reply" | "lifeline";
     currentUserText?: string;
     scenarioContext?: string;
   };
@@ -62,6 +62,9 @@ export async function POST(req: Request) {
       if (!currentUserText.trim()) return NextResponse.json({ error: { code: "INVALID_REQUEST", message: "Thiếu currentUserText" } }, { status: 400 });
       currentUserText = sanitizeInput(currentUserText, 2000);
       const scenarioContext = (body as { scenarioContext?: string }).scenarioContext;
+      const discourseStage = (body as { discourseStage?: any }).discourseStage;
+      const activeTwist = (body as { activeTwist?: any }).activeTwist;
+      const userTurnDurationMs = (body as { userTurnDurationMs?: number }).userTurnDurationMs;
       const safeTurns = turns.slice(-20).map((t) => ({ ...t, content: sanitizeInput(t.content, 1000) }));
       const { generatePedagogicalConversationReply } = await import("@/lib/ai");
       const result = await generatePedagogicalConversationReply({
@@ -70,9 +73,26 @@ export async function POST(req: Request) {
         turns: safeTurns,
         currentUserText,
         scenarioContext,
+        discourseStage,
+        activeTwist,
+        userTurnDurationMs,
       });
       const headers = { "x-request-id": requestId, ...rateLimitResponse(rl.remaining, rl.resetMs) } as Record<string, string>;
       return NextResponse.json({ result }, { headers });
+    }
+
+    // Silence Lifeline emergency hint generation
+    if (mode === "lifeline") {
+      const lastAiTurnText = (body as { lastAiTurnText?: string }).lastAiTurnText || "";
+      const scenarioTitle = (body as { scenarioTitle?: string }).scenarioTitle || "";
+      const { generateLifelineEmergencyHints } = await import("@/lib/ai");
+      const result = await generateLifelineEmergencyHints({
+        provider,
+        model,
+        lastAiTurnText: sanitizeInput(lastAiTurnText, 500),
+        scenarioTitle: sanitizeInput(scenarioTitle, 200),
+      });
+      return NextResponse.json({ result });
     }
 
     // Conversation reply with context management

@@ -12,6 +12,9 @@ export async function GET() {
       configured: s.configured,
       // Do NOT expose keys
     })),
+    { id: "edge-tts", displayName: "Microsoft Edge Neural TTS (Free)", configured: true },
+    { id: "kokoro-tts", displayName: "Kokoro-82M TTS (Offline trong models/)", configured: true },
+    { id: "whisper-local", displayName: "Whisper ONNX (Offline trong models/)", configured: true },
     { id: "browser", displayName: "Browser (Web Speech / speechSynthesis)", configured: true },
     { id: "mock", displayName: "Mock (Dev/Test)", configured: process.env.MOCK_AI === "true" || process.env.NODE_ENV !== "production" },
   ];

@@ -140,4 +140,63 @@ describe("Vietnamese -> English Speaking (Function 2) Engine", () => {
     expect(state.consecutiveSuccesses).toBe(3);
     expect(state.currentDifficulty).toBe(4);
   });
+
+  it("evaluates correct speech instantly (<100ms) with Fast-Pass Engine and returns Bo 3 Say It Better", async () => {
+    const { computeFastPassVNMatch } = await import("@/lib/foundation/vn-to-en/fast-pass.service");
+
+    const task: VNToENTask = {
+      id: "vn_fp_1",
+      category: "daily_life",
+      retrievalMode: "timed",
+      promptVi: "Tôi thường uống một tách cà phê vào buổi sáng trước khi bắt đầu làm việc.",
+      targetIntent: "I usually drink a cup of coffee in the morning before starting work.",
+      expectedResponses: [
+        "I usually drink a cup of coffee in the morning before I start work.",
+        "I normally have a cup of coffee in the morning before work.",
+        "I usually grab a cup of coffee in the morning before starting work.",
+      ],
+      requiredMeaningElements: ["drink coffee", "in the morning", "before start work"],
+      targetSkills: ["daily_routine", "spoken_retrieval"],
+      difficulty: { overall: 3, grammarComplexity: 2, retrievalDemand: 0.4, semanticDensity: 2 },
+      hints: [],
+      prepTimeSec: 2.0,
+      isRapidFire: false,
+      topic: "routine",
+      sayItBetter: {
+        professional: "I typically drink a cup of coffee in the morning prior to commencing work.",
+        casual: "I usually grab a cup of coffee in the morning before starting work.",
+        idiomatic: "I always kick off my morning with a nice cup of joe before getting down to work.",
+      },
+    };
+
+    // 1. Clear, correct utterance matching expected candidate
+    const fpResult = computeFastPassVNMatch(task, "I usually drink a cup of coffee in the morning before I start work", {
+      responseLatencyMs: 1200,
+      speechDurationMs: 2000,
+      hintTierUsed: 0,
+      attemptNumber: 1,
+    });
+
+    expect(fpResult.canFastPass).toBe(true);
+    expect(fpResult.evaluation).toBeDefined();
+    expect(fpResult.evaluation?.isFastPass).toBe(true);
+    expect(fpResult.evaluation?.meaningScore).toBeGreaterThanOrEqual(95);
+    expect(fpResult.evaluation?.overallScore).toBeGreaterThanOrEqual(85);
+    expect(fpResult.evaluation?.sayItBetter).toBeDefined();
+    expect(fpResult.evaluation?.sayItBetter?.professional).toContain("prior to commencing");
+    expect(fpResult.evaluation?.sayItBetter?.casual).toContain("grab a cup of coffee");
+    expect(fpResult.evaluation?.sayItBetter?.idiomatic).toContain("cup of joe");
+
+    // 2. Incomplete or inaccurate utterance -> Bypasses Fast-Pass, goes to full LLM evaluation
+    const incompleteResult = computeFastPassVNMatch(task, "I drink water at night", {
+      responseLatencyMs: 1200,
+      speechDurationMs: 1500,
+      hintTierUsed: 0,
+      attemptNumber: 1,
+    });
+
+    expect(incompleteResult.canFastPass).toBe(false);
+    expect(incompleteResult.evaluation).toBeUndefined();
+  });
 });
+

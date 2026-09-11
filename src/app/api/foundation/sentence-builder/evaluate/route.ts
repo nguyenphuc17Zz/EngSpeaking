@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
       attemptNumber = 1,
       provider,
       model,
+      forceAi,
     } = body;
 
     if (!task) {
@@ -28,6 +29,7 @@ export async function POST(req: NextRequest) {
       attemptNumber,
       provider,
       model,
+      forceAi,
     });
 
     return NextResponse.json({ success: true, evaluation });

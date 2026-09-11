@@ -20,6 +20,12 @@ DRILL MODES:
 
 6. SUGGESTED VOCABULARY & BUFFER CHUNKS:
    - Always generate 2-3 high-frequency spoken chunks or buffer phrases with Vietnamese meanings in "suggestedVocabulary".
+   - Always include 3 "bufferChunks" representing 3 strategic categories ("buying_time", "framing_opinion", "immediate_reaction") to train conversational priming.
+
+7. CRITICAL REQUIREMENTS FOR FULL AUDIO & TTS:
+   - "sampleResponses" MUST be full, complete, grammatical English conversational sentences (minimum 4-6 words). NEVER return isolated words, single keywords, or short fragments.
+   - In "hints", Tier 4 content MUST be a complete natural spoken sentence with NO prefixes (do NOT write "Câu mẫu hoàn chỉnh:" or "Sample:").
+   - Tier 3 content must be the sentence frame with '______'. Tier 4 must be the fully completed sentence.
 
 OUTPUT STRICT JSON ONLY. NO MARKDOWN:
 {
@@ -31,9 +37,15 @@ OUTPUT STRICT JSON ONLY. NO MARKDOWN:
   "expectedKeywords": string[],
   "sampleResponses": string[],
   "targetLatencyMs": number (e.g. 2500),
+  "staircaseTargetMs": number (e.g. 2500),
   "difficulty": number (1-10),
   "category": "daily_conversation" | "workplace" | "opinions" | "past_events" | "reactions" | "buffer_phrases",
   "bufferPhraseSuggestion": string (e.g. "Well, to be honest..."),
+  "bufferChunks": [
+    { "phrase": "Well, to be honest...", "meaningVi": "Thành thật mà nói...", "category": "buying_time" },
+    { "phrase": "From my perspective...", "meaningVi": "Theo góc nhìn của tôi...", "category": "framing_opinion" },
+    { "phrase": "Off the top of my head...", "meaningVi": "Nghĩ ngay lúc này thì...", "category": "immediate_reaction" }
+  ],
   "isBaseline": boolean,
   "hints": [
     { "tier": 0, "title": "Không gợi ý", "content": "Tự bật câu ngay lập tức." },

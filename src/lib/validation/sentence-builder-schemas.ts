@@ -50,6 +50,7 @@ export const sentenceBuilderTaskSchema = z.object({
   vocabularyTargets: z.array(z.string()).default([]),
   topic: z.string().default("daily_life"),
   prepTimeSec: z.number().default(3.0),
+  targetErrorPatternKey: z.string().optional(),
 });
 
 export const evaluatedErrorSchema = z.object({
@@ -59,6 +60,13 @@ export const evaluatedErrorSchema = z.object({
   correction: z.string(),
   explanation: z.string(),
   patternKey: z.string().optional(),
+});
+
+export const hesitationMetricsSchema = z.object({
+  wpm: z.number().default(0),
+  durationMs: z.number().default(0),
+  hesitationLevel: z.enum(["smooth", "moderate", "hesitant"]).default("smooth"),
+  pauseEstimatedSec: z.number().default(0),
 });
 
 export const sentenceBuilderEvaluationSchema = z.object({
@@ -83,4 +91,6 @@ export const sentenceBuilderEvaluationSchema = z.object({
   actionableFeedback: z.string(),
   hintTierUsed: z.number().default(0),
   attemptNumber: z.number().default(1),
+  evaluationSource: z.enum(["fast_pass", "ai_llm", "deterministic"]).optional(),
+  hesitationMetrics: hesitationMetricsSchema.optional(),
 });

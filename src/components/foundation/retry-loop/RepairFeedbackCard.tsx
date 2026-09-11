@@ -53,7 +53,7 @@ export function RepairFeedbackCard({ session, result, onRetry, onContinue }: Pro
             </div>
 
             <div className="space-y-0.5">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                   Điểm sửa sai khẩu ngữ:
                 </span>
@@ -68,12 +68,23 @@ export function RepairFeedbackCard({ session, result, onRetry, onContinue }: Pro
                     <span>Chưa sửa đúng</span>
                   </Badge>
                 )}
+
+                {/* Fast-Pass Badge */}
+                {result.isFastPass && (
+                  <Badge
+                    variant="outline"
+                    className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/40 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs"
+                  >
+                    <Zap className="size-3 fill-amber-500 text-amber-500" />
+                    <span>⚡ Fast-Pass (&lt;50ms)</span>
+                  </Badge>
+                )}
               </div>
 
-              {result.selfCorrectionDetected && (
-                <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 animate-pulse">
+              {(result.selfCorrectionDetected || result.isMidSpeechSelfCorrection) && (
+                <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 animate-pulse pt-0.5">
                   <Award className="size-3.5" />
-                  <span>🎉 Tự sửa lỗi (Self-Correction Bonus) — Phản xạ cực tốt!</span>
+                  <span>🎉 Tự sửa lỗi giữa câu (Mid-Speech Self-Correction) — Bonus +100!</span>
                 </div>
               )}
             </div>
@@ -111,16 +122,63 @@ export function RepairFeedbackCard({ session, result, onRetry, onContinue }: Pro
               </p>
             </div>
 
-            {/* 2. User retry attempt */}
-            <div className="p-3 rounded-xl bg-background border border-border/80 space-y-1 shadow-2xs">
+            {/* 2. User retry attempt with Word-Level Diff */}
+            <div className="p-3.5 rounded-xl bg-background border border-border/80 space-y-2 shadow-2xs">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold text-foreground uppercase tracking-wider block">
-                  2. Bạn vừa sửa lại:
+                  2. Bạn vừa sửa lại (Word-Level Diff):
                 </span>
                 <span className="text-[10px] text-muted-foreground">
-                  {result.repairedText ? `"${result.repairedText}"` : "Không nhận diện được giọng nói"}
+                  Từ cần sửa: <strong className="text-emerald-600 dark:text-emerald-400">"{session.targetCorrection.minimalCorrection}"</strong>
                 </span>
               </div>
+
+              {result.diffTokens && result.diffTokens.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-1.5 p-2.5 rounded-lg bg-muted/30 border border-border/40 font-mono text-sm leading-relaxed">
+                  {result.diffTokens.map((token, idx) => {
+                    if (token.status === "repaired") {
+                      return (
+                        <span
+                          key={idx}
+                          className="px-2 py-0.5 rounded-md font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40 shadow-2xs flex items-center gap-1 animate-in zoom-in-95 duration-200"
+                        >
+                          <CheckCircle2 className="size-3 text-emerald-500 inline" />
+                          {token.text}
+                        </span>
+                      );
+                    }
+                    if (token.status === "error_persisted") {
+                      return (
+                        <span
+                          key={idx}
+                          className="px-2 py-0.5 rounded-md font-bold bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/40 line-through"
+                        >
+                          {token.text}
+                        </span>
+                      );
+                    }
+                    if (token.status === "inserted") {
+                      return (
+                        <span
+                          key={idx}
+                          className="px-1.5 py-0.5 rounded-md bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30"
+                        >
+                          {token.text}
+                        </span>
+                      );
+                    }
+                    return (
+                      <span key={idx} className="text-foreground">
+                        {token.text}
+                      </span>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="font-mono text-sm font-semibold text-foreground">
+                  {result.repairedText ? `"${result.repairedText}"` : "Không nhận diện được giọng nói"}
+                </p>
+              )}
             </div>
 
             {/* 3. Ideal Target Model */}

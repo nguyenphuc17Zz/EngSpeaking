@@ -2,6 +2,9 @@
 import { GeminiProvider } from "@/lib/ai/providers/gemini";
 import { GroqProvider } from "@/lib/ai/providers/groq";
 import { MockProvider } from "@/lib/ai/providers/mock";
+import { EdgeTTSProvider } from "@/lib/ai/providers/edge";
+import { KokoroTTSProvider } from "@/lib/ai/providers/kokoro";
+import { WhisperONNXProvider } from "@/lib/ai/providers/whisper";
 import { getProviderApiKey } from "@/lib/config/server";
 import type { AIProvider } from "@/lib/ai/interfaces/provider";
 import type { TextGenerationInput, TextGenerationResult } from "@/types/ai";
@@ -16,6 +19,7 @@ import {
   truncateHistory,
 } from "@/lib/ai/prompts/conversation";
 import { logger } from "@/lib/logger";
+import type { DiscourseStage, ConversationalTwist } from "@/types/conversation";
 
 export function createProvider(providerId: string): AIProvider | null {
   const key = getProviderApiKey(providerId) || "";
@@ -32,6 +36,9 @@ export function createProvider(providerId: string): AIProvider | null {
     if (!key && process.env.MOCK_AI === "true") return new MockProvider();
     return new GroqProvider(key);
   }
+  if (lower === "edge-tts" || lower === "edge") return new EdgeTTSProvider();
+  if (lower === "kokoro-tts" || lower === "kokoro") return new KokoroTTSProvider();
+  if (lower === "whisper-local" || lower === "whisper-onnx" || lower === "whisper") return new WhisperONNXProvider();
   if (lower === "mock") return new MockProvider();
   return null;
 }
@@ -130,6 +137,11 @@ export interface PedagogicalConversationResult {
     vocabularyUsed: string[];
     turnScore: number;
     coachTipVi?: string;
+    speechRateWpm?: number;
+    lexicalDiversityTtr?: number;
+    hesitationCount?: number;
+    discourseStage?: DiscourseStage;
+    activeTwistAlert?: string;
   };
   hints: DynamicScaffoldingHints;
 }
@@ -140,15 +152,34 @@ export async function generatePedagogicalConversationReply(opts: {
   turns: Array<{ role: "user" | "assistant" | "system"; content: string }>;
   currentUserText: string;
   scenarioContext?: string;
+  discourseStage?: DiscourseStage;
+  activeTwist?: ConversationalTwist | null;
+  userTurnDurationMs?: number;
 }): Promise<PedagogicalConversationResult> {
+  const { calculateSpeechRateWpm, calculateTypeTokenRatio, detectHesitations } = await import(
+    "@/lib/audio/smart-vad.engine"
+  );
+
+  const durationMs = opts.userTurnDurationMs || 3500;
+  const speechRateWpm = calculateSpeechRateWpm(opts.currentUserText, durationMs);
+  const lexicalDiversityTtr = calculateTypeTokenRatio(opts.currentUserText);
+  const hesitationStats = detectHesitations(opts.currentUserText);
+
   const history = truncateHistory([...opts.turns, { role: "user" as const, content: opts.currentUserText }], 14);
   const messages = history
     .filter((t) => t.role !== "system")
     .map((t) => ({ role: t.role as "user" | "assistant", content: t.content }));
 
-  const systemPrompt = opts.scenarioContext
+  let systemPrompt = opts.scenarioContext
     ? `${PEDAGOGICAL_CONVERSATION_SYSTEM_PROMPT}\n\nCurrent Scenario / Goal:\n${opts.scenarioContext}`
     : PEDAGOGICAL_CONVERSATION_SYSTEM_PROMPT;
+
+  if (opts.discourseStage) {
+    systemPrompt += `\n\nCURRENT CONVERSATION DISCOURSE STAGE: ${opts.discourseStage.toUpperCase()}`;
+  }
+  if (opts.activeTwist) {
+    systemPrompt += `\n\nACTIVE CONVERSATIONAL TWIST (Incorporate this complication naturally into your persona):\n${opts.activeTwist.titleVi} — ${opts.activeTwist.descriptionEn}`;
+  }
 
   const rawRes = await generateTextWithRouting({
     provider: opts.provider,
@@ -208,6 +239,11 @@ export async function generatePedagogicalConversationReply(opts: {
         vocabularyUsed: parsed.pedagogy?.vocabularyUsed || [],
         turnScore: parsed.pedagogy?.turnScore || 85,
         coachTipVi: parsed.pedagogy?.coachTipVi || "Phản xạ giao tiếp tốt!",
+        speechRateWpm,
+        lexicalDiversityTtr,
+        hesitationCount: hesitationStats.fillerWordCount,
+        discourseStage: opts.discourseStage,
+        activeTwistAlert: opts.activeTwist ? opts.activeTwist.titleVi : undefined,
       },
       hints: {
         tier1Keywords: parsed.hints?.tier1Keywords?.length ? parsed.hints.tier1Keywords : fallbackHints.tier1Keywords,
@@ -229,9 +265,69 @@ export async function generatePedagogicalConversationReply(opts: {
       vocabularyUsed: [],
       turnScore: 80,
       coachTipVi: "Tiếp tục duy trì hội thoại nhé!",
+      speechRateWpm,
+      lexicalDiversityTtr,
+      hesitationCount: hesitationStats.fillerWordCount,
+      discourseStage: opts.discourseStage,
+      activeTwistAlert: opts.activeTwist ? opts.activeTwist.titleVi : undefined,
     },
     hints: fallbackHints,
   };
+}
+
+export async function generateLifelineEmergencyHints(opts: {
+  provider: string;
+  model: string;
+  lastAiTurnText: string;
+  scenarioTitle?: string;
+}): Promise<{
+  emergencyStarters: Array<{ starter: string; meaningVi: string }>;
+  rescueIdeaEn: string;
+  rescueIdeaVi: string;
+}> {
+  const fallback = {
+    emergencyStarters: [
+      { starter: "To be completely honest...", meaningVi: "Thành thật mà nói..." },
+      { starter: "From my standpoint, I believe...", meaningVi: "Theo quan điểm của tôi..." },
+      { starter: "That's a valid point, however...", meaningVi: "Ý đó rất chuẩn, tuy nhiên..." },
+    ],
+    rescueIdeaEn: "I understand the situation, and I recommend we explore a balanced approach.",
+    rescueIdeaVi: "Tôi hiểu tình huống này, và đề xuất chúng ta nên tìm giải pháp cân bằng.",
+  };
+
+  try {
+    const prompt = `AI Partner just said: "${opts.lastAiTurnText}".
+Context: ${opts.scenarioTitle || "Spoken conversation"}.
+Return 3 quick emergency sentence starters and 1 rescue reply idea in strict JSON.`;
+
+    const { LIFELINE_RESCUE_PROMPT } = await import("@/lib/ai/prompts/live-session-prompts");
+    const rawRes = await generateTextWithRouting({
+      provider: opts.provider,
+      model: opts.model,
+      input: {
+        messages: [{ role: "user", content: prompt }],
+        systemInstruction: LIFELINE_RESCUE_PROMPT,
+        temperature: 0.4,
+        maxOutputTokens: 350,
+      },
+    });
+
+    const parsed = cleanJson(rawRes.text) as {
+      emergencyStarters?: Array<{ starter: string; meaningVi: string }>;
+      rescueIdeaEn?: string;
+      rescueIdeaVi?: string;
+    } | null;
+
+    if (parsed && Array.isArray(parsed.emergencyStarters) && parsed.emergencyStarters.length > 0) {
+      return {
+        emergencyStarters: parsed.emergencyStarters,
+        rescueIdeaEn: parsed.rescueIdeaEn || fallback.rescueIdeaEn,
+        rescueIdeaVi: parsed.rescueIdeaVi || fallback.rescueIdeaVi,
+      };
+    }
+  } catch {}
+
+  return fallback;
 }
 
 export async function generateOpeningPedagogicalPrompt(opts: {

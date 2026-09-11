@@ -23,7 +23,12 @@ CRITICAL INSTRUCTIONS:
    - Tier 4: Full model answer
 5. SUGGESTED VOCABULARY & COLLOCATIONS:
    ALWAYS generate 2-4 authentic, high-frequency collocations/chunks with Vietnamese meanings in "suggestedVocabulary". Provide natural oral chunks (e.g. "get stuck in traffic", "wrap up", "catch up with") rather than stiff single words.
-6. OUTPUT FORMAT: STRICT JSON ONLY. NO MARKDOWN. NO CONVERSATIONAL PROSE.
+6. PROVIDE BỘ 3 "SAY IT BETTER" (sayItBetter):
+   Always provide 3 clean, natural spoken English formulations:
+   - "professional": Formal, polite workplace & meeting English (clear, professional, polished).
+   - "casual": Natural, relaxed everyday spoken English for peers/friends.
+   - "idiomatic": Native colloquial phrase or idiom expressing the exact intent.
+7. OUTPUT FORMAT: STRICT JSON ONLY. NO MARKDOWN. NO CONVERSATIONAL PROSE.
 
 JSON Schema:
 {
@@ -52,6 +57,11 @@ JSON Schema:
     { "term": "get stuck in traffic", "meaningVi": "bị kẹt xe", "partOfSpeech": "phrase" },
     { "term": "commute to work", "meaningVi": "đi làm", "partOfSpeech": "phrase" }
   ],
+  "sayItBetter": {
+    "professional": string,
+    "casual": string,
+    "idiomatic": string
+  },
   "prepTimeSec": number (1.5 - 3.0, or 1.0 for rapid_fire),
   "isRapidFire": boolean,
   "topic": string
@@ -72,6 +82,7 @@ export function buildVNToENTaskPrompt(params: {
 - Target Difficulty (1-10): ${params.targetDifficulty}
 - Learner Weak Skills to target: ${params.weakSkills?.join(", ") || "spoken_retrieval, past_tense"}
 - Recent Recurring Spoken Errors: ${params.recentErrors?.join(", ") || "None"}
+- Anchor Instruction: If learner has recent errors, naturally embed that grammar/collocation target into authentic Vietnamese situational dialogue without word-by-word translation.
 - Anti-Repetition Exclusion (DO NOT use or closely match): ${JSON.stringify(params.recentPrompts?.slice(-10) || [])}
 - Topic domain: ${params.topic || "work_and_life"}
 

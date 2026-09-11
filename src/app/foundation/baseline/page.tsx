@@ -10,6 +10,7 @@ import { Mic, Square, Play, Loader2 } from "lucide-react";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useSettingsStore } from "@/stores/settings-store";
+import { transcribeViaServer } from "@/lib/stt/service";
 
 type BaselineTask = { id: string; prompt: string; skill: string; topic: string; transcript?: string; durationMs?: number; timeToFirstWordMs?: number };
 
@@ -45,20 +46,43 @@ export default function BaselinePage() {
     startTimeRef.current = Date.now();
     speechStartRef.current = Date.now();
     speech.resetTranscript();
+    const isBrowserSTT = (settings.stt?.provider || "browser") === "browser";
     try { await recorder.start(); } catch {}
-    speech.startListening();
+    if (isBrowserSTT) {
+      speech.startListening();
+    }
   };
   const stopRec = async () => {
     speech.stopListening();
-    await new Promise((r) => setTimeout(r, 300));
-    const transcript = speech.fullTranscript.trim() || speech.transcript.trim() || textFallback.trim();
+    const sttProvider = settings.stt?.provider || "browser";
+    const sttModel =
+      settings.stt?.model ||
+      (sttProvider === "groq" ? "whisper-large-v3" : "onnx-community/whisper-tiny.en");
+
+    let transcript = "";
     let durationMs: number | undefined;
     try {
       const rec = await recorder.stop().catch(() => null);
       durationMs = rec?.durationMs;
-    } catch {}
-    const ttfw = Date.now() - startTimeRef.current - (transcript ? 0 : 0);
-    // Actually ttfw approx speech start diff
+      if (sttProvider !== "browser" && rec?.blob) {
+        try {
+          const res = await transcribeViaServer(rec.blob, {
+            provider: sttProvider === "auto" ? "whisper-local" : sttProvider,
+            model: sttModel,
+            language: "en-US",
+          });
+          transcript = res.text.trim();
+        } catch {
+          transcript = speech.fullTranscript.trim() || speech.transcript.trim() || textFallback.trim();
+        }
+      } else {
+        await new Promise((r) => setTimeout(r, 300));
+        transcript = speech.fullTranscript.trim() || speech.transcript.trim() || textFallback.trim();
+      }
+    } catch {
+      transcript = speech.fullTranscript.trim() || speech.transcript.trim() || textFallback.trim();
+    }
+
     const timeToFirstWordMs = transcript ? Date.now() - speechStartRef.current : undefined;
     const updated = tasks.map((t, i) => i === currentIdx ? { ...t, transcript, durationMs, timeToFirstWordMs } : t);
     setTasks(updated);

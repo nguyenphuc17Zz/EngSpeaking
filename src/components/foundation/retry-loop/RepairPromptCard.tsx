@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,6 +15,7 @@ import {
   X,
   Layers,
   ChevronRight,
+  ChevronDown,
 } from "lucide-react";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 import { sanitizeTextForTTS } from "@/lib/tts/browser";
@@ -34,6 +36,7 @@ export function RepairPromptCard({
   attemptIndex = 1,
   totalAttempts = 5,
 }: Props) {
+  const [isHintsExpanded, setIsHintsExpanded] = useState(true);
   const tts = useBrowserTTS();
   const correction = session.targetCorrection;
 
@@ -67,8 +70,6 @@ export function RepairPromptCard({
           content: correction.betterSentence,
         },
       ];
-
-  const activeHint = currentHintTier > 0 ? hints.find((h) => h.tier === currentHintTier) : null;
 
   return (
     <Card className="rounded-3xl border border-border/80 bg-gradient-to-br from-card via-card to-amber-500/5 shadow-xs overflow-hidden flex flex-col h-full">
@@ -106,6 +107,42 @@ export function RepairPromptCard({
               {session.originalPrompt}
             </h2>
           </div>
+
+          {/* Conversational Trap / Partner Echo Simulation */}
+          {correction.conversationalTrap && (
+            <div className="p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/25 space-y-1.5 animate-in fade-in-0 duration-300">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+                  <Sparkles className="size-3 text-indigo-500" />
+                  Đối tác giao tiếp hỏi lại (Conversational Echo):
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handlePlayAudio(correction.conversationalTrap!.partnerUtterance)}
+                  className="h-6 px-2 text-[11px] text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/20 gap-1 rounded-lg"
+                  title="Nghe câu hỏi của đối tác"
+                >
+                  <Volume2 className="size-3" />
+                  <span>Nghe đối tác nói</span>
+                </Button>
+              </div>
+
+              <p className="text-sm font-semibold text-foreground italic">
+                "{correction.conversationalTrap.partnerUtterance}"
+              </p>
+
+              <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-indigo-500/15 text-[11px] text-muted-foreground">
+                <span>💡 {correction.conversationalTrap.reactionPromptVi}</span>
+                {correction.conversationalTrap.suggestedStarter && (
+                  <span className="text-indigo-600 dark:text-indigo-400 font-mono font-medium">
+                    (Gợi ý: "{correction.conversationalTrap.suggestedStarter}")
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Erroneous Spoken Sentence Display Box */}
           <div className="p-3.5 rounded-2xl bg-red-500/5 border border-red-500/20 space-y-2">
@@ -176,90 +213,92 @@ export function RepairPromptCard({
             </div>
           )}
 
-          {/* Active Inline Hint View (Revealed when tier > 0) */}
-          {activeHint && (
-            <div className="p-3.5 rounded-2xl bg-primary/10 border border-primary/30 space-y-2 animate-in fade-in-0 slide-in-from-top-2 duration-200 shadow-xs">
+          {/* 4-Tier Progressive Hints (Stack List - Open by Default) */}
+          {hints && hints.length > 0 && (
+            <div className="rounded-2xl border border-amber-500/25 bg-amber-500/5 p-3 space-y-2.5 mt-2 transition-all">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 font-bold text-xs text-primary">
-                  <Sparkles className="size-3.5" />
-                  <span>{activeHint.title}</span>
-                  <Badge variant="outline" className="text-[9px] font-mono px-1 py-0 h-4 border-primary/40 text-primary">
-                    Tầng {activeHint.tier}/4
-                  </Badge>
+                <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                  <Sparkles className="size-3.5 text-amber-500" />
+                  <span>Gợi ý nấc thang sửa lỗi (T1 - T4):</span>
                 </div>
-                <Button
+                <button
                   type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onSelectHintTier(0)}
-                  className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground gap-1 rounded-lg"
+                  onClick={() => setIsHintsExpanded(!isHintsExpanded)}
+                  className="text-[11px] font-semibold text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer transition-colors"
                 >
-                  <X className="size-3" />
-                  <span>Thu gọn (Esc)</span>
-                </Button>
+                  <span>{isHintsExpanded ? "Thu gọn gợi ý" : "Hiện tất cả (T1 - T4)"}</span>
+                  <ChevronDown className={`size-3.5 transition-transform duration-200 ${isHintsExpanded ? "rotate-180" : ""}`} />
+                </button>
               </div>
 
-              <div className="text-xs md:text-sm font-mono text-foreground leading-relaxed bg-background/80 p-2.5 rounded-xl border border-border/40">
-                {activeHint.content}
-              </div>
+              {isHintsExpanded && (
+                <div className="space-y-1.5 pt-0.5 animate-in fade-in-0 duration-150">
+                  {hints
+                    .filter((h) => h.tier >= 1 && h.tier <= 4)
+                    .map((h) => {
+                      const tierStyles = [
+                        { badge: "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30", border: "border-sky-500/20 bg-card/90" },
+                        { badge: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30", border: "border-indigo-500/20 bg-card/90" },
+                        { badge: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30", border: "border-amber-500/20 bg-card/90" },
+                        { badge: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30", border: "border-emerald-500/20 bg-card/90" },
+                      ];
+                      const style = tierStyles[h.tier - 1] || tierStyles[0];
+                      const isFullSentenceTier = h.tier === 3 || h.tier === 4;
+                      const cleanRepairSentence =
+                        correction.betterSentence || (!h.content.includes("______") ? h.content : "");
 
-              {/* Audio button for skeleton or model sentence */}
-              {(activeHint.tier === 3 || activeHint.tier === 4) && (
-                <div className="flex items-center justify-end">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handlePlayAudio(activeHint.content)}
-                    className="h-7 text-xs gap-1.5 rounded-xl border-primary/30 text-primary hover:bg-primary/10 btn-spring"
-                  >
-                    <Volume2 className="size-3" />
-                    <span>Nghe câu mẫu</span>
-                  </Button>
+                      return (
+                        <div key={h.tier} className={`p-2.5 rounded-xl border ${style.border} shadow-2xs space-y-1`}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold border ${style.badge}`}>
+                                T{h.tier}
+                              </span>
+                              <span className="text-xs font-bold text-foreground">{h.title}</span>
+                            </div>
+
+                            {isFullSentenceTier && cleanRepairSentence && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handlePlayAudio(cleanRepairSentence)}
+                                className="h-6 px-2 text-[10px] gap-1 rounded-lg border border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 shrink-0 font-semibold btn-spring"
+                                title="Nghe câu mẫu hoàn chỉnh"
+                              >
+                                <Volume2 className="size-3" />
+                                <span>{h.tier === 3 ? "Nghe câu hoàn chỉnh" : "Nghe câu mẫu"}</span>
+                              </Button>
+                            )}
+                          </div>
+
+                          <p className="font-mono text-xs md:text-sm font-medium text-foreground/90 pl-0.5 leading-relaxed">
+                            {h.content}
+                          </p>
+                        </div>
+                      );
+                    })}
                 </div>
               )}
             </div>
           )}
         </div>
 
-        {/* 4-Tier Inline Stepper Buttons (Always visible at card bottom, Zero Popup) */}
-        <div className="pt-2 border-t border-border/40 space-y-1.5">
-          <div className="flex items-center justify-between text-[11px] text-muted-foreground px-0.5">
-            <span className="font-semibold flex items-center gap-1">
-              <Layers className="size-3 text-primary" />
-              <span>Gợi ý nấc thang:</span>
-            </span>
-            <span className="font-mono text-[10px]">Phím 'H' để đổi tầng</span>
-          </div>
-
-          <div className="grid grid-cols-4 gap-1.5">
-            {[
-              { tier: 1, label: "T1: Chỉ lỗi", desc: "Từ sai" },
-              { tier: 2, label: "T2: Cấu trúc", desc: "Quy tắc" },
-              { tier: 3, label: "T3: Khung câu", desc: "Điền chỗ" },
-              { tier: 4, label: "T4: Câu mẫu", desc: "Hoàn chỉnh" },
-            ].map((btn) => {
-              const isActive = currentHintTier === btn.tier;
-              return (
-                <Button
-                  key={btn.tier}
-                  type="button"
-                  variant={isActive ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => onSelectHintTier(isActive ? 0 : btn.tier)}
-                  className={`h-9 px-1 rounded-xl text-xs font-semibold flex flex-col items-center justify-center gap-0 transition-all btn-spring shadow-2xs ${
-                    isActive
-                      ? "bg-primary text-primary-foreground border-primary shadow-xs ring-2 ring-primary/20"
-                      : "border-border/80 hover:border-primary/40 hover:bg-primary/5 text-foreground"
-                  }`}
-                  title={`${btn.label} - ${btn.desc}`}
-                >
-                  <span className="font-bold text-[11px] leading-tight">{btn.label}</span>
-                  <span className="text-[9px] font-normal opacity-80 leading-none">{btn.desc}</span>
-                </Button>
-              );
-            })}
-          </div>
+        {/* Bottom Bar: Quick Hint Status */}
+        <div className="pt-2 border-t border-border/40 flex items-center justify-between gap-2 shrink-0">
+          <span className="text-[11px] text-muted-foreground flex items-center gap-1 font-mono">
+            <Layers className="size-3 text-primary" />
+            <span>Nấc thang sửa lỗi phản xạ (T1 - T4)</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setIsHintsExpanded(!isHintsExpanded)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 hover:bg-amber-500/20 transition-all cursor-pointer"
+            title="Bấm để ẩn hoặc hiện toàn bộ gợi ý T1-T4"
+          >
+            <Sparkles className="size-3 text-amber-500" />
+            <span>{isHintsExpanded ? "Gợi ý T1-T4: Đang hiện" : "Gợi ý T1-T4: Đã ẩn (Bấm mở)"}</span>
+          </button>
         </div>
       </CardContent>
     </Card>

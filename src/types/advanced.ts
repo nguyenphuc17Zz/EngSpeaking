@@ -50,6 +50,58 @@ export interface AdvancedTrainingContext {
   userPreferences?: Record<string, unknown>;
 }
 
+export type ToulminElement =
+  | "claim"
+  | "data"
+  | "warrant"
+  | "rebuttal"
+  | "backing"
+  | "qualifier";
+
+export interface ToulminAnalysis {
+  elementsFound: ToulminElement[];
+  claimSnippet?: string;
+  dataSnippet?: string;
+  warrantSnippet?: string;
+  rebuttalSnippet?: string;
+  toulminScore: number; // 0 - 100%
+  feedbackVi: string;
+  missingKeyElements: ToulminElement[];
+}
+
+export type FallacyType =
+  | "false_dilemma"
+  | "hasty_generalization"
+  | "circular_reasoning"
+  | "strawman"
+  | "ad_hominem"
+  | "slippery_slope";
+
+export interface FallacyDetected {
+  type: FallacyType;
+  labelVi: string;
+  snippet: string;
+  explanationVi: string;
+  severity: "warning" | "critical";
+}
+
+export interface ComposureMetrics {
+  score: number; // 0 - 100
+  grade: "S" | "A" | "B" | "C";
+  latencyMs: number;
+  timeLimitMs: number;
+  pressureRatio: number; // latency / timeLimit
+  wpm: number;
+  hesitationCount: number;
+  label: string;
+}
+
+export interface TransitionalBridgeDetected {
+  hasBridge: boolean;
+  bridgePhrase?: string;
+  feedbackVi: string;
+}
+
 export interface AdvancedTrainingBlock {
   id: string;
   type: AdvancedTrainingType;
@@ -60,6 +112,8 @@ export interface AdvancedTrainingBlock {
   instructions: string;
   scenario?: unknown;
   constraints?: string[];
+  timeLimitSec?: number;
+  requiredToulminElements?: ToulminElement[];
 }
 
 export interface AdvancedChallenge {

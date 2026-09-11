@@ -15,6 +15,8 @@ export interface LatencyState {
   recentAccuracies: number[];
   rapidStreak: number;
   baselineMedianMs: number | null;
+  lastDirection?: "tighten" | "relax" | "hold";
+  reversalCount?: number;
 }
 
 export const INITIAL_LATENCY_STATE: LatencyState = {
@@ -24,6 +26,8 @@ export const INITIAL_LATENCY_STATE: LatencyState = {
   recentAccuracies: [],
   rapidStreak: 0,
   baselineMedianMs: null,
+  lastDirection: "hold",
+  reversalCount: 0,
 };
 
 export function computeMedian(numbers: number[]): number {
@@ -43,6 +47,44 @@ export function computePercentile(numbers: number[], p: number): number {
   return Math.round(sorted[lower] * (1 - weight) + sorted[upper] * weight);
 }
 
+/**
+ * Psychometric Adaptive Staircase Step Evaluator
+ * Transformed 2-down / 1-up staircase targeting ~70.7% success rate threshold
+ */
+export function evaluateStaircaseStep(
+  prevTargetMs: number,
+  evaluation: LatencyEvaluation,
+  consecutiveFast: number,
+  prevDirection?: "tighten" | "relax" | "hold"
+): {
+  nextTargetMs: number;
+  stepDirection: "tighten" | "relax" | "hold";
+  reversalOccurred: boolean;
+} {
+  let nextTargetMs = prevTargetMs;
+  let stepDirection: "tighten" | "relax" | "hold" = "hold";
+
+  // 2 consecutive fast_correct responses tighten target by 250ms (down to 1400ms)
+  if (evaluation.quadrant === "fast_correct" && consecutiveFast >= 2) {
+    stepDirection = "tighten";
+    nextTargetMs = Math.max(1400, prevTargetMs - 250);
+  } else if (evaluation.quadrant === "slow_incorrect" || evaluation.accuracyScore < 65) {
+    // Relax pressure by 200ms up to 4500ms
+    stepDirection = "relax";
+    nextTargetMs = Math.min(4500, prevTargetMs + 200);
+  } else if (evaluation.quadrant === "fast_incorrect") {
+    // Speed good but accuracy slips: slight relax +100ms
+    stepDirection = "relax";
+    nextTargetMs = Math.min(4500, prevTargetMs + 100);
+  }
+
+  const reversalOccurred =
+    (prevDirection === "tighten" && stepDirection === "relax") ||
+    (prevDirection === "relax" && stepDirection === "tighten");
+
+  return { nextTargetMs, stepDirection, reversalOccurred };
+}
+
 export function updateAdaptiveLatencyState(
   state: LatencyState,
   evaluation: LatencyEvaluation
@@ -51,28 +93,32 @@ export function updateAdaptiveLatencyState(
   const updatedAccuracies = [...state.recentAccuracies.slice(-15), evaluation.accuracyScore];
   const median = computeMedian(updatedLatencies);
 
-  let nextTarget = state.currentTargetLatencyMs;
-  let nextDifficulty = state.currentDifficulty;
-  let rapidStreak = evaluation.quadrant === "fast_correct" ? state.rapidStreak + 1 : 0;
+  const rapidStreak = evaluation.quadrant === "fast_correct" ? state.rapidStreak + 1 : 0;
+  const { nextTargetMs, stepDirection, reversalOccurred } = evaluateStaircaseStep(
+    state.currentTargetLatencyMs,
+    evaluation,
+    rapidStreak,
+    state.lastDirection
+  );
 
-  // 1. Adaptive Target Latency Tuning
-  if (rapidStreak >= 3 && evaluation.accuracyScore >= 85) {
-    // Increase pressure: lower target latency by 300ms down to min 1500ms
-    nextTarget = Math.max(1500, state.currentTargetLatencyMs - 300);
+  let nextDifficulty = state.currentDifficulty;
+  if (stepDirection === "tighten" && rapidStreak >= 3) {
     nextDifficulty = Math.min(10, state.currentDifficulty + 1);
-  } else if (evaluation.quadrant === "slow_incorrect" || evaluation.accuracyScore < 60) {
-    // Relax pressure: increase target latency by 400ms up to max 5000ms
-    nextTarget = Math.min(5000, state.currentTargetLatencyMs + 400);
+  } else if (stepDirection === "relax" && evaluation.accuracyScore < 60) {
     nextDifficulty = Math.max(1, state.currentDifficulty - 1);
   }
 
+  const reversalCount = (state.reversalCount || 0) + (reversalOccurred ? 1 : 0);
+
   return {
-    currentTargetLatencyMs: nextTarget,
+    currentTargetLatencyMs: nextTargetMs,
     currentDifficulty: nextDifficulty,
     recentLatencies: updatedLatencies,
     recentAccuracies: updatedAccuracies,
     rapidStreak,
     baselineMedianMs: state.baselineMedianMs ?? (updatedLatencies.length >= 5 ? median : null),
+    lastDirection: stepDirection,
+    reversalCount,
   };
 }
 

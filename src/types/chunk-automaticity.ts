@@ -57,11 +57,20 @@ export interface ChunkRecord {
   isCustomUserChunk?: boolean;
 }
 
+export type PragmaticStrategyType =
+  | "opinion_defense"        // Standard: Buffer -> Stance -> Reason -> Example
+  | "concession_counter"      // Advanced: Buffer -> Concession -> Stance/Rebuttal -> Resolution
+  | "problem_solution"       // Strategic: Buffer -> Problem diagnosis -> Core solution -> Projected impact
+  | "hypothetical_projection" // Analytic: Buffer -> Conditional premise -> Mechanism -> Concrete outcome
+  | "cause_effect_chain";     // Dynamic: Buffer -> Initiating trigger -> Core consequence -> Elaboration
+
 export interface ChunkChainBlock {
   blockType: "buffer" | "stance" | "reason" | "example";
   labelVi: string; // e.g. "Cụm câu đệm mở đầu"
   suggestedChunk: string; // e.g. "Well, to be honest..."
   alternativeChunks: string[];
+  rhetoricalRole?: string; // e.g. "Buying time & acknowledging question"
+  transitionConnector?: string; // e.g. "Having said that...", "First and foremost..."
 }
 
 export interface ChunkChainTask {
@@ -72,6 +81,11 @@ export interface ChunkChainTask {
   blocks: ChunkChainBlock[];
   expectedAssemblyExample: string;
   targetLatencyMs: number;
+  pragmaticStrategy?: PragmaticStrategyType;
+  strategyTitleVi?: string;
+  strategyDescriptionVi?: string;
+  persona?: string;
+  domain?: "workplace" | "daily_life" | "travel" | "tech_ai" | "opinions" | "career";
   hints?: Array<{
     tier: number;
     title: string;

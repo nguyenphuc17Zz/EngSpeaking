@@ -42,6 +42,7 @@ interface LatencyStoreState {
   preloadNextTask: () => Promise<void>;
   processEvaluation: (evaluation: LatencyEvaluation) => void;
   advanceToNextTask: () => void;
+  setIsEvaluating: (val: boolean) => void;
   resetSession: () => void;
 }
 
@@ -134,7 +135,7 @@ export const useLatencyStore = create<LatencyStoreState>()(
             lastEvaluation: null,
             generationError: null,
           });
-          get().preloadNextTask();
+          // Do NOT preload concurrently to avoid Groq 8000 TPM limit
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Lỗi kết nối AI khi tạo tình huống phản xạ.";
           set({ isGenerating: false, generationError: msg });
@@ -142,45 +143,7 @@ export const useLatencyStore = create<LatencyStoreState>()(
       },
 
       preloadNextTask: async () => {
-        const { isPreloadingNext, currentDrillMode, adaptiveState, currentTaskIndex, targetCount } = get();
-        if (isPreloadingNext || currentTaskIndex + 1 >= targetCount) return;
-
-        set({ isPreloadingNext: true });
-
-        let provider = "gemini";
-        let model = "auto";
-        try {
-          const { useSettingsStore } = await import("@/stores/settings-store");
-          const settings = useSettingsStore.getState();
-          provider = settings.generation?.provider || settings.activeProvider || "gemini";
-          model =
-            settings.generation?.model ||
-            (provider === "groq" ? settings.preferredGroqModel : settings.preferredGeminiModel) ||
-            "auto";
-        } catch {}
-
-        try {
-          const res = await fetch("/api/foundation/latency/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              drillMode: currentDrillMode,
-              targetDifficulty: adaptiveState.currentDifficulty,
-              targetLatencyMs: adaptiveState.currentTargetLatencyMs,
-              provider,
-              model,
-            }),
-          });
-
-          const data = await res.json();
-          if (data.task) {
-            set({ nextTask: data.task, isPreloadingNext: false });
-          } else {
-            set({ isPreloadingNext: false });
-          }
-        } catch {
-          set({ isPreloadingNext: false });
-        }
+        // Kept no-op to prevent Groq 429 TPM rate limits
       },
 
       processEvaluation: (evaluation: LatencyEvaluation) => {
@@ -248,6 +211,8 @@ export const useLatencyStore = create<LatencyStoreState>()(
           get().fetchFirstTask();
         }
       },
+
+      setIsEvaluating: (val) => set({ isEvaluating: val }),
 
       resetSession: () =>
         set({

@@ -14,313 +14,56 @@ export interface GenerateTaskOptions {
   controlLevel?: SentenceBuilderControlLevel;
   taskType?: SentenceBuilderCategory;
   targetDifficulty?: number;
-  weakSkills?: string[];
-  recentErrors?: string[];
-  recentPrompts?: string[];
   topic?: string;
   prepTimeSec?: number;
   provider?: string;
   model?: string;
+  pedagogicalConstraint?: string;
+  // Legacy optional fields ignored
+  weakSkills?: string[];
+  recentErrors?: string[];
+  recentPrompts?: string[];
+  targetErrorPatternKey?: string;
 }
 
-// 20+ High Quality Dynamic Mock Templates for Robust Offline/Fallback Generation
-const MOCK_TASK_POOLS: Record<SentenceBuilderControlLevel, Array<Omit<SentenceBuilderTask, "id">>> = {
-  controlled: [
-    {
-      taskType: "translation_output",
-      controlLevel: "controlled",
-      instruction: "Hãy nói bằng tiếng Anh theo khung mẫu bên dưới:",
-      promptVi: "Tôi thường uống cà phê vào buổi sáng trước khi bắt đầu làm việc.",
-      targetIntent: "I usually drink coffee in the morning before starting work.",
-      expectedResponses: [
-        "I usually drink coffee in the morning before I start work.",
-        "I normally have coffee in the morning before starting work.",
-        "I usually drink coffee in the morning before working.",
-      ],
-      requiredElements: ["usually drink coffee", "in the morning", "before starting work"],
-      scaffold: {
-        level: 1,
-        template: "I usually ______ in the morning before I ______.",
-        keywords: ["drink coffee", "start work"],
-        starter: "I usually...",
-        constraints: ["Dùng thì Hiện tại đơn"],
-      },
-      hints: [
-        { tier: 0, title: "Không gợi ý", content: "Tự phản xạ và nói ngay.", penaltyWeight: 0 },
-        { tier: 1, title: "Từ khoá chính", content: "drink coffee / morning / start work", penaltyWeight: 0.1 },
-        { tier: 2, title: "Khung câu", content: "I usually [verb] in the morning before I [verb].", penaltyWeight: 0.25 },
-        { tier: 3, title: "Từ mở đầu", content: "I usually drink coffee...", penaltyWeight: 0.5 },
-        { tier: 4, title: "Câu mẫu hoàn chỉnh", content: "I usually drink coffee in the morning before I start work.", penaltyWeight: 0.85 },
-      ],
-      difficulty: { overall: 2, grammarComplexity: 2, retrievalDemand: 0.3, lengthScore: 2 },
-      skills: ["present_simple", "sentence_construction", "routine_vocabulary"],
-      grammarTargets: ["present_simple", "time_clauses"],
-      vocabularyTargets: ["usually", "start work"],
-      topic: "daily_routine",
-      prepTimeSec: 3.0,
-    },
-    {
-      taskType: "sentence_completion",
-      controlLevel: "controlled",
-      instruction: "Điền và nói trọn vẹn câu sau:",
-      promptVi: "Nói về thói quen sau giờ làm của bạn.",
-      sourceText: "Sau khi tan làm, tôi thường đi tập gym.",
-      targetIntent: "After work, I usually go to the gym.",
-      expectedResponses: [
-        "After work, I usually go to the gym.",
-        "I usually go to the gym after I finish work.",
-        "After finishing work, I often hit the gym.",
-      ],
-      requiredElements: ["after work", "usually go to the gym"],
-      scaffold: {
-        level: 1,
-        template: "After work, I usually ______.",
-        keywords: ["go to the gym"],
-        starter: "After work, I usually...",
-        constraints: [],
-      },
-      hints: [
-        { tier: 0, title: "Không gợi ý", content: "Nói ngay.", penaltyWeight: 0 },
-        { tier: 1, title: "Từ khoá", content: "after work / go to the gym", penaltyWeight: 0.1 },
-        { tier: 2, title: "Khung câu", content: "After work, I usually [action].", penaltyWeight: 0.25 },
-        { tier: 3, title: "Từ mở đầu", content: "After work, I usually go...", penaltyWeight: 0.5 },
-        { tier: 4, title: "Câu mẫu", content: "After work, I usually go to the gym.", penaltyWeight: 0.85 },
-      ],
-      difficulty: { overall: 3, grammarComplexity: 2, retrievalDemand: 0.4, lengthScore: 2 },
-      skills: ["sentence_construction", "routine_vocabulary"],
-      grammarTargets: ["adverbs_of_frequency"],
-      vocabularyTargets: ["gym", "after work"],
-      topic: "health_and_fitness",
-      prepTimeSec: 3.0,
-    },
-    {
-      taskType: "translation_output",
-      controlLevel: "controlled",
-      instruction: "Chuyển câu sau sang tiếng Anh:",
-      promptVi: "Hôm qua tôi đã làm việc tại nhà vì trời mưa to.",
-      targetIntent: "Yesterday I worked from home because it rained heavily.",
-      expectedResponses: [
-        "Yesterday I worked from home because it was raining heavily.",
-        "I worked from home yesterday because of the heavy rain.",
-        "Yesterday I worked at home because it rained a lot.",
-      ],
-      requiredElements: ["worked from home", "yesterday", "because it rained heavily"],
-      scaffold: {
-        level: 1,
-        template: "Yesterday I ______ from home because it ______.",
-        keywords: ["worked", "rained heavily"],
-        starter: "Yesterday I worked...",
-        constraints: ["Dùng thì Quá khứ đơn (Past Simple)"],
-      },
-      hints: [
-        { tier: 0, title: "Không gợi ý", content: "Nói ngay.", penaltyWeight: 0 },
-        { tier: 1, title: "Từ khoá", content: "yesterday / worked from home / rained heavily", penaltyWeight: 0.1 },
-        { tier: 2, title: "Khung câu", content: "Yesterday I [past verb] from home because it [past verb].", penaltyWeight: 0.25 },
-        { tier: 3, title: "Từ mở đầu", content: "Yesterday I worked from home...", penaltyWeight: 0.5 },
-        { tier: 4, title: "Câu mẫu", content: "Yesterday I worked from home because it rained heavily.", penaltyWeight: 0.85 },
-      ],
-      difficulty: { overall: 4, grammarComplexity: 3, retrievalDemand: 0.5, lengthScore: 3 },
-      skills: ["past_simple", "cause_and_effect", "work_vocabulary"],
-      grammarTargets: ["past_simple_regular", "conjunction_because"],
-      vocabularyTargets: ["work from home", "rain heavily"],
-      topic: "work_and_weather",
-      prepTimeSec: 3.0,
-    },
-  ],
-  semi_controlled: [
-    {
-      taskType: "constraint_speaking",
-      controlLevel: "semi_controlled",
-      instruction: "Tạo và nói 1 câu hoàn chỉnh sử dụng các từ khoá sau:",
-      promptVi: "Nói về việc bạn chuẩn bị cho buổi họp vào buổi sáng.",
-      targetIntent: "I usually prepare my slides before the morning meeting.",
-      expectedResponses: [
-        "I prepare my slides before the morning meeting.",
-        "I usually check the meeting notes in the morning.",
-        "Before the morning meeting, I prepare all necessary documents.",
-      ],
-      requiredElements: ["prepare", "morning", "meeting"],
-      scaffold: {
-        level: 2,
-        template: null,
-        keywords: ["prepare", "slides / notes", "morning meeting"],
-        starter: null,
-        constraints: ["Dùng từ nối 'before' hoặc 'in order to'"],
-      },
-      hints: [
-        { tier: 0, title: "Không gợi ý", content: "Tự tạo câu từ từ khoá.", penaltyWeight: 0 },
-        { tier: 1, title: "Gợi ý ý tưởng", content: "prepare my slides / review the agenda", penaltyWeight: 0.1 },
-        { tier: 2, title: "Khung cấu trúc", content: "I [action] before the morning meeting.", penaltyWeight: 0.25 },
-        { tier: 3, title: "Từ mở đầu", content: "I always prepare my...", penaltyWeight: 0.5 },
-        { tier: 4, title: "Câu mẫu", content: "I always prepare my slides before the morning meeting.", penaltyWeight: 0.85 },
-      ],
-      difficulty: { overall: 5, grammarComplexity: 3, retrievalDemand: 0.65, lengthScore: 3 },
-      skills: ["sentence_construction", "vocabulary_retrieval", "workplace_communication"],
-      grammarTargets: ["prepositional_phrases", "time_connectors"],
-      vocabularyTargets: ["prepare", "meeting"],
-      topic: "workplace",
-      prepTimeSec: 2.0,
-    },
-    {
-      taskType: "sentence_transformation",
-      controlLevel: "semi_controlled",
-      instruction: "Biến đổi câu sau sang Thể Phủ Định trong Quá Khứ:",
-      promptVi: "Chuyển câu: 'I went to the office yesterday' sang phủ định (Tôi đã không đến văn phòng hôm qua vì...).",
-      baseSentence: "I went to the office yesterday.",
-      transformationType: "negative",
-      targetIntent: "I didn't go to the office yesterday because I was sick.",
-      expectedResponses: [
-        "I didn't go to the office yesterday.",
-        "I didn't go to the office yesterday because I was feeling unwell.",
-        "Yesterday, I didn't go to the office.",
-      ],
-      requiredElements: ["didn't go", "office", "yesterday"],
-      scaffold: {
-        level: 2,
-        template: null,
-        keywords: ["didn't go", "office", "yesterday"],
-        starter: null,
-        constraints: ["Dùng trợ động từ 'didn't' + động từ nguyên mẫu"],
-      },
-      hints: [
-        { tier: 0, title: "Không gợi ý", content: "Nói ngay câu phủ định.", penaltyWeight: 0 },
-        { tier: 1, title: "Từ khoá", content: "didn't go / office / yesterday", penaltyWeight: 0.1 },
-        { tier: 2, title: "Cấu trúc", content: "I didn't [verb] to the [place] yesterday.", penaltyWeight: 0.25 },
-        { tier: 3, title: "Từ mở đầu", content: "I didn't go to...", penaltyWeight: 0.5 },
-        { tier: 4, title: "Câu mẫu", content: "I didn't go to the office yesterday.", penaltyWeight: 0.85 },
-      ],
-      difficulty: { overall: 5, grammarComplexity: 3, retrievalDemand: 0.6, lengthScore: 3 },
-      skills: ["sentence_transformation", "past_simple_negative"],
-      grammarTargets: ["past_negative_did_not"],
-      vocabularyTargets: ["office", "yesterday"],
-      topic: "workplace",
-      prepTimeSec: 2.0,
-    },
-    {
-      taskType: "sentence_expansion",
-      controlLevel: "semi_controlled",
-      instruction: "Mở rộng câu gốc bằng cách thêm lý do (because) và địa điểm (where):",
-      promptVi: "Câu gốc: 'I like reading books.' Hãy mở rộng câu này khi nói.",
-      baseSentence: "I like reading books.",
-      targetIntent: "I like reading books at the coffee shop because it helps me relax.",
-      expectedResponses: [
-        "I like reading books at the coffee shop because it helps me relax.",
-        "I enjoy reading books in my room because it's very quiet.",
-        "I like reading books on weekends because it reduces my stress.",
-      ],
-      requiredElements: ["like reading books", "location/time", "because + reason"],
-      scaffold: {
-        level: 2,
-        template: null,
-        keywords: ["reading books", "coffee shop / home", "because / relax"],
-        starter: null,
-        constraints: ["Thêm mệnh đề lý do 'because'"],
-      },
-      hints: [
-        { tier: 0, title: "Không gợi ý", content: "Mở rộng và nói ngay.", penaltyWeight: 0 },
-        { tier: 1, title: "Từ khoá", content: "at the coffee shop / because it helps me relax", penaltyWeight: 0.1 },
-        { tier: 2, title: "Khung cấu trúc", content: "I like reading books [where] because [why].", penaltyWeight: 0.25 },
-        { tier: 3, title: "Từ mở đầu", content: "I like reading books at the coffee shop because...", penaltyWeight: 0.5 },
-        { tier: 4, title: "Câu mẫu", content: "I like reading books at the coffee shop because it helps me relax.", penaltyWeight: 0.85 },
-      ],
-      difficulty: { overall: 6, grammarComplexity: 4, retrievalDemand: 0.7, lengthScore: 4 },
-      skills: ["sentence_expansion", "complex_sentences", "active_vocabulary"],
-      grammarTargets: ["complex_sentences_because", "prepositions_of_place"],
-      vocabularyTargets: ["reading books", "relax"],
-      topic: "hobbies_and_lifestyle",
-      prepTimeSec: 2.0,
-    },
-  ],
-  free: [
-    {
-      taskType: "personal_context",
-      controlLevel: "free",
-      instruction: "Nói tự do 1-2 câu theo tình huống (Không có từ gợi ý):",
-      promptVi: "Hãy giải thích ngắn gọn tại sao bạn thích làm việc từ xa (Remote Work) hơn làm việc tại văn phòng.",
-      targetIntent: "Speaker explains preference for remote work (e.g. saves commute time, more flexible).",
-      expectedResponses: [
-        "I prefer working remotely because it saves me two hours of commuting every day.",
-        "Remote work is better for me because I can focus better and manage my own schedule.",
-        "I like working from home because it gives me a better work-life balance.",
-      ],
-      requiredElements: ["preference for remote work", "clear reason (commute / focus / balance)"],
-      scaffold: {
-        level: 3,
-        template: null,
-        keywords: [],
-        starter: null,
-        constraints: [],
-      },
-      hints: [
-        { tier: 0, title: "Không gợi ý", content: "Nói tự do theo ý bạn.", penaltyWeight: 0 },
-        { tier: 1, title: "Từ vựng gợi ý", content: "prefer remote work / save commute time / work-life balance", penaltyWeight: 0.1 },
-        { tier: 2, title: "Cấu trúc đề xuất", content: "I prefer [A] because it helps me [benefit].", penaltyWeight: 0.25 },
-        { tier: 3, title: "Từ mở đầu", content: "I prefer working remotely because...", penaltyWeight: 0.5 },
-        { tier: 4, title: "Câu mẫu tham khảo", content: "I prefer working remotely because it saves me a lot of time on commuting.", penaltyWeight: 0.85 },
-      ],
-      difficulty: { overall: 7, grammarComplexity: 4, retrievalDemand: 0.85, lengthScore: 4 },
-      skills: ["spontaneous_speech", "opinion_expression", "complex_sentence_construction"],
-      grammarTargets: ["gerunds_after_prefer", "causal_connectors"],
-      vocabularyTargets: ["remote work", "commute", "flexibility"],
-      topic: "work_and_career",
-      prepTimeSec: 1.5,
-    },
-    {
-      taskType: "personal_context",
-      controlLevel: "free",
-      instruction: "Nói tự do 1-2 câu theo tình huống:",
-      promptVi: "Mô tả một thói quen buổi tối giúp bạn nạp lại năng lượng sau một ngày làm việc bận rộn.",
-      targetIntent: "Speaker describes an evening routine to recharge (e.g. listening to music, taking a walk, reading).",
-      expectedResponses: [
-        "In the evening, I usually take a short walk in the park to clear my mind.",
-        "After a busy workday, I enjoy listening to acoustic music and drinking herbal tea.",
-        "To unwind after work, I usually work out for 30 minutes and take a warm shower.",
-      ],
-      requiredElements: ["evening routine activity", "purpose (recharge / unwind / relax)"],
-      scaffold: {
-        level: 3,
-        template: null,
-        keywords: [],
-        starter: null,
-        constraints: [],
-      },
-      hints: [
-        { tier: 0, title: "Không gợi ý", content: "Nói tự do.", penaltyWeight: 0 },
-        { tier: 1, title: "Từ vựng gợi ý", content: "unwind / take a walk / clear my mind / recharge", penaltyWeight: 0.1 },
-        { tier: 2, title: "Cấu trúc", content: "To unwind after a busy day, I usually [action].", penaltyWeight: 0.25 },
-        { tier: 3, title: "Từ mở đầu", content: "To recharge my energy in the evening, I...", penaltyWeight: 0.5 },
-        { tier: 4, title: "Câu mẫu tham khảo", content: "In the evening, I usually take a short walk in the park to unwind and clear my mind.", penaltyWeight: 0.85 },
-      ],
-      difficulty: { overall: 8, grammarComplexity: 4, retrievalDemand: 0.9, lengthScore: 5 },
-      skills: ["spontaneous_speech", "descriptive_speaking", "advanced_vocabulary_retrieval"],
-      grammarTargets: ["infinitive_of_purpose", "compound_predicates"],
-      vocabularyTargets: ["unwind", "recharge", "routine"],
-      topic: "lifestyle_and_wellbeing",
-      prepTimeSec: 1.5,
-    },
-  ],
-};
-
-function getMockTask(options: GenerateTaskOptions): SentenceBuilderTask {
+// Minimal test fixture strictly for offline test runner when provider === "mock"
+function getTestMockTask(options: GenerateTaskOptions): SentenceBuilderTask {
   const level = options.controlLevel || "controlled";
-  const pool = MOCK_TASK_POOLS[level] || MOCK_TASK_POOLS.controlled;
-  
-  // Filter out recent prompts to avoid repetition
-  const recent = options.recentPrompts || [];
-  const candidates = pool.filter((t) => !recent.includes(t.promptVi));
-  const selected = candidates.length > 0
-    ? candidates[Math.floor(Math.random() * candidates.length)]
-    : pool[Math.floor(Math.random() * pool.length)];
-
-  const id = `sb_task_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const id = `sb_task_test_${Date.now()}`;
   return {
-    ...selected,
     id,
-    prepTimeSec: options.prepTimeSec ?? (level === "controlled" ? 3.0 : level === "semi_controlled" ? 2.0 : 1.5),
-    difficulty: {
-      ...selected.difficulty,
-      overall: options.targetDifficulty ?? selected.difficulty.overall,
+    taskType: "sentence_completion",
+    controlLevel: level,
+    instruction: "Hoàn thành câu sau bằng tiếng Anh:",
+    promptVi: "Tôi thường uống cà phê vào mỗi buổi sáng.",
+    targetIntent: "I usually drink coffee every morning.",
+    expectedResponses: ["I usually drink coffee every morning."],
+    requiredElements: ["usually", "drink coffee", "every morning"],
+    scaffold: {
+      level: 1,
+      template: "I usually ___ every morning.",
+      keywords: ["coffee", "drink"],
+      starter: "I usually...",
+      constraints: [],
     },
+    hints: [
+      { tier: 0, title: "Không gợi ý", content: "Nói ngay.", penaltyWeight: 0 },
+      { tier: 1, title: "Từ khoá", content: "drink coffee", penaltyWeight: 0.1 },
+      { tier: 2, title: "Khung câu", content: "I usually ___ every morning.", penaltyWeight: 0.25 },
+      { tier: 3, title: "Từ mở đầu", content: "I usually...", penaltyWeight: 0.5 },
+      { tier: 4, title: "Câu mẫu", content: "I usually drink coffee every morning.", penaltyWeight: 0.85 },
+    ],
+    suggestedVocabulary: [
+      { term: "usually", phonetic: "/ˈjuː.ʒu.ə.li/", meaningVi: "thường xuyên" },
+      { term: "drink", phonetic: "/drɪŋk/", meaningVi: "uống" },
+      { term: "coffee", phonetic: "/ˈkɒf.i/", meaningVi: "cà phê" },
+    ],
+    difficulty: { overall: options.targetDifficulty ?? 3, grammarComplexity: 2, retrievalDemand: 0.5, lengthScore: 2 },
+    skills: ["sentence_construction"],
+    grammarTargets: ["present_simple"],
+    vocabularyTargets: ["coffee", "drink"],
+    topic: "daily_life",
+    prepTimeSec: 3.0,
   };
 }
 
@@ -352,21 +95,21 @@ export async function generateSentenceBuilderTask(
   const model = options.model || "auto";
 
   if (provider === "mock") {
-    return getMockTask({ ...options, controlLevel, targetDifficulty });
+    return getTestMockTask({ ...options, controlLevel, targetDifficulty });
   }
 
+  // Dynamic prompt with optional Targeted Error Bank pedagogical constraint
   const userPrompt = buildTaskGeneratorUserPrompt({
     controlLevel,
     taskType: options.taskType,
     targetDifficulty,
-    weakSkills: options.weakSkills,
-    recentErrors: options.recentErrors,
-    recentPrompts: options.recentPrompts,
     topic: options.topic,
-    prepTimeSec: options.prepTimeSec,
+    pedagogicalConstraint: options.pedagogicalConstraint,
   });
 
   let lastErrorMsg = "";
+  let isRateLimited = false;
+
   const attemptGenerate = async (): Promise<SentenceBuilderTask | null> => {
     try {
       const res = await generateTextWithRouting({
@@ -376,7 +119,7 @@ export async function generateSentenceBuilderTask(
           messages: [{ role: "user", content: userPrompt }],
           systemInstruction: TASK_GENERATOR_SYSTEM,
           temperature: 0.7,
-          maxOutputTokens: 1000,
+          maxOutputTokens: 450, // Reduced from 1000 to 450 to stay well under Groq 8000 TPM limit
         },
       });
 
@@ -390,7 +133,7 @@ export async function generateSentenceBuilderTask(
         parsed.id = `sb_task_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
       }
 
-      // Robust sanitization for fast/lightweight LLMs (like gemini-3.5-flash-lite)
+      // Robust sanitization for fast/lightweight LLMs (like gemini-3.5-flash-lite or groq)
       if (parsed.sourceText === null) delete parsed.sourceText;
       if (parsed.baseSentence === null) delete parsed.baseSentence;
       if (parsed.transformationType === null) delete parsed.transformationType;
@@ -403,20 +146,45 @@ export async function generateSentenceBuilderTask(
       if (!parsed.scaffold || typeof parsed.scaffold !== "object") {
         parsed.scaffold = { level: 1, template: null, keywords: [], starter: null, constraints: [] };
       }
+      const intentStr = String(parsed.targetIntent || "").trim();
+      const templateStr = (parsed.scaffold as Record<string, unknown>)?.template as string | undefined;
+
       if (!Array.isArray(parsed.expectedResponses) || parsed.expectedResponses.length === 0) {
-        parsed.expectedResponses = parsed.targetIntent ? [String(parsed.targetIntent)] : [];
+        parsed.expectedResponses = intentStr ? [intentStr] : [];
+      } else {
+        // Expand any isolated blank-fill phrases if a template with blanks exists
+        const expList: string[] = (parsed.expectedResponses as unknown[])
+          .map((r) => {
+            const s = String(r || "").trim();
+            if (templateStr && templateStr.includes("___") && s.split(/\s+/).length < 4) {
+              return templateStr.replace(/_{2,}/g, s).trim();
+            }
+            return s;
+          })
+          .filter(Boolean);
+
+        // Ensure the full targetIntent is included at the top if missing
+        if (intentStr && !expList.some((r: string) => r.toLowerCase() === intentStr.toLowerCase())) {
+          expList.unshift(intentStr);
+        }
+        parsed.expectedResponses = expList;
       }
+
       if (!Array.isArray(parsed.requiredElements)) {
         parsed.requiredElements = [];
       }
+
+      // Standard 5-tier hints auto-synthesis (saves 400+ tokens of AI output)
       if (!Array.isArray(parsed.hints) || parsed.hints.length === 0) {
-        const intent = String(parsed.targetIntent || "");
+        const fullSentence = intentStr || (parsed.expectedResponses as string[])?.[0] || "";
+        const words = fullSentence.split(" ").filter(Boolean);
+        const starter = (parsed.scaffold as Record<string, unknown>)?.starter as string | undefined;
         parsed.hints = [
-          { tier: 0, title: "Không gợi ý", content: "Nói ngay không cần xem gợi ý.", penaltyWeight: 0 },
-          { tier: 1, title: "Từ khoá", content: intent.split(" ").slice(0, 3).join(" "), penaltyWeight: 0.1 },
-          { tier: 2, title: "Khung câu", content: (parsed.scaffold as Record<string, unknown>)?.template || "Pattern...", penaltyWeight: 0.25 },
-          { tier: 3, title: "Từ mở đầu", content: intent.split(" ")[0] || "Starter...", penaltyWeight: 0.5 },
-          { tier: 4, title: "Câu mẫu bản xứ", content: intent, penaltyWeight: 0.85 },
+          { tier: 0, title: "Không gợi ý", content: "Tự phản xạ và nói ngay.", penaltyWeight: 0 },
+          { tier: 1, title: "Từ khoá", content: words.slice(0, 3).join(" "), penaltyWeight: 0.1 },
+          { tier: 2, title: "Khung câu", content: templateStr || (words[0] ? `Bắt đầu bằng: "${words[0]}"` : "Pattern..."), penaltyWeight: 0.25 },
+          { tier: 3, title: "Từ mở đầu", content: starter || (words.slice(0, 2).join(" ") + "..."), penaltyWeight: 0.5 },
+          { tier: 4, title: "Câu mẫu bản xứ", content: fullSentence, penaltyWeight: 0.85 },
         ];
       }
 
@@ -463,7 +231,11 @@ export async function generateSentenceBuilderTask(
       }
       return validated.data as SentenceBuilderTask;
     } catch (err) {
-      lastErrorMsg = err instanceof Error ? err.message : String(err);
+      const errStr = err instanceof Error ? err.message : String(err);
+      lastErrorMsg = errStr;
+      if (errStr.includes("429") || errStr.includes("rate_limit") || errStr.includes("TPM")) {
+        isRateLimited = true;
+      }
       if (process.env.NODE_ENV !== "production") {
         console.warn("[SentenceBuilderTaskGenerator] API call failed:", err);
       }
@@ -472,17 +244,16 @@ export async function generateSentenceBuilderTask(
   };
 
   let task = await attemptGenerate();
-  // Retry once if first attempt fails or returns malformed JSON
+
+  // Retry once for transient glitches if initial attempt failed
   if (!task) {
     task = await attemptGenerate();
   }
 
-  // Pure 100% Real AI — Throw error, NEVER fallback to fake/mock data
+  // Never fall back silently to mock data; throw error directly so user/client knows
   if (!task) {
     throw new Error(
-      `Không thể tạo bài tập bằng AI (${provider} • ${model}): ${
-        lastErrorMsg || "Mô hình AI không phản hồi hoặc mất kết nối mạng."
-      }`
+      `Không thể tạo bài tập Sentence Builder từ AI: ${lastErrorMsg || "AI không phản hồi hoặc phản hồi không hợp lệ"}. Vui lòng thử lại hoặc đổi AI Model / Provider.`
     );
   }
 

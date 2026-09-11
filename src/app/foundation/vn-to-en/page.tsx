@@ -26,8 +26,7 @@ import {
 } from "lucide-react";
 
 import { useVNToENStore } from "@/stores/vn-to-en-store";
-import { useAudioRecorder } from "@/hooks/useAudioRecorder";
-import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import { useUnifiedSTT } from "@/hooks/useUnifiedSTT";
 import { soundEffects } from "@/lib/audio/audio-chimes";
 
 import { VNPromptCard } from "@/components/foundation/vn-to-en/VNPromptCard";
@@ -35,6 +34,7 @@ import { SpeakingController } from "@/components/foundation/sentence-builder/Spe
 import { VNFeedbackCard } from "@/components/foundation/vn-to-en/VNFeedbackCard";
 import { VNSummaryModal } from "@/components/foundation/vn-to-en/VNSummaryModal";
 import { GlobalAiSelector } from "@/components/common/GlobalAiSelector";
+import { computeFastPassVNMatch } from "@/lib/foundation/vn-to-en/fast-pass.service";
 
 import type { VNToENRetrievalMode } from "@/types/vn-to-en";
 
@@ -43,6 +43,7 @@ export default function VNToENPage() {
     currentTask,
     isGenerating,
     isEvaluating,
+    setIsEvaluating,
     sessionConfig,
     currentTaskIndex,
     isSessionCompleted,
@@ -68,13 +69,16 @@ export default function VNToENPage() {
     resetSession,
   } = useVNToENStore();
 
-  const recorder = useAudioRecorder();
-  const speechRec = useSpeechRecognition("en-US");
+  const unifiedSTT = useUnifiedSTT({ lang: "en-US" });
+  const unifiedSTTRef = useRef(unifiedSTT);
+  unifiedSTTRef.current = unifiedSTT;
 
   const [hasStartedSession, setHasStartedSession] = useState(false);
   const [promptDisplayTime, setPromptDisplayTime] = useState<number>(Date.now());
   const [recordingStartTime, setRecordingStartTime] = useState<number>(0);
   const [recordingDurationMs, setRecordingDurationMs] = useState(0);
+  const [pendingSpokenText, setPendingSpokenText] = useState<string | null>(null);
+  const [pendingDurationMs, setPendingDurationMs] = useState<number>(2000);
 
   const durationTimerRef = useRef<NodeJS.Timeout | null>(null);
   const prepTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -125,7 +129,7 @@ export default function VNToENPage() {
 
   // Recording Duration Tracker
   useEffect(() => {
-    if (recorder.status === "recording") {
+    if (unifiedSTT.isListening) {
       durationTimerRef.current = setInterval(() => {
         setRecordingDurationMs(Date.now() - recordingStartTime);
       }, 100);
@@ -136,25 +140,25 @@ export default function VNToENPage() {
     return () => {
       if (durationTimerRef.current) clearInterval(durationTimerRef.current);
     };
-  }, [recorder.status, recordingStartTime]);
+  }, [unifiedSTT.isListening, recordingStartTime]);
 
   // Start Voice Recording
   const handleStartRecord = useCallback(async () => {
     if (prepTimerRef.current) clearInterval(prepTimerRef.current);
     setIsCountingDown(false);
     setPrepCountdown(null);
+    setPendingSpokenText(null);
 
     soundEffects.playMicStart();
-    speechRec.resetTranscript();
+    unifiedSTTRef.current.resetTranscript();
     setRecordingStartTime(Date.now());
 
     try {
-      await recorder.start();
-      speechRec.startListening();
+      await unifiedSTTRef.current.startListening();
     } catch {
       toast.error("Không thể mở Micro", "Vui lòng cấp quyền truy cập micro trong trình duyệt.");
     }
-  }, [recorder, speechRec, setIsCountingDown, setPrepCountdown]);
+  }, [setIsCountingDown, setPrepCountdown]);
 
   // Stable ref for auto-start timer
   const handleStartRecordRef = useRef(handleStartRecord);
@@ -167,20 +171,39 @@ export default function VNToENPage() {
 
       const responseLatencyMs = Math.max(400, recordingStartTime ? recordingStartTime - promptDisplayTime : 2000);
 
-      // Read active evaluation model from settings
-      let provider = "gemini";
-      let model = "auto";
-      try {
-        const { useSettingsStore } = await import("@/stores/settings-store");
-        const settings = useSettingsStore.getState();
-        provider = settings.evaluation?.provider || settings.activeProvider || "gemini";
-        model =
-          settings.evaluation?.model ||
-          (provider === "groq" ? settings.preferredGroqModel : settings.preferredGeminiModel) ||
-          "auto";
-      } catch {}
+      // --- Tier 1: Client-side Fast-Pass Evaluation (<100ms) ---
+      const fastPassResult = computeFastPassVNMatch(currentTask, spokenText, {
+        responseLatencyMs,
+        speechDurationMs,
+        hintTierUsed: hintTier,
+        attemptNumber: attemptCount,
+      });
 
+      if (fastPassResult.canFastPass && fastPassResult.evaluation) {
+        soundEffects.playAIReady();
+        processEvaluation(fastPassResult.evaluation);
+        setIsEvaluating(false);
+        setPendingSpokenText(null);
+        return;
+      }
+      // ---------------------------------------------------------
+
+      setIsEvaluating(true);
       try {
+
+        // Read active evaluation model from settings
+        let provider = "gemini";
+        let model = "auto";
+        try {
+          const { useSettingsStore } = await import("@/stores/settings-store");
+          const settings = useSettingsStore.getState();
+          provider = settings.evaluation?.provider || settings.activeProvider || "gemini";
+          model =
+            settings.evaluation?.model ||
+            (provider === "groq" ? settings.preferredGroqModel : settings.preferredGeminiModel) ||
+            "auto";
+        } catch {}
+
         const res = await fetch("/api/foundation/vn-to-en/evaluate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -205,65 +228,101 @@ export default function VNToENPage() {
         }
       } catch {
         toast.error("Lỗi đánh giá câu", "Không thể hoàn thành chấm điểm lúc này.");
+      } finally {
+        setIsEvaluating(false);
+        setPendingSpokenText(null);
       }
     },
-    [currentTask, recordingStartTime, promptDisplayTime, hintTier, attemptCount, processEvaluation]
+    [currentTask, recordingStartTime, promptDisplayTime, hintTier, attemptCount, processEvaluation, setIsEvaluating]
   );
 
-  // Stop Recording and Evaluate
+  // Stop Recording -> Do NOT send immediately, store in pending review state
   const handleStopRecord = useCallback(async () => {
-    if (recorder.status !== "recording") return;
+    if (!unifiedSTTRef.current.isListening) return;
 
     soundEffects.playMicStop();
-    speechRec.stopListening();
     const durationMs = Math.max(700, Date.now() - recordingStartTime);
 
     try {
-      await recorder.stop();
-      await new Promise((r) => setTimeout(r, 400));
-      const spokenText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
+      const { text: spokenText } = await unifiedSTTRef.current.stopListening();
 
-      await submitAttemptForEvaluation(spokenText, durationMs);
+      if (!spokenText) {
+        toast.error("Chưa ghi nhận được âm thanh", "Vui lòng bấm mic và nói lại câu.");
+        return;
+      }
+
+      setPendingSpokenText(spokenText);
+      setPendingDurationMs(durationMs);
     } catch {
       toast.error("Lỗi hoàn thành thu âm", "Hãy thử nói lại câu.");
     }
-  }, [recorder, speechRec, recordingStartTime, submitAttemptForEvaluation]);
+  }, [recordingStartTime]);
 
-  // Reset Live Transcript during recording (Backspace)
+  // Confirm submit pending speech
+  const handleConfirmSubmit = useCallback(async () => {
+    if (!pendingSpokenText) return;
+    await submitAttemptForEvaluation(pendingSpokenText, pendingDurationMs);
+  }, [pendingSpokenText, pendingDurationMs, submitAttemptForEvaluation]);
+
+  // Re-record
+  const handleReRecord = useCallback(() => {
+    setPendingSpokenText(null);
+    handleStartRecord();
+  }, [handleStartRecord]);
+
+  // Reset Live Transcript during recording (Backspace / Undo)
   const handleResetLiveTranscript = useCallback(() => {
-    speechRec.resetTranscript();
+    unifiedSTTRef.current.resetTranscript();
+    setPendingSpokenText(null);
     toast.info("Đã xoá câu nói", "Micro vẫn mở, hãy nói lại từ đầu trôi chảy.");
-  }, [speechRec]);
+  }, []);
 
   // Handle Text Fallback Submit
   const handleTextFallbackSubmit = async (text: string) => {
-    await submitAttemptForEvaluation(text, 2200);
+    await submitAttemptForEvaluation(text, 2500);
   };
 
   // Retry same task (Say Again)
   const handleRetryTask = useCallback(() => {
     incrementAttempt(false);
-    speechRec.resetTranscript();
+    setPendingSpokenText(null);
+    unifiedSTTRef.current.resetTranscript();
     if (autoStartMic) {
       handleStartRecord();
     }
-  }, [incrementAttempt, speechRec, autoStartMic, handleStartRecord]);
+  }, [incrementAttempt, autoStartMic, handleStartRecord]);
 
   // Say It Better
   const handleSayItBetter = useCallback(() => {
     incrementAttempt(true);
-    speechRec.resetTranscript();
+    setPendingSpokenText(null);
+    unifiedSTTRef.current.resetTranscript();
     toast.info("Chế độ 'Say It Better'", "Hãy nhại lại câu bản xứ tự nhiên hơn để ghi nhớ mẫu câu!");
     if (autoStartMic) {
       handleStartRecord();
     }
-  }, [incrementAttempt, speechRec, autoStartMic, handleStartRecord]);
+  }, [incrementAttempt, autoStartMic, handleStartRecord]);
+
+  // Practice specific Say It Better variant
+  const handlePracticeVariant = useCallback(
+    (variantText: string) => {
+      incrementAttempt(true);
+      setPendingSpokenText(null);
+      unifiedSTTRef.current.resetTranscript();
+      toast.info("Luyện nói bản này", `Mẫu: "${variantText}". Hãy bấm mic để nói!`);
+      if (autoStartMic) {
+        handleStartRecord();
+      }
+    },
+    [incrementAttempt, autoStartMic, handleStartRecord]
+  );
 
   // Continue to Next Task
   const handleContinueTask = useCallback(() => {
-    speechRec.resetTranscript();
+    setPendingSpokenText(null);
+    unifiedSTTRef.current.resetTranscript();
     advanceToNextTask();
-  }, [speechRec, advanceToNextTask]);
+  }, [advanceToNextTask]);
 
   // Keyboard Shortcuts
   useEffect(() => {
@@ -272,22 +331,29 @@ export default function VNToENPage() {
 
       if (e.code === "Space") {
         e.preventDefault();
-        if (lastEvaluation) {
-          handleRetryTask();
-        } else if (recorder.status === "recording") {
+        if (unifiedSTT.status === "recording") {
           handleStopRecord();
+        } else if (lastEvaluation) {
+          handleRetryTask();
+        } else if (pendingSpokenText) {
+          handleReRecord();
         } else if (!isEvaluating) {
           handleStartRecord();
         }
-      } else if (e.code === "Backspace" && recorder.status === "recording") {
+      } else if (e.code === "Backspace" && unifiedSTT.status === "recording") {
         e.preventDefault();
         handleResetLiveTranscript();
       } else if (e.code === "KeyH" && !isEvaluating) {
         e.preventDefault();
         setHintTier(((hintTier + 1) % 5) as 0 | 1 | 2 | 3 | 4);
-      } else if (e.code === "Enter" && lastEvaluation) {
-        e.preventDefault();
-        handleContinueTask();
+      } else if (e.code === "Enter") {
+        if (pendingSpokenText && !isEvaluating) {
+          e.preventDefault();
+          handleConfirmSubmit();
+        } else if (lastEvaluation) {
+          e.preventDefault();
+          handleContinueTask();
+        }
       } else if (e.code === "Escape") {
         if (hintTier > 0) {
           setHintTier(0);
@@ -300,15 +366,18 @@ export default function VNToENPage() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
-    recorder.status,
+    unifiedSTT.status,
     isEvaluating,
     lastEvaluation,
     hintTier,
     hasStartedSession,
-    handleStartRecord,
+    pendingSpokenText,
+    handleConfirmSubmit,
+    handleReRecord,
     handleStopRecord,
-    handleResetLiveTranscript,
+    handleStartRecord,
     handleRetryTask,
+    handleResetLiveTranscript,
     handleContinueTask,
     setHintTier,
   ]);
@@ -476,7 +545,7 @@ export default function VNToENPage() {
 
   // 4. Immersive Zero-Scroll 2-Column Split Studio
   return (
-    <div className="fixed inset-0 z-50 bg-background/98 backdrop-blur-xl p-3 md:p-5 flex flex-col justify-between overflow-hidden">
+    <div className="w-full min-h-[calc(100vh-8rem)] flex flex-col justify-between overflow-hidden rounded-3xl border border-border/80 bg-card p-3 md:p-5 shadow-xs">
       {/* Studio Header Bar */}
       <header className="flex items-center justify-between border-b border-border/40 pb-2.5 shrink-0 gap-3">
         <div className="flex items-center gap-3">
@@ -559,21 +628,31 @@ export default function VNToENPage() {
               onRetry={handleRetryTask}
               onContinue={handleContinueTask}
               onSayItBetter={handleSayItBetter}
+              onPracticeVariant={handlePracticeVariant}
             />
           ) : (
             <SpeakingController
-              status={recorder.status === "recording" ? "recording" : "idle"}
-              isListening={speechRec.isListening}
-              liveTranscript={speechRec.fullTranscript}
-              durationMs={recordingDurationMs}
+              status={
+                isEvaluating || unifiedSTT.isTranscribing
+                  ? "processing"
+                  : unifiedSTT.isListening
+                  ? "recording"
+                  : "idle"
+              }
+              isListening={unifiedSTT.isListening}
+              liveTranscript={unifiedSTT.fullTranscript}
+              durationMs={recordingDurationMs || unifiedSTT.audioRecorder.durationMs}
               autoStartMic={autoStartMic}
               onToggleAutoStartMic={setAutoStartMic}
               onStartRecord={handleStartRecord}
               onStopRecord={handleStopRecord}
               onSubmitTextFallback={handleTextFallbackSubmit}
               onOpenHints={() => setHintTier(((hintTier + 1) % 5) as 0 | 1 | 2 | 3 | 4)}
-              isEvaluating={isEvaluating}
+              isEvaluating={isEvaluating || unifiedSTT.isTranscribing}
               onResetLiveTranscript={handleResetLiveTranscript}
+              pendingText={pendingSpokenText}
+              onConfirmSubmit={handleConfirmSubmit}
+              onReRecord={handleReRecord}
             />
           )}
         </div>
@@ -582,11 +661,17 @@ export default function VNToENPage() {
       {/* Bottom Footer Dock */}
       <footer className="flex items-center justify-between border-t border-border/40 pt-2 shrink-0 text-[11px] font-mono text-muted-foreground">
         <div className="flex items-center gap-3">
-          <span>[Space]: {lastEvaluation ? "Nói lại" : "Thu âm/Dừng"}</span>
+          <span>[Space]: {lastEvaluation ? "Nói lại" : pendingSpokenText ? "Thu âm lại" : "Thu âm/Dừng"}</span>
           <span>•</span>
           <span>[Backspace]: Xoá nói lại</span>
           <span>•</span>
           <span>[H]: Gợi ý</span>
+          {pendingSpokenText && !isEvaluating && (
+            <>
+              <span>•</span>
+              <span className="text-primary font-bold">[Enter]: Nộp bài chấm điểm</span>
+            </>
+          )}
           {lastEvaluation && (
             <>
               <span>•</span>

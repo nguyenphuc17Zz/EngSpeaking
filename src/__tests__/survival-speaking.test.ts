@@ -78,4 +78,38 @@ describe("Function 7 — Survival Speaking & Circumlocution Engine", () => {
     expect(res.communicationRecovered).toBe(true);
     expect(res.overallScore).toBeGreaterThanOrEqual(80);
   });
+
+  it("evaluates Aristotelian Genus, Differentia, and Listener Guessing test", async () => {
+    const task: CircumlocutionTask = SEED_CIRCUMLOCUTION_TASKS[0]; // microwave
+
+    const res = await evaluateCircumlocutionAttempt({
+      task,
+      userTranscript: "It's a kind of kitchen appliance that you use to heat up cold food quickly.",
+      responseLatencyMs: 1900,
+      provider: "mock",
+    });
+
+    expect(res.isSuccessful).toBe(true);
+    expect(res.targetWordAvoided).toBe(true);
+    expect(res.genusDetected).toBe(true);
+    expect(res.differentiaDetected).toBe(true);
+    expect(res.listenerGuess).toBeDefined();
+    expect(res.listenerGuess).toContain("MICROWAVE");
+    expect(res.semanticPrecisionScore).toBeGreaterThanOrEqual(80);
+  });
+
+  it("detects morphological inflections of taboo lemmas (e.g. microwaved, microwaving)", async () => {
+    const task: CircumlocutionTask = SEED_CIRCUMLOCUTION_TASKS[0]; // microwave
+
+    const res = await evaluateCircumlocutionAttempt({
+      task,
+      userTranscript: "I was microwaving my pizza yesterday in the kitchen.",
+      responseLatencyMs: 1400,
+      provider: "mock",
+    });
+
+    expect(res.targetWordAvoided).toBe(false);
+    expect(res.isSuccessful).toBe(false);
+    expect(res.listenerGuess).toContain("từ cấm");
+  });
 });

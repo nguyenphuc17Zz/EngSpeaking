@@ -1,12 +1,21 @@
 import { generateTextWithRouting } from "@/lib/ai";
 import { conversationAIResponseSchema } from "@/lib/validation/conversation-schemas";
 import { RESPONSE_SYSTEM, buildResponseUserPrompt } from "@/lib/conversation/prompts/response-generator";
-import type { ConversationWorldState, ConversationAIResponse } from "@/types/conversation-world";
+import type { ConversationWorldState, ConversationAIResponse, PragmaticSpeechAct } from "@/types/conversation-world";
+import {
+  classifyPragmaticSpeechAct,
+  computeAffectiveDeltas,
+  checkHiddenObjectiveUnlock,
+  detectFactContradictions,
+} from "@/lib/conversation/engines/affective-pragmatic.engine";
 
 function mockResponse(state: ConversationWorldState, transcript: string): ConversationAIResponse {
   const mode = state.scenario.mode;
   const name = state.activeCharacter.name || state.scenario.character.role;
-  const nextTopic = state.currentTopic;
+  const pragmatic = classifyPragmaticSpeechAct(transcript);
+  const affective = computeAffectiveDeltas(pragmatic.act, state.activeCharacter);
+  const unlockedObjective = checkHiddenObjectiveUnlock(state, pragmatic.act);
+
   // Simple rule-based responses to avoid needing AI for mock
   const templates: Record<string, string[]> = {
     free: ["That's interesting! Could you tell me more about that?", "I see — how does that make you feel?", "What do you usually do in that situation?"],
@@ -31,17 +40,23 @@ function mockResponse(state: ConversationWorldState, transcript: string): Conver
   return {
     responseText: `${name ? `(${name}): ` : ""}${text}`,
     stateUpdate: {
-      trustChange: transcript.trim().length > 10 ? 2 : -1,
-      patienceChange: transcript.trim().length < 3 ? -5 : 0,
+      trustChange: affective.deltaTrust,
+      patienceChange: affective.deltaPatience,
+      defensivenessChange: affective.deltaDefensiveness,
+      emotionalValenceChange: affective.deltaValence,
       newThreads: transcript.includes("?") ? [] : [],
+      unlockedObjective: unlockedObjective || undefined,
     },
     event,
+    pragmaticAct: pragmatic.act,
+    pragmaticFeedbackVi: pragmatic.feedbackVi,
+    unlockedObjective: unlockedObjective || undefined,
     pedagogy: {
       grammarIssue: null,
       grammarFix: null,
       nativeReformulation: transcript,
       turnScore: 85,
-      coachTipVi: "Phản xạ giao tiếp tự nhiên!",
+      coachTipVi: `${pragmatic.icon} ${pragmatic.labelVi}: ${pragmatic.feedbackVi}`,
     },
     hints: {
       tier1Keywords: [
@@ -85,6 +100,11 @@ export async function generateTurnResponse(
   const model = opts?.model || "auto";
   if (provider === "mock") return mockResponse(state, transcript);
 
+  const pragmatic = classifyPragmaticSpeechAct(transcript);
+  const affective = computeAffectiveDeltas(pragmatic.act, state.activeCharacter);
+  const unlockedObjective = checkHiddenObjectiveUnlock(state, pragmatic.act);
+  const contradictionWarning = detectFactContradictions(transcript, state.conversationFacts);
+
   const worldStateJson = JSON.stringify({
     scenario: state.scenario,
     currentObjective: state.currentObjective,
@@ -103,6 +123,7 @@ export async function generateTurnResponse(
     summaryJson: opts?.summaryJson,
     userTranscript: transcript,
     activeEventJson: opts?.activeEventJson,
+    pragmaticActInfo: `${pragmatic.icon} ${pragmatic.labelVi} (${pragmatic.act}). Character impact recommendation: Trust ${affective.deltaTrust > 0 ? `+${affective.deltaTrust}` : affective.deltaTrust}, Defensiveness ${affective.deltaDefensiveness > 0 ? `+${affective.deltaDefensiveness}` : affective.deltaDefensiveness}. ${contradictionWarning ? `\nContradiction Detected: ${contradictionWarning}` : ""}`,
   });
 
   try {
@@ -121,14 +142,59 @@ export async function generateTurnResponse(
     const validated = conversationAIResponseSchema.safeParse(json);
     if (!validated.success) {
       // Fallback: treat raw text as responseText
-      if (res.text.trim().length > 5) return { responseText: res.text.trim().slice(0, 600) };
+      if (res.text.trim().length > 5) {
+        return {
+          responseText: res.text.trim().slice(0, 600),
+          pragmaticAct: pragmatic.act,
+          pragmaticFeedbackVi: pragmatic.feedbackVi,
+          unlockedObjective: unlockedObjective || undefined,
+          stateUpdate: {
+            trustChange: affective.deltaTrust,
+            patienceChange: affective.deltaPatience,
+            defensivenessChange: affective.deltaDefensiveness,
+            emotionalValenceChange: affective.deltaValence,
+            unlockedObjective: unlockedObjective || undefined,
+          },
+        };
+      }
       throw new Error("Schema invalid");
     }
-    // Ensure stateUpdate has timestamps for facts
-    if (validated.data.stateUpdate?.newFacts) {
-      validated.data.stateUpdate.newFacts = validated.data.stateUpdate.newFacts.map((f) => ({ ...f, createdAt: f.createdAt || new Date().toISOString() }));
+
+    const aiRes = validated.data as ConversationAIResponse;
+    aiRes.pragmaticAct = pragmatic.act as PragmaticSpeechAct;
+    aiRes.pragmaticFeedbackVi = pragmatic.feedbackVi;
+    aiRes.unlockedObjective = unlockedObjective || undefined;
+
+    if (!aiRes.stateUpdate) {
+      aiRes.stateUpdate = {};
     }
-    return validated.data;
+    // Blend algorithmic affective deltas if LLM didn't specify them
+    if (aiRes.stateUpdate.defensivenessChange === undefined) {
+      aiRes.stateUpdate.defensivenessChange = affective.deltaDefensiveness;
+    }
+    if (aiRes.stateUpdate.emotionalValenceChange === undefined) {
+      aiRes.stateUpdate.emotionalValenceChange = affective.deltaValence;
+    }
+    if (aiRes.stateUpdate.trustChange === undefined) {
+      aiRes.stateUpdate.trustChange = affective.deltaTrust;
+    }
+    if (unlockedObjective) {
+      aiRes.stateUpdate.unlockedObjective = unlockedObjective;
+    }
+
+    // Ensure stateUpdate has timestamps for facts
+    if (aiRes.stateUpdate?.newFacts) {
+      aiRes.stateUpdate.newFacts = aiRes.stateUpdate.newFacts.map((f) => ({
+        ...f,
+        createdAt: f.createdAt || new Date().toISOString(),
+      }));
+    }
+
+    if (aiRes.pedagogy && !aiRes.pedagogy.coachTipVi) {
+      aiRes.pedagogy.coachTipVi = `${pragmatic.icon} ${pragmatic.labelVi}: ${pragmatic.feedbackVi}`;
+    }
+
+    return aiRes;
   } catch {
     return mockResponse(state, transcript);
   }

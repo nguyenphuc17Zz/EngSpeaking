@@ -10,182 +10,63 @@ import {
 import {
   CHUNK_TASK_GENERATOR_SYSTEM,
   CHUNK_CHAIN_GENERATOR_SYSTEM,
+  buildPragmaticChainUserPrompt,
 } from "@/lib/ai/prompts/chunk-prompts";
 import type {
   ChunkRecord,
   ChunkTrainingTask,
   ChunkChainTask,
   ChunkStage,
+  PragmaticStrategyType,
 } from "@/types/chunk-automaticity";
+import {
+  samplePragmaticDAG,
+  PRAGMATIC_DAG_STRATEGIES,
+  DYNAMIC_SCENARIO_SEEDS,
+} from "./pragmatic-dag.engine";
 
-export const SEED_CHUNK_LIBRARY: ChunkRecord[] = [
-  {
-    id: "chunk_depend_on",
-    familyKey: "depend_on_conditional",
-    canonicalChunk: "It depends on...",
-    meaningVi: "Điều này còn phụ thuộc vào...",
-    type: "sentence_frame",
-    difficulty: 3,
-    functionName: "Conditional Decision",
-    variants: [
-      { id: "v1", expression: "That really depends on...", register: "neutral", exampleSentence: "That really depends on your budget." },
-      { id: "v2", expression: "It depends whether...", register: "formal", exampleSentence: "It depends whether we finish on time." },
-      { id: "v3", expression: "It mostly depends on...", register: "casual", exampleSentence: "It mostly depends on the weather." },
-    ],
-    exampleSentences: [
-      "It depends on how much free time you have.",
-      "Whether we go out depends on the traffic.",
-    ],
-    masteryScore: 72,
-    retrievalLatencyMs: 1800,
-    stage: "contextual_use",
-    practiceCount: 8,
-    successCount: 6,
-    independentSuccessCount: 5,
-  },
-  {
-    id: "chunk_to_be_honest",
-    familyKey: "to_be_honest_stance",
-    canonicalChunk: "To be honest, ...",
-    meaningVi: "Thành thật mà nói thì...",
-    type: "conversation_opener",
-    difficulty: 2,
-    functionName: "Expressing Stance",
-    variants: [
-      { id: "v1", expression: "Honestly speaking, ...", register: "neutral", exampleSentence: "Honestly speaking, I prefer tea." },
-      { id: "v2", expression: "Truth be told, ...", register: "formal", exampleSentence: "Truth be told, we need more time." },
-    ],
-    exampleSentences: [
-      "To be honest, I didn't like the meeting.",
-      "To be honest, that's not my favorite topic.",
-    ],
-    masteryScore: 85,
-    retrievalLatencyMs: 1400,
-    stage: "automaticity",
-    practiceCount: 12,
-    successCount: 11,
-    independentSuccessCount: 10,
-  },
-  {
-    id: "chunk_the_main_reason",
-    familyKey: "the_main_reason_cause",
-    canonicalChunk: "The main reason is that...",
-    meaningVi: "Lý do chính là vì...",
-    type: "sentence_frame",
-    difficulty: 3,
-    functionName: "Giving Reason",
-    variants: [
-      { id: "v1", expression: "The primary reason is because...", register: "formal", exampleSentence: "The primary reason is because of safety." },
-      { id: "v2", expression: "Mostly because...", register: "casual", exampleSentence: "Mostly because I'm busy." },
-    ],
-    exampleSentences: [
-      "The main reason is that it saves a lot of travel time.",
-      "The main reason is that I enjoy working independently.",
-    ],
-    masteryScore: 65,
-    retrievalLatencyMs: 2400,
-    stage: "spoken_recall",
-    practiceCount: 6,
-    successCount: 4,
-    independentSuccessCount: 3,
-  },
-  {
-    id: "chunk_for_example",
-    familyKey: "for_example_elaboration",
-    canonicalChunk: "For example, ...",
-    meaningVi: "Ví dụ như...",
-    type: "example_giving",
-    difficulty: 2,
-    functionName: "Giving Illustration",
-    variants: [
-      { id: "v1", expression: "For instance, ...", register: "formal", exampleSentence: "For instance, last week we had a test." },
-      { id: "v2", expression: "Take ... as an example", register: "neutral", exampleSentence: "Take remote work as an example." },
-    ],
-    exampleSentences: [
-      "For example, you can take an online course.",
-      "For example, yesterday I walked 5 kilometers.",
-    ],
-    masteryScore: 90,
-    retrievalLatencyMs: 1200,
-    stage: "automaticity",
-    practiceCount: 15,
-    successCount: 14,
-    independentSuccessCount: 14,
-  },
-];
+import { SEED_CHUNK_LIBRARY } from "./seed-chunks";
+export { SEED_CHUNK_LIBRARY };
 
-const MOCK_CHAIN_TASKS: ChunkChainTask[] = [
-  {
-    id: "chain_task_remote_work",
-    topic: "Lợi ích của làm việc từ xa (Remote Work)",
-    situationVi: "Đồng nghiệp hỏi vì sao bạn muốn làm việc từ xa thay vì lên công ty mỗi ngày.",
-    targetQuestion: "Why do you prefer working from home?",
-    blocks: [
-      {
-        blockType: "buffer",
-        labelVi: "1. Câu đệm mở đầu",
-        suggestedChunk: "Well, to be honest...",
-        alternativeChunks: ["That's a good question...", "Honestly speaking..."],
-      },
-      {
-        blockType: "stance",
-        labelVi: "2. Nêu quan điểm",
-        suggestedChunk: "I personally feel that...",
-        alternativeChunks: ["From my perspective...", "In my experience..."],
-      },
-      {
-        blockType: "reason",
-        labelVi: "3. Nêu lý do cốt lõi",
-        suggestedChunk: "The main reason is that...",
-        alternativeChunks: ["Mostly because it...", "The primary reason is..."],
-      },
-      {
-        blockType: "example",
-        labelVi: "4. Dẫn chứng thực tế",
-        suggestedChunk: "For example, I can...",
-        alternativeChunks: ["For instance, every day I...", "Take my mornings as an example..."],
-      },
-    ],
+// Minimal test fixture strictly for offline test runner when provider === "mock"
+export function getMockChainTask(topic?: string, strategy: PragmaticStrategyType = "opinion_defense"): ChunkChainTask {
+  const strategyDef = PRAGMATIC_DAG_STRATEGIES[strategy] || PRAGMATIC_DAG_STRATEGIES.opinion_defense;
+  const seed = DYNAMIC_SCENARIO_SEEDS[0];
+
+  return {
+    id: `chain_test_${Date.now()}`,
+    topic: topic || seed.topic,
+    pragmaticStrategy: strategyDef.strategy,
+    strategyTitleVi: strategyDef.titleVi,
+    strategyDescriptionVi: strategyDef.descriptionVi,
+    persona: seed.persona,
+    domain: seed.domain,
+    situationVi: seed.situationVi,
+    targetQuestion: seed.targetQuestion,
+    blocks: strategyDef.blocksBlueprint.map((b) => ({
+      blockType: b.blockType,
+      labelVi: b.labelVi,
+      suggestedChunk: b.suggestedChunk,
+      alternativeChunks: b.alternativeChunks,
+      rhetoricalRole: b.rhetoricalRole,
+      transitionConnector: b.transitionConnector,
+    })),
     expectedAssemblyExample:
-      "Well, to be honest, I personally feel that working from home is much better. The main reason is that it saves two hours of commuting every day. For example, I can use that extra time to exercise or cook a healthy breakfast.",
-    targetLatencyMs: 3500,
-  },
-  {
-    id: "chain_task_weekend_plans",
-    topic: "Kế hoạch du lịch cuối tuần",
-    situationVi: "Bạn bè rủ bạn đi dã ngoại cuối tuần và muốn biết quyết định của bạn.",
-    targetQuestion: "Are you joining us for the camping trip this weekend?",
-    blocks: [
-      {
-        blockType: "buffer",
-        labelVi: "1. Câu đệm mở đầu",
-        suggestedChunk: "Let me think for a second...",
-        alternativeChunks: ["Well, I'm not sure yet...", "That sounds exciting, but..."],
-      },
-      {
-        blockType: "stance",
-        labelVi: "2. Nêu quyết định có điều kiện",
-        suggestedChunk: "It depends on...",
-        alternativeChunks: ["That really depends on...", "It mostly depends whether..."],
-      },
-      {
-        blockType: "reason",
-        labelVi: "3. Nêu lý do",
-        suggestedChunk: "The thing is that...",
-        alternativeChunks: ["The main reason is...", "Because I might have..."],
-      },
-      {
-        blockType: "example",
-        labelVi: "4. Dẫn chứng minh họa",
-        suggestedChunk: "For instance, if my project...",
-        alternativeChunks: ["For example, tomorrow I...", "Take Friday as an example..."],
-      },
+      "Well, to be honest, I personally feel that working from home is much better because it saves commute time. For example, in my daily routine, I can dedicate an extra two hours to deep focused work.",
+    targetLatencyMs: strategyDef.recommendedLatencyMs,
+    hints: [
+      { tier: 0, title: "Không gợi ý", content: "Tự kết hợp cả 4 khối và nói một mạch liên tục." },
+      { tier: 1, title: "Tổng quan 4 khối", content: "Đệm → Quan điểm → Lý do → Ví dụ" },
+      { tier: 2, title: "Từ nối chuyển ý", content: "First of all, What is more, For example..." },
+      { tier: 3, title: "Khung chuỗi câu", content: "Well, to be honest... I personally feel that..." },
+      { tier: 4, title: "Chuỗi câu mẫu hoàn chỉnh", content: "Well, to be honest, I personally feel that working from home is much better because it saves commute time." },
     ],
-    expectedAssemblyExample:
-      "Let me think for a second. It depends on my work deadline this Friday. The thing is that I have a major presentation. For instance, if my project finishes early, I will definitely join you guys!",
-    targetLatencyMs: 3500,
-  },
-];
+    suggestedVocabulary: [
+      { term: "first of all", meaningVi: "trước hết là", partOfSpeech: "connector" },
+      { term: "dedicate", meaningVi: "dành trọn cho", partOfSpeech: "verb" },
+    ],
+  };
+}
 
 function cleanJson(text: string): unknown {
   let cleaned = text.trim()
@@ -214,45 +95,81 @@ function cleanJson(text: string): unknown {
   }
 }
 
+export function getMockSingleChunkTask(
+  chunk: ChunkRecord = SEED_CHUNK_LIBRARY[0],
+  stage: ChunkStage = "contextual_use"
+): ChunkTrainingTask {
+  return {
+    id: `chunk_task_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    chunk,
+    stage,
+    situationVi: `Bạn bè hỏi ý kiến của bạn về việc lựa chọn kế hoạch. Hãy dùng cụm "${chunk.canonicalChunk}" để trả lời tự nhiên.`,
+    contextDomain: "daily_life",
+    promptText: "Are you free to hang out this afternoon?",
+    expectedChunkUsage: chunk.canonicalChunk,
+    scaffoldText: stage === "controlled_recall" ? `It ______ on my work schedule.` : undefined,
+    targetLatencyMs: 2500,
+    hints: [
+      { tier: 0, title: "Không gợi ý", content: "Tự bật cụm từ ngay lập tức." },
+      { tier: 1, title: "Cụm mục tiêu", content: `Dùng cụm: "${chunk.canonicalChunk}"` },
+      {
+        tier: 2,
+        title: "Cụm biến thể",
+        content: chunk.variants.map((v) => v.expression).join(" / "),
+      },
+      {
+        tier: 3,
+        title: "Khung câu",
+        content: `Well, ${chunk.canonicalChunk} how much free time I have.`,
+      },
+      {
+        tier: 4,
+        title: "Câu mẫu hoàn chỉnh",
+        content: `Well, ${chunk.canonicalChunk} my schedule, but I'd love to join you!`,
+      },
+    ],
+    suggestedVocabulary: [
+      { term: chunk.canonicalChunk, meaningVi: chunk.meaningVi, partOfSpeech: "phrase" },
+      ...(chunk.variants.slice(0, 2).map((v) => ({ term: v.expression, meaningVi: "biến thể tự nhiên", partOfSpeech: "phrase" }))),
+    ],
+  };
+}
+
 export async function generateChunkChainTask(options: {
   topic?: string;
+  strategy?: PragmaticStrategyType;
+  domain?: "workplace" | "daily_life" | "travel" | "tech_ai" | "opinions" | "career";
   provider?: string;
   model?: string;
 } = {}): Promise<ChunkChainTask> {
   const provider = options.provider || "gemini";
   const model = options.model && options.model !== "auto" ? options.model : "gemini-3.5-flash-lite";
 
+  // 1. Sample Pragmatic DAG Blueprint & Dynamic Scenario Seed
+  const { strategyDef, scenarioSeed } = samplePragmaticDAG({
+    strategy: options.strategy,
+    topic: options.topic,
+    domain: options.domain,
+  });
+
   if (provider === "mock") {
-    const selected = MOCK_CHAIN_TASKS[Math.floor(Math.random() * MOCK_CHAIN_TASKS.length)];
-    return {
-      ...selected,
-      id: `chain_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      hints: [
-        { tier: 0, title: "Không gợi ý", content: "Tự kết hợp cả 4 khối và nói một mạch liên tục." },
-        {
-          tier: 1,
-          title: "Tổng quan 4 khối",
-          content: selected.blocks.map((b, i) => `Khối ${i + 1} (${b.labelVi}): "${b.suggestedChunk}"`).join(" → "),
-        },
-        { tier: 2, title: "Từ nối chuyển ý", content: "First of all, What is more, For example..." },
-        {
-          tier: 3,
-          title: "Khung chuỗi câu",
-          content: `${selected.blocks[0].suggestedChunk} ______ . ${selected.blocks[1].suggestedChunk} ______ .`,
-        },
-        { tier: 4, title: "Chuỗi câu mẫu hoàn chỉnh", content: selected.expectedAssemblyExample },
-      ],
-      suggestedVocabulary: [
-        { term: "first of all", meaningVi: "trước hết là", partOfSpeech: "connector" },
-        { term: "in fact", meaningVi: "trên thực tế", partOfSpeech: "connector" },
-        { term: "for instance", meaningVi: "chẳng hạn như", partOfSpeech: "connector" },
-      ],
-    };
+    return getMockChainTask(options.topic || scenarioSeed.topic, options.strategy || strategyDef.strategy);
   }
 
-  const userPrompt = `Generate a realistic Speech Chain Builder task combining 4 blocks (buffer -> stance -> reason -> example) on topic: ${
-    options.topic || "Workplace / Daily life / Travel / Society & Opinions"
-  }. Return strict JSON.`;
+  // 2. Synthesize Rich Context-Infused LLM Prompt from DAG
+  const userPrompt = buildPragmaticChainUserPrompt({
+    topic: options.topic || scenarioSeed.topic,
+    strategyTitleVi: strategyDef.titleVi,
+    strategyKey: strategyDef.strategy,
+    strategyDescriptionVi: strategyDef.descriptionVi,
+    domain: scenarioSeed.domain,
+    persona: scenarioSeed.persona,
+    situationVi: scenarioSeed.situationVi,
+    targetQuestion: scenarioSeed.targetQuestion,
+    blocksBlueprint: strategyDef.blocksBlueprint,
+  });
+
+  let lastErrorMsg = "";
 
   const attemptGenerate = async (): Promise<ChunkChainTask | null> => {
     try {
@@ -263,7 +180,7 @@ export async function generateChunkChainTask(options: {
           messages: [{ role: "user", content: userPrompt }],
           systemInstruction: CHUNK_CHAIN_GENERATOR_SYSTEM,
           temperature: 0.7,
-          maxOutputTokens: 1500,
+          maxOutputTokens: 650,
         },
       });
 
@@ -274,31 +191,51 @@ export async function generateChunkChainTask(options: {
         parsed.id = `chain_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
       }
 
-      // Robust block sanitization
+      // Metadata synthesis
+      parsed.pragmaticStrategy = parsed.pragmaticStrategy || strategyDef.strategy;
+      parsed.strategyTitleVi = parsed.strategyTitleVi || strategyDef.titleVi;
+      parsed.strategyDescriptionVi = parsed.strategyDescriptionVi || strategyDef.descriptionVi;
+      parsed.persona = typeof parsed.persona === "string" && parsed.persona.trim() ? parsed.persona.trim() : scenarioSeed.persona;
+      parsed.domain = parsed.domain || scenarioSeed.domain;
+      parsed.situationVi = typeof parsed.situationVi === "string" && parsed.situationVi.trim() ? parsed.situationVi.trim() : scenarioSeed.situationVi;
+      parsed.targetQuestion = typeof parsed.targetQuestion === "string" && parsed.targetQuestion.trim() ? parsed.targetQuestion.trim() : scenarioSeed.targetQuestion;
+      parsed.targetLatencyMs = typeof parsed.targetLatencyMs === "number" ? parsed.targetLatencyMs : strategyDef.recommendedLatencyMs;
+
+      // Robust block sanitization aligned with DAG blueprint
       if (Array.isArray(parsed.blocks)) {
         parsed.blocks = (parsed.blocks as any[]).map((b, idx) => {
+          const blueprint = strategyDef.blocksBlueprint[idx % 4];
           const rawType = String(b.blockType || "").toLowerCase().trim();
           const validTypes = ["buffer", "stance", "reason", "example"] as const;
-          const fallbackType = validTypes[idx % 4];
-          const blockType = validTypes.includes(rawType as any) ? rawType : fallbackType;
+          const blockType = validTypes.includes(rawType as any) ? rawType : blueprint.blockType;
 
-          let labelVi = typeof b.labelVi === "string" && b.labelVi.trim() ? b.labelVi.trim() : "";
-          if (!labelVi) {
-            if (blockType === "buffer") labelVi = "Khối 1: Đệm câu (Buffer)";
-            else if (blockType === "stance") labelVi = "Khối 2: Lập trường (Stance)";
-            else if (blockType === "reason") labelVi = "Khối 3: Lý do (Reason)";
-            else labelVi = "Khối 4: Ví dụ (Example)";
-          }
+          const labelVi = typeof b.labelVi === "string" && b.labelVi.trim() ? b.labelVi.trim() : blueprint.labelVi;
+          const rhetoricalRole = typeof b.rhetoricalRole === "string" && b.rhetoricalRole.trim() ? b.rhetoricalRole.trim() : blueprint.rhetoricalRole;
+          const transitionConnector = typeof b.transitionConnector === "string" && b.transitionConnector.trim() ? b.transitionConnector.trim() : blueprint.transitionConnector;
 
-          const suggestedChunk = typeof b.suggestedChunk === "string" ? b.suggestedChunk.trim() : "Well, ...";
-          const alternativeChunks = Array.isArray(b.alternativeChunks)
+          const suggestedChunk = typeof b.suggestedChunk === "string" && b.suggestedChunk.trim() ? b.suggestedChunk.trim() : blueprint.suggestedChunk;
+          let alternativeChunks = Array.isArray(b.alternativeChunks)
             ? b.alternativeChunks
                 .filter((item: unknown) => typeof item === "string")
                 .map((item: string) => item.replace(/^[a-zA-Z0-9_]+\s*=\s*/, "").replace(/^["']|["']$/g, "").trim())
+                .filter(Boolean)
             : [];
 
-          return { blockType, labelVi, suggestedChunk, alternativeChunks };
+          if (alternativeChunks.length === 0) {
+            alternativeChunks = blueprint.alternativeChunks;
+          }
+
+          return { blockType, labelVi, rhetoricalRole, transitionConnector, suggestedChunk, alternativeChunks };
         });
+      } else {
+        parsed.blocks = strategyDef.blocksBlueprint.map((b) => ({
+          blockType: b.blockType,
+          labelVi: b.labelVi,
+          rhetoricalRole: b.rhetoricalRole,
+          transitionConnector: b.transitionConnector,
+          suggestedChunk: b.suggestedChunk,
+          alternativeChunks: b.alternativeChunks,
+        }));
       }
 
       // Robust 4-Tier hints sanitization
@@ -310,7 +247,7 @@ export async function generateChunkChainTask(options: {
         parsed.hints = [
           { tier: 0, title: "Không gợi ý", content: "Tự kết hợp cả 4 khối và nói một mạch liên tục." },
           { tier: 1, title: "Tổng quan 4 khối", content: overview || "Kết hợp lần lượt 4 khối" },
-          { tier: 2, title: "Từ nối chuyển ý", content: "Dùng các từ nối: First of all, What is more, For instance..." },
+          { tier: 2, title: "Từ nối chuyển ý", content: blocks.map((b) => b.transitionConnector).filter(Boolean).join(" → ") || "First of all, What is more, For example..." },
           {
             tier: 3,
             title: "Khung chuỗi câu",
@@ -322,11 +259,13 @@ export async function generateChunkChainTask(options: {
         parsed.hints = (parsed.hints as any[]).map((h, i) => ({
           tier: typeof h.tier === "number" ? h.tier : i,
           title: String(h.title || `Tầng ${i}`),
-          content: String(h.content || ""),
+          content: String(h.content || "")
+            .replace(/^(chuỗi câu mẫu hoàn chỉnh|câu mẫu hoàn chỉnh|câu mẫu|sample speech|model answer):\s*/i, "")
+            .trim(),
         }));
       }
 
-      if (!Array.isArray(parsed.suggestedVocabulary)) {
+      if (!Array.isArray(parsed.suggestedVocabulary) || parsed.suggestedVocabulary.length === 0) {
         parsed.suggestedVocabulary = [
           { term: "first of all", meaningVi: "trước hết là", partOfSpeech: "connector" },
           { term: "in fact", meaningVi: "trên thực tế", partOfSpeech: "connector" },
@@ -336,12 +275,18 @@ export async function generateChunkChainTask(options: {
 
       const validated = chunkChainTaskSchema.safeParse(parsed);
       if (!validated.success) {
-        console.error("chunkChainTaskSchema validation failed:", JSON.stringify(validated.error.issues, null, 2));
+        lastErrorMsg = `Dữ liệu không khớp schema: ${validated.error.message.slice(0, 150)}`;
         return null;
       }
       return validated.data as ChunkChainTask;
     } catch (err: any) {
-      console.error("attemptGenerate catch error:", err?.message || err);
+      const errMsg = err?.message || String(err);
+      lastErrorMsg = errMsg;
+      if (errMsg.includes("429") || errMsg.toLowerCase().includes("rate limit")) {
+        console.warn("[ChunkGenerator] Groq/LLM Rate Limit (429) hit in generateChunkChainTask:", errMsg);
+      } else {
+        console.error("attemptGenerate catch error:", errMsg);
+      }
       return null;
     }
   };
@@ -349,8 +294,11 @@ export async function generateChunkChainTask(options: {
   let task = await attemptGenerate();
   if (!task) task = await attemptGenerate();
 
+  // Never fall back silently to mock data; throw error directly
   if (!task) {
-    throw new Error("Không thể tạo chuỗi bài tập Chunk Chain từ AI. Vui lòng thử lại.");
+    throw new Error(
+      `Không thể tạo bài tập Chunk Chain từ AI: ${lastErrorMsg || "AI không phản hồi hoặc phản hồi không hợp lệ"}. Vui lòng thử lại hoặc đổi AI Model / Provider.`
+    );
   }
 
   return task;
@@ -368,40 +316,7 @@ export async function generateSingleChunkTask(options: {
   const model = options.model && options.model !== "auto" ? options.model : "gemini-3.5-flash-lite";
 
   if (provider === "mock") {
-    return {
-      id: `chunk_task_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      chunk,
-      stage,
-      situationVi: `Bạn bè hỏi ý kiến của bạn về việc lựa chọn kế hoạch. Hãy dùng cụm "${chunk.canonicalChunk}" để trả lời tự nhiên.`,
-      contextDomain: "daily_life",
-      promptText: "Are you free to hang out this afternoon?",
-      expectedChunkUsage: chunk.canonicalChunk,
-      scaffoldText: stage === "controlled_recall" ? "It ______ on my work schedule." : undefined,
-      targetLatencyMs: 2500,
-      hints: [
-        { tier: 0, title: "Không gợi ý", content: "Tự bật cụm từ ngay lập tức." },
-        { tier: 1, title: "Cụm mục tiêu", content: `Dùng cụm: "${chunk.canonicalChunk}"` },
-        {
-          tier: 2,
-          title: "Cụm biến thể",
-          content: chunk.variants.map((v) => v.expression).join(" / "),
-        },
-        {
-          tier: 3,
-          title: "Khung câu",
-          content: `Well, ${chunk.canonicalChunk} how much free time I have.`,
-        },
-        {
-          tier: 4,
-          title: "Câu mẫu hoàn chỉnh",
-          content: `Well, ${chunk.canonicalChunk} my schedule, but I'd love to join you!`,
-        },
-      ],
-      suggestedVocabulary: [
-        { term: chunk.canonicalChunk, meaningVi: chunk.meaningVi, partOfSpeech: "phrase" },
-        ...(chunk.variants.slice(0, 2).map((v) => ({ term: v.expression, meaningVi: "biến thể tự nhiên", partOfSpeech: "phrase" }))),
-      ],
-    };
+    return getMockSingleChunkTask(chunk, stage);
   }
 
   const domains = ["workplace", "daily_life", "opinions", "travel"] as const;
@@ -409,6 +324,8 @@ export async function generateSingleChunkTask(options: {
 
   const userPrompt = `Generate a realistic spoken communicative task for the target chunk "${chunk.canonicalChunk}" (Meaning: "${chunk.meaningVi}") in domain "${domain}" at progressive stage "${stage}".
 Make sure situationVi is in natural Vietnamese and promptText is an authentic question in English. Return strict JSON.`;
+
+  let lastErrorMsg = "";
 
   const attemptGenerate = async (): Promise<ChunkTrainingTask | null> => {
     try {
@@ -419,7 +336,7 @@ Make sure situationVi is in natural Vietnamese and promptText is an authentic qu
           messages: [{ role: "user", content: userPrompt }],
           systemInstruction: CHUNK_TASK_GENERATOR_SYSTEM,
           temperature: 0.7,
-          maxOutputTokens: 1200,
+          maxOutputTokens: 450,
         },
       });
 
@@ -440,7 +357,7 @@ Make sure situationVi is in natural Vietnamese and promptText is an authentic qu
           {
             tier: 2,
             title: "Cụm biến thể",
-            content: chunk.variants.map((v) => v.expression).join(" / "),
+            content: (chunk.variants || []).map((v: { expression: string }) => v.expression).join(" / "),
           },
           {
             tier: 3,
@@ -457,7 +374,9 @@ Make sure situationVi is in natural Vietnamese and promptText is an authentic qu
         parsed.hints = (parsed.hints as any[]).map((h, i) => ({
           tier: typeof h.tier === "number" ? h.tier : i,
           title: String(h.title || `Tầng ${i}`),
-          content: String(h.content || ""),
+          content: String(h.content || "")
+            .replace(/^(câu mẫu hoàn chỉnh|câu mẫu|chuỗi câu mẫu hoàn chỉnh|khung câu điền chỗ|khung câu|model answer|sample sentence):\s*/i, "")
+            .trim(),
         }));
       }
 
@@ -468,9 +387,17 @@ Make sure situationVi is in natural Vietnamese and promptText is an authentic qu
       }
 
       const validated = chunkTrainingTaskSchema.safeParse(parsed);
-      if (!validated.success) return null;
+      if (!validated.success) {
+        lastErrorMsg = `Dữ liệu không khớp schema: ${validated.error.message.slice(0, 150)}`;
+        return null;
+      }
       return validated.data as ChunkTrainingTask;
-    } catch {
+    } catch (err: any) {
+      const errMsg = err?.message || String(err);
+      lastErrorMsg = errMsg;
+      if (errMsg.includes("429") || errMsg.toLowerCase().includes("rate limit")) {
+        console.warn("[ChunkGenerator] Groq/LLM Rate Limit (429) hit in generateSingleChunkTask:", errMsg);
+      }
       return null;
     }
   };
@@ -478,8 +405,11 @@ Make sure situationVi is in natural Vietnamese and promptText is an authentic qu
   let task = await attemptGenerate();
   if (!task) task = await attemptGenerate();
 
+  // Never fall back silently to mock data; throw error directly
   if (!task) {
-    throw new Error("Không thể tạo bài tập Chunk từ AI. Vui lòng thử lại.");
+    throw new Error(
+      `Không thể tạo bài tập Chunk Single Drill từ AI: ${lastErrorMsg || "AI không phản hồi hoặc phản hồi không hợp lệ"}. Vui lòng thử lại hoặc đổi AI Model / Provider.`
+    );
   }
 
   return task;

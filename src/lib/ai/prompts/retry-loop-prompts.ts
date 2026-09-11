@@ -80,6 +80,11 @@ OUTPUT FORMAT: STRICT JSON ONLY. NO MARKDOWN.
   "betterSentence": string (the full, natural English sentence, e.g. "Yesterday, I went to the supermarket to buy food."),
   "skeletonHint": string (e.g. "Yesterday, I ______ to the supermarket to buy food."),
   "simplifiedSentence": string (shorter version, e.g. "Yesterday, I went to the supermarket."),
+  "conversationalTrap": {
+    "partnerUtterance": string (natural partner reaction/question clarifying the error, e.g. "Wait, did you say you go yesterday or you went?"),
+    "reactionPromptVi": string (Vietnamese situational prompt, e.g. "Đối tác đang hỏi lại xem bạn đi hôm qua hay hôm nay. Hãy đính chính lại ngay!"),
+    "suggestedStarter": string (e.g. "Oh sorry, I meant...")
+  },
   "hints": [
     { "tier": 0, "title": "Không gợi ý", "content": "Tự phát hiện và sửa lại ngay." },
     { "tier": 1, "title": "Chỉ điểm lỗi", "content": "Từ 'go' chưa chia thì quá khứ cho 'Yesterday'." },

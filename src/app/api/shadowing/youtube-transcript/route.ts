@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { YouTubeTranscriptSegment } from "@/types/shadowing";
+import { getSentenceWordsWithIpa } from "@/lib/foundation/shadowing/ipa-dictionary";
+import { stitchTranscriptSegments } from "@/lib/foundation/shadowing/transcript-stitcher";
 
 const INNERTUBE_API_URL = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false";
 const INNERTUBE_CLIENT_VERSION = "20.10.38";
@@ -8,7 +10,8 @@ const INNERTUBE_USER_AGENT = `com.google.android.youtube/${INNERTUBE_CLIENT_VERS
 const BROWSER_USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 
-function extractYouTubeId(urlOrId: string): string | null {
+export function extractYouTubeId(urlOrId: string): string | null {
+  if (!urlOrId) return null;
   const trimmed = urlOrId.trim();
   if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) return trimmed;
 
@@ -17,13 +20,13 @@ function extractYouTubeId(urlOrId: string): string | null {
     if (parsed.hostname.includes("youtube.com")) {
       if (parsed.searchParams.get("v")) return parsed.searchParams.get("v");
       const pathParts = parsed.pathname.split("/").filter(Boolean);
-      if (pathParts[0] === "shorts" || pathParts[0] === "embed" || pathParts[0] === "v") {
-        return pathParts[1] || null;
+      if (["shorts", "embed", "v"].includes(pathParts[0]) && pathParts[1]) {
+        return pathParts[1].slice(0, 11);
       }
     }
     if (parsed.hostname.includes("youtu.be")) {
       const pathParts = parsed.pathname.split("/").filter(Boolean);
-      return pathParts[0] || null;
+      return pathParts[0] ? pathParts[0].slice(0, 11) : null;
     }
   } catch {}
 
@@ -117,10 +120,16 @@ function parseTranscriptXml(xml: string): YouTubeTranscriptSegment[] {
   return segments;
 }
 
+interface InnertubeResult {
+  title?: string;
+  channel?: string;
+  segments: YouTubeTranscriptSegment[];
+}
+
 /**
  * Robust Innertube Player API fetch
  */
-async function fetchCaptionsViaInnertube(videoId: string): Promise<YouTubeTranscriptSegment[] | null> {
+async function fetchCaptionsViaInnertube(videoId: string): Promise<InnertubeResult | null> {
   try {
     const res = await fetch(INNERTUBE_API_URL, {
       method: "POST",
@@ -141,13 +150,12 @@ async function fetchCaptionsViaInnertube(videoId: string): Promise<YouTubeTransc
 
     if (!res.ok) return null;
     const data = await res.json();
+    const videoTitle = data?.videoDetails?.title;
+    const channelName = data?.videoDetails?.author;
     const captionTracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
     if (!Array.isArray(captionTracks) || captionTracks.length === 0) return null;
 
-    // Prioritize:
-    // 1. English Manual Subtitles (creator uploaded: no 'kind' or kind !== 'asr')
-    // 2. English Auto Subtitles (kind === 'asr')
-    // 3. Any track starting with 'en'
+    // Prioritize English tracks
     const manualEnTrack = captionTracks.find(
       (t: { languageCode?: string; kind?: string }) =>
         (t.languageCode === "en" || t.languageCode?.startsWith("en")) && t.kind !== "asr"
@@ -171,7 +179,13 @@ async function fetchCaptionsViaInnertube(videoId: string): Promise<YouTubeTransc
     if (!xml || xml.trim().length === 0) return null;
 
     const segments = parseTranscriptXml(xml);
-    return segments.length > 0 ? segments : null;
+    if (segments.length === 0) return null;
+
+    return {
+      title: videoTitle,
+      channel: channelName,
+      segments,
+    };
   } catch {
     return null;
   }
@@ -180,7 +194,7 @@ async function fetchCaptionsViaInnertube(videoId: string): Promise<YouTubeTransc
 /**
  * Web Page Scraping fallback for captionTracks
  */
-async function fetchCaptionsViaWebPage(videoId: string): Promise<YouTubeTranscriptSegment[] | null> {
+async function fetchCaptionsViaWebPage(videoId: string): Promise<InnertubeResult | null> {
   try {
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
     const pageRes = await fetch(videoUrl, {
@@ -196,6 +210,8 @@ async function fetchCaptionsViaWebPage(videoId: string): Promise<YouTubeTranscri
     if (!match || !match[1]) return null;
 
     const data = JSON.parse(match[1]);
+    const videoTitle = data?.videoDetails?.title;
+    const channelName = data?.videoDetails?.author;
     const captionTracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
     if (!Array.isArray(captionTracks) || captionTracks.length === 0) return null;
 
@@ -222,7 +238,13 @@ async function fetchCaptionsViaWebPage(videoId: string): Promise<YouTubeTranscri
     if (!xml || xml.trim().length === 0) return null;
 
     const segments = parseTranscriptXml(xml);
-    return segments.length > 0 ? segments : null;
+    if (segments.length === 0) return null;
+
+    return {
+      title: videoTitle,
+      channel: channelName,
+      segments,
+    };
   } catch {
     return null;
   }
@@ -250,13 +272,17 @@ export async function POST(req: NextRequest) {
       }
 
       let currentTime = 0;
-      const customSegments: YouTubeTranscriptSegment[] = sentences.slice(0, 40).map((text, i) => {
+      const customSegments = sentences.map((text, i) => {
         const estDuration = Math.max(2.5, Math.round((text.split(/\s+/).length / 2.5) * 10) / 10);
-        const seg: YouTubeTranscriptSegment = {
+        const wordsWithIpa = getSentenceWordsWithIpa(text);
+        const seg = {
           segment_id: `seg_${String(i + 1).padStart(3, "0")}`,
           text,
           start_time: Math.round(currentTime * 10) / 10,
           end_time: Math.round((currentTime + estDuration) * 10) / 10,
+          wordsWithIpa,
+          ipa: wordsWithIpa.map((w) => w.ipa).filter(Boolean).join(" "),
+          thoughtGroups: text,
         };
         currentTime += estDuration + 0.5;
         return seg;
@@ -285,22 +311,25 @@ export async function POST(req: NextRequest) {
     }
 
     // Step 1: Try Innertube Android Client (most reliable)
-    let segments = await fetchCaptionsViaInnertube(videoId);
+    let result = await fetchCaptionsViaInnertube(videoId);
 
     // Step 2: Fallback to Web Page extraction
-    if (!segments || segments.length === 0) {
-      segments = await fetchCaptionsViaWebPage(videoId);
+    if (!result || result.segments.length === 0) {
+      result = await fetchCaptionsViaWebPage(videoId);
     }
 
-    if (segments && segments.length > 0) {
+    if (result && result.segments.length > 0) {
+      // Apply High-End Sentence Alignment & Boundary Stitching Algorithm
+      const stitchedSegments = stitchTranscriptSegments(result.segments);
+
       return NextResponse.json({
         success: true,
         videoId,
-        title: `YouTube Video (${videoId})`,
-        channel: "YouTube",
+        title: result.title || `YouTube Video (${videoId})`,
+        channel: result.channel || "YouTube",
         thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
-        segments: segments.slice(0, 40),
-        totalSegments: segments.length,
+        segments: stitchedSegments,
+        totalSegments: stitchedSegments.length,
       });
     }
 

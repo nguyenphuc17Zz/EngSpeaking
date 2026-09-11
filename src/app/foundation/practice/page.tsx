@@ -37,10 +37,10 @@ import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 import { MicButton } from "@/components/voice/MicButton";
 import { SessionCompletedModal } from "@/components/voice/SessionCompletedModal";
 import { soundEffects } from "@/lib/audio/audio-chimes";
+import { transcribeViaServer } from "@/lib/stt/service";
 import { getLevelForSkill } from "@/lib/foundation/skills/taxonomy";
 import { updateFoundationProfileFromScore } from "@/lib/foundation/services/progress.service";
 import type { FoundationExercise, FoundationExerciseType, FoundationSkill } from "@/types/foundation";
-import { buildNextExerciseForSession } from "@/lib/foundation/services/session-engine.service";
 import { GlobalAiSelector } from "@/components/common/GlobalAiSelector";
 
 const ALL_TYPES: FoundationExerciseType[] = [
@@ -257,22 +257,48 @@ function PracticeInner() {
     setDurationMs(undefined);
     setTtfwMs(undefined);
     speech.resetTranscript();
+    const sttProvider = settings.stt?.provider || "browser";
     try {
       await recorder.start();
     } catch {}
-    speech.startListening();
+    if (sttProvider === "browser") {
+      speech.startListening();
+    }
   };
 
   const stopRecording = async () => {
     soundEffects.playMicStop();
+    const sttProvider = settings.stt?.provider || "browser";
+    const sttModel =
+      settings.stt?.model ||
+      (sttProvider === "groq" ? "whisper-large-v3" : "onnx-community/whisper-tiny.en");
+
     speech.stopListening();
-    await new Promise((r) => setTimeout(r, 350));
-    const tr = speech.fullTranscript.trim() || speech.transcript.trim() || textInput.trim();
+    let tr = "";
     let dur: number | undefined;
+
     try {
       const rec = await recorder.stop().catch(() => null);
       dur = rec?.durationMs;
-    } catch {}
+      if (sttProvider !== "browser" && rec?.blob) {
+        try {
+          const res = await transcribeViaServer(rec.blob, {
+            provider: sttProvider === "auto" ? "whisper-local" : sttProvider,
+            model: sttModel,
+            language: "en-US",
+          });
+          tr = res.text.trim();
+        } catch {
+          tr = speech.fullTranscript.trim() || speech.transcript.trim() || textInput.trim();
+        }
+      } else {
+        await new Promise((r) => setTimeout(r, 350));
+        tr = speech.fullTranscript.trim() || speech.transcript.trim() || textInput.trim();
+      }
+    } catch {
+      tr = speech.fullTranscript.trim() || speech.transcript.trim() || textInput.trim();
+    }
+
     const ttfw = tr ? (dur ? Math.min(dur, 3000) : Date.now() - startTimeRef.current) : undefined;
     setTranscript(tr);
     setDurationMs(dur);
@@ -380,42 +406,10 @@ function PracticeInner() {
       setShowCompletedModal(true);
       return;
     }
-    if (!currentExercise) {
-      await generate();
-      return;
-    }
-    if (autoMode && lastEvaluation && currentSession) {
-      try {
-        const next = await buildNextExerciseForSession(
-          currentSession,
-          currentExercise,
-          lastEvaluation,
-          {
-            provider:
-              settings.conversation.provider === "browser"
-                ? "gemini"
-                : settings.conversation.provider,
-            model: settings.conversation.model,
-          }
-        );
-        setExercise(next);
-        setEvaluation(null);
-        setTranscript("");
-        setTextInput("");
-        setHint(0, null);
-        setSession({
-          ...currentSession,
-          exerciseId: next.id,
-          skill: next.skill,
-          difficulty: next.difficulty,
-          type: next.type,
-        });
-        return;
-      } catch {}
-    }
     setTranscript("");
     setTextInput("");
     setEvaluation(null);
+    setHint(0, null);
     await generate();
   };
 

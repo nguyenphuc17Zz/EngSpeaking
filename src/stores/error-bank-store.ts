@@ -5,12 +5,12 @@ import type {
   MasterErrorRecord,
   MainErrorCategory,
   ErrorStatus,
+  FossilizationLevel,
   CompactErrorContextPack,
   SpokenDiagnosticReport,
 } from "@/types/error-bank";
 import {
   getMasterErrorBank,
-  ingestErrorOccurrence,
   flagErrorAsFalsePositive,
   advanceSpacedReviewStage,
   getCompactErrorContextPack,
@@ -20,6 +20,8 @@ interface ErrorBankStoreState {
   records: MasterErrorRecord[];
   selectedCategory: MainErrorCategory | "all";
   selectedStatus: ErrorStatus | "all";
+  selectedFossilization: FossilizationLevel | "all";
+  dueFilter: "all" | "due_today";
   searchQuery: string;
   selectedRecord: MasterErrorRecord | null;
   contextPack: CompactErrorContextPack;
@@ -31,77 +33,21 @@ interface ErrorBankStoreState {
   loadLocalRecords: () => void;
   setCategory: (category: MainErrorCategory | "all") => void;
   setStatus: (status: ErrorStatus | "all") => void;
+  setFossilization: (level: FossilizationLevel | "all") => void;
+  setDueFilter: (filter: "all" | "due_today") => void;
   setSearchQuery: (query: string) => void;
   selectRecord: (record: MasterErrorRecord | null) => void;
   flagFalsePositive: (recordId: string) => void;
-  advanceReview: (recordId: string, passed: boolean) => void;
+  advanceReview: (recordId: string, passed: boolean, responseLatencyMs?: number) => void;
   generateDiagnosticReport: () => Promise<void>;
 }
-
-const DEFAULT_MOCK_ERRORS: Parameters<typeof ingestErrorOccurrence>[0][] = [
-  {
-    patternKey: "past_simple_base_form",
-    canonicalName: "Past Simple base form used instead of V2",
-    category: "grammar",
-    labelVi: "Động từ quá khứ đơn (went / saw / ate)",
-    descriptionVi: "Dùng nhầm động từ nguyên mẫu khi diễn tả sự việc đã kết thúc trong quá khứ.",
-    userText: "Yesterday I go to the supermarket.",
-    correction: "Yesterday I went to the supermarket.",
-    contextSentence: "Talking about grocery shopping yesterday",
-    sourceModule: "sentence_builder",
-    responseLatencyMs: 4600,
-    wasRetried: true,
-    retrySucceeded: true,
-    severity: "major",
-  },
-  {
-    patternKey: "collocation_depend_on",
-    canonicalName: "Collocation: depend on vs depend of",
-    category: "vocabulary",
-    labelVi: "Giới từ đi kèm động từ (depend on)",
-    descriptionVi: "Dùng nhầm 'depend of' thay vì cụm chuẩn 'depend on'.",
-    userText: "It depends of the weather.",
-    correction: "It depends on the weather.",
-    sourceModule: "vn_to_en",
-    responseLatencyMs: 3800,
-    wasRetried: true,
-    retrySucceeded: true,
-    severity: "moderate",
-  },
-  {
-    patternKey: "ending_sound_ed",
-    canonicalName: "Ending sound /t/, /d/, /id/ in past verbs",
-    category: "pronunciation",
-    labelVi: "Phát âm đuôi -ed (/t/, /d/, /ɪd/)",
-    descriptionVi: "Bỏ quên âm đuôi khi phát âm động từ có quy tắc trong quá khứ.",
-    userText: "I work yesterday.",
-    correction: "I worked (/wɜːrkt/) yesterday.",
-    sourceModule: "shadowing",
-    responseLatencyMs: 2500,
-    wasRetried: true,
-    retrySucceeded: true,
-    severity: "major",
-  },
-  {
-    patternKey: "retrieval_delay_opinions",
-    canonicalName: "Spoken Response Latency Delay (>4.0s)",
-    category: "fluency",
-    labelVi: "Độ trễ truy xuất câu nêu quan điểm (>4.0s)",
-    descriptionVi: "Mất nhiều thời gian suy nghĩ cấu trúc câu trước khi bắt đầu nói.",
-    userText: "Um, I think that, uh, remote work is good.",
-    correction: "In my opinion, remote work is very convenient.",
-    sourceModule: "latency",
-    responseLatencyMs: 5200,
-    wasRetried: false,
-    retrySucceeded: false,
-    severity: "moderate",
-  },
-];
 
 export const useErrorBankStore = create<ErrorBankStoreState>((set, get) => ({
   records: [],
   selectedCategory: "all",
   selectedStatus: "all",
+  selectedFossilization: "all",
+  dueFilter: "all",
   searchQuery: "",
   selectedRecord: null,
   contextPack: {
@@ -115,19 +61,15 @@ export const useErrorBankStore = create<ErrorBankStoreState>((set, get) => ({
   isDiagnosing: false,
 
   loadLocalRecords: () => {
-    let stored = getMasterErrorBank();
-    if (stored.length === 0) {
-      // Seed initial high-value sample errors so the dashboard is immediately rich & actionable
-      DEFAULT_MOCK_ERRORS.forEach((item) => ingestErrorOccurrence(item));
-      stored = getMasterErrorBank();
-    }
-
+    const stored = getMasterErrorBank();
     const contextPack = getCompactErrorContextPack();
     set({ records: stored, contextPack });
   },
 
   setCategory: (category) => set({ selectedCategory: category }),
   setStatus: (status) => set({ selectedStatus: status }),
+  setFossilization: (level) => set({ selectedFossilization: level }),
+  setDueFilter: (filter) => set({ dueFilter: filter }),
   setSearchQuery: (query) => set({ searchQuery: query }),
   selectRecord: (record) => set({ selectedRecord: record }),
 
@@ -141,8 +83,8 @@ export const useErrorBankStore = create<ErrorBankStoreState>((set, get) => ({
     });
   },
 
-  advanceReview: (recordId: string, passed: boolean) => {
-    const updated = advanceSpacedReviewStage(recordId, passed);
+  advanceReview: (recordId: string, passed: boolean, responseLatencyMs?: number) => {
+    const updated = advanceSpacedReviewStage(recordId, passed, responseLatencyMs);
     const contextPack = getCompactErrorContextPack();
     set({
       records: updated,
@@ -153,6 +95,9 @@ export const useErrorBankStore = create<ErrorBankStoreState>((set, get) => ({
 
   generateDiagnosticReport: async () => {
     const { records } = get();
+    if (!records.length) {
+      throw new Error("Ngân hàng lỗi đang trống. Hãy thực hành nói để thu thập lỗi trước khi chẩn đoán.");
+    }
     set({ isDiagnosing: true });
 
     let provider = "gemini";
@@ -174,13 +119,17 @@ export const useErrorBankStore = create<ErrorBankStoreState>((set, get) => ({
         body: JSON.stringify({ records, provider, model }),
       });
       const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error?.message || "Không thể khởi tạo báo cáo chẩn đoán");
+      }
       if (data.report) {
         set({ diagnosticReport: data.report, isDiagnosing: false });
       } else {
         set({ isDiagnosing: false });
       }
-    } catch {
+    } catch (err) {
       set({ isDiagnosing: false });
+      throw err;
     }
   },
 }));

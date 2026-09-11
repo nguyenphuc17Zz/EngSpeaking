@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+export const bufferChunkCandidateSchema = z.object({
+  phrase: z.string(),
+  meaningVi: z.string(),
+  category: z.enum(["buying_time", "framing_opinion", "immediate_reaction"]).default("buying_time"),
+});
+
 export const latencyTaskSchema = z.object({
   id: z.string(),
   drillMode: z.enum(["open_response", "rapid_retrieval", "timed_countdown", "baseline_test"]).default("open_response"),
@@ -12,6 +18,8 @@ export const latencyTaskSchema = z.object({
   difficulty: z.number().min(1).max(10).default(3),
   category: z.enum(["daily_conversation", "workplace", "opinions", "past_events", "reactions", "buffer_phrases"]).default("daily_conversation"),
   bufferPhraseSuggestion: z.string().optional(),
+  bufferChunks: z.array(bufferChunkCandidateSchema).optional(),
+  staircaseTargetMs: z.number().optional(),
   isBaseline: z.boolean().default(false),
   hints: z
     .array(
@@ -67,4 +75,7 @@ export const latencyEvaluationSchema = z.object({
   coachFeedbackVi: z.string(),
   betterResponse: z.string(),
   praisePoints: z.array(z.string()).default([]),
+  isFastPass: z.boolean().optional(),
+  bufferUsed: z.string().optional(),
+  speechOnsetMs: z.number().optional(),
 });

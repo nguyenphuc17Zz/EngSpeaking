@@ -8,8 +8,9 @@ import type {
   ChunkTrainingTask,
   ChunkEvaluationResult,
   ChunkChainEvaluationResult,
+  PragmaticStrategyType,
 } from "@/types/chunk-automaticity";
-import { SEED_CHUNK_LIBRARY } from "@/lib/foundation/chunks/chunk-generator.service";
+import { SEED_CHUNK_LIBRARY } from "@/lib/foundation/chunks/seed-chunks";
 
 interface ChunkStoreState {
   mode: "chain_builder" | "single_chunk";
@@ -17,6 +18,7 @@ interface ChunkStoreState {
   currentChainTask: ChunkChainTask | null;
   currentSingleTask: ChunkTrainingTask | null;
   selectedChunk: ChunkRecord | null;
+  selectedStrategy: PragmaticStrategyType | "all";
 
   isGenerating: boolean;
   isEvaluating: boolean;
@@ -27,13 +29,15 @@ interface ChunkStoreState {
 
   // Actions
   setMode: (mode: "chain_builder" | "single_chunk") => void;
+  setSelectedStrategy: (strategy: PragmaticStrategyType | "all") => void;
   loadLibrary: () => void;
-  fetchNextChainTask: (topic?: string) => Promise<void>;
+  fetchNextChainTask: (options?: string | { topic?: string; strategy?: PragmaticStrategyType; domain?: any }) => Promise<void>;
   fetchNextSingleTask: (chunk?: ChunkRecord) => Promise<void>;
   clearGenerationError: () => void;
   saveCustomChunk: (canonicalChunk: string, meaningVi: string, type?: string) => void;
   processChainEvaluation: (evalResult: ChunkChainEvaluationResult) => void;
   processSingleEvaluation: (evalResult: ChunkEvaluationResult) => void;
+  setIsEvaluating: (val: boolean) => void;
   resetSession: () => void;
 }
 
@@ -45,6 +49,7 @@ export const useChunkStore = create<ChunkStoreState>()(
       currentChainTask: null,
       currentSingleTask: null,
       selectedChunk: null,
+      selectedStrategy: "all",
 
       isGenerating: false,
       isEvaluating: false,
@@ -59,6 +64,15 @@ export const useChunkStore = create<ChunkStoreState>()(
         else get().fetchNextSingleTask();
       },
 
+      setSelectedStrategy: (selectedStrategy) => {
+        set({ selectedStrategy });
+        if (get().mode === "chain_builder") {
+          get().fetchNextChainTask({
+            strategy: selectedStrategy === "all" ? undefined : selectedStrategy,
+          });
+        }
+      },
+
       clearGenerationError: () => set({ generationError: null }),
 
       loadLibrary: () => {
@@ -68,8 +82,18 @@ export const useChunkStore = create<ChunkStoreState>()(
         }
       },
 
-      fetchNextChainTask: async (topic) => {
+      fetchNextChainTask: async (options) => {
         set({ isGenerating: true, lastChainEvaluation: null, generationError: null });
+
+        const topic = typeof options === "string" ? options : options?.topic;
+        const currentSelectedStrategy = get().selectedStrategy;
+        const strategy =
+          typeof options === "object" && options?.strategy
+            ? options.strategy
+            : currentSelectedStrategy !== "all"
+            ? currentSelectedStrategy
+            : undefined;
+        const domain = typeof options === "object" ? options?.domain : undefined;
 
         let provider = "gemini";
         let model = "auto";
@@ -87,7 +111,7 @@ export const useChunkStore = create<ChunkStoreState>()(
           const res = await fetch("/api/foundation/chunks/generate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mode: "chain_builder", topic, provider, model }),
+            body: JSON.stringify({ mode: "chain_builder", topic, strategy, domain, provider, model }),
           });
           const data = await res.json();
           if (data.task) {
@@ -205,6 +229,8 @@ export const useChunkStore = create<ChunkStoreState>()(
           set({ library: updatedLib });
         }
       },
+
+      setIsEvaluating: (val) => set({ isEvaluating: val }),
 
       resetSession: () => {
         set({

@@ -67,7 +67,10 @@ export async function POST(req: Request) {
   // Resolve auto — prefer groq whisper
   let providerId = provider;
   let modelId = model;
-  if (providerId === "auto" || modelId === "auto") {
+  if (providerId === "whisper-local" || providerId === "whisper-onnx" || providerId === "whisper") {
+    providerId = "whisper-local";
+    modelId = modelId === "auto" ? "whisper-tiny-en-onnx" : modelId;
+  } else if (providerId === "auto" || modelId === "auto") {
     // Default to groq whisper for server transcription
     providerId = "groq";
     modelId = modelId === "auto" ? "whisper-large-v3-turbo" : modelId;

@@ -30,11 +30,50 @@ export function applyStateUpdate(
   if (aiResponse.event) next.activeEvents.push(aiResponse.event);
   // Character state deltas
   next.activeCharacter = { ...next.activeCharacter };
-  if (upd.moodChange) next.activeCharacter.mood = upd.moodChange > 0 ? "positive" : upd.moodChange < 0 ? "slightly impatient" : next.activeCharacter.mood;
-  if (upd.trustChange) next.activeCharacter.trust = Math.max(0, Math.min(100, next.activeCharacter.trust + upd.trustChange));
-  if (upd.patienceChange) next.activeCharacter.patience = Math.max(0, Math.min(100, next.activeCharacter.patience + upd.patienceChange));
-  if (upd.engagementChange) next.activeCharacter.engagement = Math.max(0, Math.min(100, next.activeCharacter.engagement + upd.engagementChange));
-  // Also apply trustChange as engagement for now
+  if (aiResponse.pragmaticAct) {
+    next.activeCharacter.dominantAct = aiResponse.pragmaticAct;
+  }
+  if (upd.moodChange) {
+    next.activeCharacter.mood =
+      upd.moodChange > 0 ? "positive" : upd.moodChange < 0 ? "slightly impatient" : next.activeCharacter.mood;
+  }
+  if (upd.trustChange !== undefined) {
+    next.activeCharacter.trust = Math.max(0, Math.min(100, next.activeCharacter.trust + upd.trustChange));
+  }
+  if (upd.patienceChange !== undefined) {
+    next.activeCharacter.patience = Math.max(0, Math.min(100, next.activeCharacter.patience + upd.patienceChange));
+  }
+  if (upd.engagementChange !== undefined) {
+    next.activeCharacter.engagement = Math.max(
+      0,
+      Math.min(100, next.activeCharacter.engagement + upd.engagementChange)
+    );
+  }
+  if (upd.defensivenessChange !== undefined) {
+    const prevDef = next.activeCharacter.defensiveness ?? 40;
+    next.activeCharacter.defensiveness = Math.max(0, Math.min(100, prevDef + upd.defensivenessChange));
+  }
+  if (upd.emotionalValenceChange !== undefined) {
+    const prevVal = next.activeCharacter.emotionalValence ?? 0.0;
+    next.activeCharacter.emotionalValence = Math.max(
+      -1.0,
+      Math.min(1.0, Math.round((prevVal + upd.emotionalValenceChange) * 100) / 100)
+    );
+  }
+
+  // Handle unlocked objective
+  const unlocked = upd.unlockedObjective || aiResponse.unlockedObjective;
+  if (unlocked && next.scenario.speakingObjectives) {
+    next.scenario = {
+      ...next.scenario,
+      speakingObjectives: next.scenario.speakingObjectives.map((obj) =>
+        obj.type === unlocked.type || obj.description === unlocked.description
+          ? { ...obj, isUnlocked: true, unlockedAtTurn: next.turnCount }
+          : obj
+      ),
+    };
+  }
+
   return next;
 }
 

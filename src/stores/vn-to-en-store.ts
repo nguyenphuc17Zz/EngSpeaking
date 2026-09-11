@@ -16,6 +16,10 @@ import {
 } from "@/lib/foundation/vn-to-en/adaptive-engine";
 import { updateFoundationProfileFromScore } from "@/lib/foundation/services/progress.service";
 import { recordErrorsFromEvaluation } from "@/lib/foundation/sentence-builder/error-bank.service";
+import {
+  getCompactErrorContextPack,
+  ingestErrorOccurrence,
+} from "@/lib/foundation/error-bank/error-bank.service";
 
 interface VNToENStoreState {
   // Current Task & Preload Queue
@@ -62,6 +66,7 @@ interface VNToENStoreState {
   setAutoStartMic: (val: boolean) => void;
   setPrepCountdown: (val: number | null) => void;
   setIsCountingDown: (val: boolean) => void;
+  setIsEvaluating: (val: boolean) => void;
   clearGenerationError: () => void;
   resetSession: () => void;
 }
@@ -145,6 +150,12 @@ export const useVNToENStore = create<VNToENStoreState>()(
             "auto";
         } catch {}
 
+        let recentErrors: string[] = [];
+        try {
+          const pack = getCompactErrorContextPack();
+          recentErrors = pack.topWeaknesses.map((w) => w.patternKey || w.labelVi).filter(Boolean);
+        } catch {}
+
         try {
           const res = await fetch("/api/foundation/vn-to-en/generate", {
             method: "POST",
@@ -152,9 +163,7 @@ export const useVNToENStore = create<VNToENStoreState>()(
             body: JSON.stringify({
               retrievalMode: sessionConfig.mode,
               targetDifficulty: adaptiveState.currentDifficulty,
-              weakSkills: adaptiveState.recentErrors,
-              recentErrors: adaptiveState.recentErrors,
-              recentPrompts: adaptiveState.recentPrompts,
+              recentErrors,
               provider,
               model,
             }),
@@ -171,7 +180,7 @@ export const useVNToENStore = create<VNToENStoreState>()(
               lastEvaluation: null,
               isSayItBetterMode: false,
             });
-            get().preloadNextTask();
+            // Do NOT preload concurrently to avoid Groq 8000 TPM limit
           } else {
             set({
               isGenerating: false,
@@ -187,46 +196,7 @@ export const useVNToENStore = create<VNToENStoreState>()(
       },
 
       preloadNextTask: async () => {
-        const { adaptiveState, isPreloadingNext, sessionConfig, currentTaskIndex } = get();
-        if (isPreloadingNext || currentTaskIndex + 1 >= sessionConfig.targetCount) return;
-
-        set({ isPreloadingNext: true });
-
-        let provider = "gemini";
-        let model = "auto";
-        try {
-          const { useSettingsStore } = await import("@/stores/settings-store");
-          const settings = useSettingsStore.getState();
-          provider = settings.generation?.provider || settings.activeProvider || "gemini";
-          model =
-            settings.generation?.model ||
-            (provider === "groq" ? settings.preferredGroqModel : settings.preferredGeminiModel) ||
-            "auto";
-        } catch {}
-
-        try {
-          const res = await fetch("/api/foundation/vn-to-en/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              retrievalMode: sessionConfig.mode,
-              targetDifficulty: adaptiveState.currentDifficulty,
-              weakSkills: adaptiveState.recentErrors,
-              recentErrors: adaptiveState.recentErrors,
-              recentPrompts: adaptiveState.recentPrompts,
-              provider,
-              model,
-            }),
-          });
-          const data = await res.json();
-          if (data.success && data.task) {
-            set({ nextTask: data.task, isPreloadingNext: false });
-          } else {
-            set({ isPreloadingNext: false });
-          }
-        } catch {
-          set({ isPreloadingNext: false });
-        }
+        // Kept no-op to prevent Groq 429 TPM rate limits
       },
 
       processEvaluation: (evaluation: VNToENEvaluation) => {
@@ -263,6 +233,25 @@ export const useVNToENStore = create<VNToENStoreState>()(
             actionableFeedback: evaluation.actionableFeedback,
             hintTierUsed: evaluation.hintTierUsed,
             attemptNumber: evaluation.attemptNumber,
+          });
+
+          // Ingest into Function 5 Master Error Bank
+          evaluation.errors.forEach((err) => {
+            ingestErrorOccurrence({
+              patternKey: err.patternKey || err.type || "general_grammar",
+              canonicalName: err.patternKey || err.type || "Grammar/Structure",
+              category: err.type === "vocabulary" ? "vocabulary" : "grammar",
+              labelVi: err.explanation || "Lỗi cấu trúc câu",
+              descriptionVi: err.explanation || "",
+              userText: err.userText || evaluation.userTranscript,
+              correction: err.correction || evaluation.betterVersion,
+              contextSentence: currentTask.promptVi,
+              sourceModule: "vn_to_en",
+              responseLatencyMs: evaluation.responseLatencyMs,
+              wasRetried: attemptCount > 1,
+              retrySucceeded: evaluation.isSuccessful,
+              severity: err.severity,
+            });
           });
         } catch {}
 
@@ -382,6 +371,7 @@ export const useVNToENStore = create<VNToENStoreState>()(
       setAutoStartMic: (val) => set({ autoStartMic: val }),
       setPrepCountdown: (val) => set({ prepCountdown: val }),
       setIsCountingDown: (val) => set({ isCountingDown: val }),
+      setIsEvaluating: (val) => set({ isEvaluating: val }),
       resetSession: () =>
         set({
           currentTask: null,

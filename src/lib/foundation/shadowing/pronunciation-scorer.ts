@@ -65,6 +65,8 @@ export interface ShadowingScoreResult {
   fluency: number;
   /** 0–100: content-word / stressed-word coverage */
   prosody: number;
+  /** 0–100: ratio of reference words uttered (Độ hoàn thiện) */
+  completeness: number;
   /** weighted overall */
   overall: number;
   /** words in reference that were correctly matched */
@@ -96,6 +98,7 @@ export function computeShadowingScore(
       accuracy: 0,
       fluency: 0,
       prosody: 0,
+      completeness: 0,
       overall: 0,
       correctWords: [],
       missedWords: tokenize(referenceText),
@@ -159,11 +162,13 @@ export function computeShadowingScore(
 
   // ─── OVERALL WEIGHTED ────────────────────────────────────────────────
   const overall = Math.round(accuracy * 0.45 + fluency * 0.30 + prosody * 0.25);
+  const completeness =
+    refTokens.length > 0 ? Math.round((correctWords.length / refTokens.length) * 100) : 100;
 
   // ─── COACH REMARK ─────────────────────────────────────────────────────
   const coachRemarkVi = buildCoachRemark(accuracy, fluency, prosody, missedWords);
 
-  return { accuracy, fluency, prosody, overall, correctWords, missedWords, coachRemarkVi };
+  return { accuracy, fluency, prosody, completeness, overall, correctWords, missedWords, coachRemarkVi };
 }
 
 function buildCoachRemark(

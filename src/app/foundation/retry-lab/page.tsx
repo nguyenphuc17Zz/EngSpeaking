@@ -25,14 +25,14 @@ import {
 } from "lucide-react";
 
 import { useRetryLoopStore } from "@/stores/retry-loop-store";
+import { useSettingsStore } from "@/stores/settings-store";
 import { RepairPromptCard } from "@/components/foundation/retry-loop/RepairPromptCard";
 import { RepairFeedbackCard } from "@/components/foundation/retry-loop/RepairFeedbackCard";
 import { SpeakingController } from "@/components/foundation/sentence-builder/SpeakingController";
 import { GlobalAiSelector } from "@/components/common/GlobalAiSelector";
 import { getErrorBankRecords } from "@/lib/foundation/sentence-builder/error-bank.service";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
-import { useAudioRecorder } from "@/hooks/useAudioRecorder";
-import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import { useUnifiedSTT } from "@/hooks/useUnifiedSTT";
 import { soundEffects } from "@/lib/audio/audio-chimes";
 import type { ErrorBankRecord } from "@/types/sentence-builder";
 
@@ -56,11 +56,14 @@ export default function SpokenRepairLabPage() {
   const [currentHintTier, setCurrentHintTier] = useState(0);
   const [autoStartMic, setAutoStartMic] = useState(false);
   const [prepSecondsLeft, setPrepSecondsLeft] = useState<number | null>(null);
+  const [pendingSpokenText, setPendingSpokenText] = useState<string | null>(null);
+  const [pendingDurationMs, setPendingDurationMs] = useState<number>(1500);
 
   // Audio / Speech Hooks
   const tts = useBrowserTTS();
-  const recorder = useAudioRecorder();
-  const speechRec = useSpeechRecognition("en-US");
+  const unifiedSTT = useUnifiedSTT({ lang: "en-US" });
+  const unifiedSTTRef = useRef(unifiedSTT);
+  unifiedSTTRef.current = unifiedSTT;
   const [recordingStartTime, setRecordingStartTime] = useState(0);
   const [elapsedDurationMs, setElapsedDurationMs] = useState(0);
   const durationTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -98,87 +101,102 @@ export default function SpokenRepairLabPage() {
     const start = Date.now();
     const duration = 2000;
 
-    const timer = setInterval(() => {
-      const passed = Date.now() - start;
-      const left = Math.max(0, (duration - passed) / 1000);
-      setPrepSecondsLeft(parseFloat(left.toFixed(1)));
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - start;
+      const left = Math.max(0, (duration - elapsed) / 1000);
+      setPrepSecondsLeft(Number(left.toFixed(1)));
 
-      if (passed >= duration) {
-        clearInterval(timer);
+      if (elapsed >= duration) {
+        clearInterval(interval);
         setPrepSecondsLeft(null);
-        soundEffects.playAIReady();
         if (autoStartMic) {
           handleStartRecord();
         }
       }
     }, 100);
 
-    return () => clearInterval(timer);
-  }, [activeSession?.sessionId, lastRepairResult]);
+    return () => clearInterval(interval);
+  }, [activeSession?.sessionId, autoStartMic, lastRepairResult]);
 
-  // Duration Timer during recording
+  // Track speech recording duration
   useEffect(() => {
-    if (recorder.status === "recording") {
+    if (unifiedSTT.isListening) {
       durationTimerRef.current = setInterval(() => {
         setElapsedDurationMs(Date.now() - recordingStartTime);
       }, 100);
     } else {
       if (durationTimerRef.current) clearInterval(durationTimerRef.current);
+      setElapsedDurationMs(0);
     }
     return () => {
       if (durationTimerRef.current) clearInterval(durationTimerRef.current);
     };
-  }, [recorder.status, recordingStartTime]);
+  }, [unifiedSTT.isListening, recordingStartTime]);
 
   // Start Mic Recording
   const handleStartRecord = async () => {
     soundEffects.playMicStart();
-    speechRec.resetTranscript();
+    unifiedSTTRef.current.resetTranscript();
+    setPendingSpokenText(null);
     setRecordingStartTime(Date.now());
     setElapsedDurationMs(0);
     try {
-      await recorder.start();
-      speechRec.startListening();
+      await unifiedSTTRef.current.startListening();
     } catch {
       toast.error("Lỗi Micro", "Vui lòng cấp quyền micro cho trình duyệt.");
     }
   };
 
-  // Stop Mic Recording & Evaluate Repair Attempt
+  // Stop Mic Recording -> Store in pending review state
   const handleStopRecord = async () => {
-    if (recorder.status !== "recording") return;
+    if (!unifiedSTTRef.current.isListening) return;
     soundEffects.playMicStop();
-    speechRec.stopListening();
     const durationMs = Math.max(600, Date.now() - recordingStartTime);
 
     try {
-      await recorder.stop();
-      await new Promise((r) => setTimeout(r, 400));
-      const spokenText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
-
+      const { text: spokenText } = await unifiedSTTRef.current.stopListening();
       if (spokenText) {
-        await evaluateSpokenAttempt(spokenText, durationMs);
+        setPendingSpokenText(spokenText);
+        setPendingDurationMs(durationMs);
       } else {
         toast.info("Chưa phát hiện giọng nói", "Vui lòng nhấn Mic và thử nói lại câu đã sửa.");
       }
-    } catch {}
+    } catch {
+      toast.error("Lỗi hoàn thành thu âm", "Hãy thử nói lại câu.");
+    }
   };
 
   // Evaluate attempt
   const evaluateSpokenAttempt = async (spokenText: string, durationMs: number) => {
     if (!activeSession) return;
-    const res = await submitRepairSpokenAttempt({
-      spokenTranscript: spokenText,
-      responseLatencyMs: 1500,
-      speechDurationMs: durationMs,
-      expectedSentence: activeSession.targetCorrection.betterSentence,
-    });
+    try {
+      const res = await submitRepairSpokenAttempt({
+        spokenTranscript: spokenText,
+        responseLatencyMs: 1500,
+        speechDurationMs: durationMs,
+        expectedSentence: activeSession.targetCorrection.betterSentence,
+      });
 
-    if (res?.isSuccessful) {
-      soundEffects.playSuccessFanfare();
-    } else {
-      soundEffects.playMicStop();
+      if (res?.isSuccessful) {
+        soundEffects.playAIReady();
+      } else {
+        soundEffects.playMicStop();
+      }
+    } finally {
+      setPendingSpokenText(null);
     }
+  };
+
+  // User confirms submitting pending speech
+  const handleConfirmSubmit = async () => {
+    if (!pendingSpokenText) return;
+    await evaluateSpokenAttempt(pendingSpokenText, pendingDurationMs);
+  };
+
+  // User decides to re-record
+  const handleReRecord = () => {
+    setPendingSpokenText(null);
+    handleStartRecord();
   };
 
   // Handle Practice from Error Bank
@@ -188,6 +206,7 @@ export default function SpokenRepairLabPage() {
     const explanation = record.description || record.labelVi;
 
     setCurrentHintTier(0);
+    setPendingSpokenText(null);
     await startRepairSession({
       originalTaskId: record.id,
       sourceContext: "retry_lab",
@@ -208,6 +227,7 @@ export default function SpokenRepairLabPage() {
   // Handle AI Instant Challenge
   const handleStartAiChallenge = async (category?: string) => {
     setCurrentHintTier(0);
+    setPendingSpokenText(null);
     await generateAiRepairChallenge(category);
   };
 
@@ -218,40 +238,47 @@ export default function SpokenRepairLabPage() {
       const target = e.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
 
-      // Space: Toggle Mic / Retry
+      // Space: Toggle Mic / Re-record / Retry
       if (e.code === "Space") {
         e.preventDefault();
         if (activeSession && !lastRepairResult) {
-          if (recorder.status === "recording") {
+          if (unifiedSTT.isListening) {
             handleStopRecord();
-          } else if (recorder.status === "idle") {
+          } else if (pendingSpokenText) {
+            handleReRecord();
+          } else if (!isEvaluatingRepair) {
             handleStartRecord();
           }
         } else if (lastRepairResult) {
           // Retry same challenge
           useRetryLoopStore.setState({ lastRepairResult: null });
+          setPendingSpokenText(null);
           setCurrentHintTier(0);
         }
       }
 
       // Backspace: Reset live transcript while keeping mic open
       if (e.code === "Backspace") {
-        if (recorder.status === "recording") {
+        if (unifiedSTT.isListening) {
           e.preventDefault();
-          speechRec.resetTranscript();
+          unifiedSTTRef.current.resetTranscript();
+          setPendingSpokenText(null);
           soundEffects.playMicStop();
         }
       }
 
       // Key H: Cycle Hints (0 -> 1 -> 2 -> 3 -> 4 -> 0)
-      if (e.code === "KeyH") {
+      if (e.code === "KeyH" && !isEvaluatingRepair) {
         e.preventDefault();
         setCurrentHintTier((prev) => (prev >= 4 ? 0 : prev + 1));
       }
 
-      // Enter: Advance to next challenge
+      // Enter: Confirm pending submit or Advance to next challenge
       if (e.code === "Enter") {
-        if (lastRepairResult) {
+        if (pendingSpokenText && !isEvaluatingRepair) {
+          e.preventDefault();
+          handleConfirmSubmit();
+        } else if (lastRepairResult) {
           e.preventDefault();
           handleStartAiChallenge();
         }
@@ -263,11 +290,21 @@ export default function SpokenRepairLabPage() {
         if (currentHintTier > 0) {
           setCurrentHintTier(0);
         } else if (activeSession) {
+          setPendingSpokenText(null);
           closeActiveSession();
         }
       }
     },
-    [activeSession, lastRepairResult, recorder.status, currentHintTier]
+    [
+      activeSession,
+      lastRepairResult,
+      unifiedSTT.isListening,
+      currentHintTier,
+      isEvaluatingRepair,
+      pendingSpokenText,
+      pendingDurationMs,
+      handleConfirmSubmit,
+    ]
   );
 
   useEffect(() => {
@@ -275,12 +312,12 @@ export default function SpokenRepairLabPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  const liveText = speechRec.fullTranscript || speechRec.transcript;
+  const liveText = unifiedSTT.fullTranscript;
 
   // ==================== 1. STUDIO MODE (Active Session) ====================
   if (activeSession) {
     return (
-      <div className="fixed inset-0 z-50 bg-background flex flex-col overflow-hidden text-foreground">
+      <div className="w-full min-h-[calc(100vh-8rem)] flex flex-col overflow-hidden text-foreground rounded-3xl border border-border/80 bg-card shadow-xs">
         {/* Studio Top Header Bar */}
         <header className="h-14 border-b border-border/80 bg-card/95 backdrop-blur-md px-3 sm:px-5 flex items-center justify-between gap-2 shrink-0 z-10">
           <div className="flex items-center gap-2.5">
@@ -397,18 +434,30 @@ export default function SpokenRepairLabPage() {
           <section className="md:col-span-7 h-full overflow-hidden flex flex-col min-h-0">
             {!lastRepairResult ? (
               <SpeakingController
-                status={recorder.status === "recording" ? "recording" : "idle"}
-                isListening={recorder.status === "recording"}
+                status={
+                  isEvaluatingRepair || unifiedSTT.isTranscribing
+                    ? "processing"
+                    : unifiedSTT.isListening
+                    ? "recording"
+                    : "idle"
+                }
+                isListening={unifiedSTT.isListening}
                 liveTranscript={liveText}
-                durationMs={elapsedDurationMs}
+                durationMs={elapsedDurationMs || unifiedSTT.audioRecorder.durationMs}
                 autoStartMic={autoStartMic}
                 onToggleAutoStartMic={setAutoStartMic}
                 onStartRecord={handleStartRecord}
                 onStopRecord={handleStopRecord}
                 onSubmitTextFallback={(text) => evaluateSpokenAttempt(text, 1500)}
                 onOpenHints={() => setCurrentHintTier((prev) => (prev >= 4 ? 1 : prev + 1))}
-                isEvaluating={isEvaluatingRepair}
-                onResetLiveTranscript={() => speechRec.resetTranscript()}
+                isEvaluating={isEvaluatingRepair || unifiedSTT.isTranscribing}
+                onResetLiveTranscript={() => {
+                  unifiedSTTRef.current.resetTranscript();
+                  setPendingSpokenText(null);
+                }}
+                pendingText={pendingSpokenText}
+                onConfirmSubmit={handleConfirmSubmit}
+                onReRecord={handleReRecord}
               />
             ) : (
               <RepairFeedbackCard
@@ -416,6 +465,7 @@ export default function SpokenRepairLabPage() {
                 result={lastRepairResult}
                 onRetry={() => {
                   useRetryLoopStore.setState({ lastRepairResult: null });
+                  setPendingSpokenText(null);
                   setCurrentHintTier(0);
                 }}
                 onContinue={() => handleStartAiChallenge()}
@@ -431,7 +481,7 @@ export default function SpokenRepairLabPage() {
               <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
                 Space
               </kbd>
-              <span>Nói / Dừng / Nói lại</span>
+              <span>{lastRepairResult ? "Nói lại" : pendingSpokenText ? "Thu âm lại" : "Nói / Dừng"}</span>
             </span>
             <span className="flex items-center gap-1 font-mono hidden sm:inline-flex">
               <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
@@ -445,12 +495,21 @@ export default function SpokenRepairLabPage() {
               </kbd>
               <span>Đổi tầng gợi ý</span>
             </span>
-            <span className="flex items-center gap-1 font-mono hidden md:inline-flex">
-              <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
-                Enter
-              </kbd>
-              <span>Câu tiếp</span>
-            </span>
+            {pendingSpokenText && !isEvaluatingRepair ? (
+              <span className="flex items-center gap-1 font-mono text-primary font-bold">
+                <kbd className="px-1.5 py-0.5 rounded bg-primary text-primary-foreground border text-[10px] font-bold">
+                  Enter
+                </kbd>
+                <span>Nộp bài chấm điểm</span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 font-mono hidden md:inline-flex">
+                <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
+                  Enter
+                </kbd>
+                <span>Câu tiếp</span>
+              </span>
+            )}
             <span className="flex items-center gap-1 font-mono">
               <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
                 Esc

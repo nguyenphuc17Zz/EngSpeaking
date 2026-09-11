@@ -4,6 +4,11 @@
 import { generateTextWithRouting } from "@/lib/ai";
 import { sentenceBuilderEvaluationSchema } from "@/lib/validation/sentence-builder-schemas";
 import { EVALUATOR_SYSTEM, buildEvaluatorUserPrompt } from "@/lib/ai/prompts/sentence-builder-prompts";
+import {
+  computeFastPassMatch,
+  buildFastPassEvaluation,
+  calculateHesitationMetrics,
+} from "./fast-pass.service";
 import type {
   SentenceBuilderTask,
   SentenceBuilderEvaluation,
@@ -19,6 +24,7 @@ export interface EvaluateAttemptParams {
   attemptNumber?: number;
   provider?: string;
   model?: string;
+  forceAi?: boolean; // Set true to bypass fast-pass if explicit full deep AI review requested
 }
 
 function cleanText(t: string): string {
@@ -40,6 +46,12 @@ function computeDeterministicEvaluation(
   const speechDurationMs = opts.speechDurationMs ?? 3000;
   const hintTier = opts.hintTierUsed ?? 0;
   const attempt = opts.attemptNumber ?? 1;
+
+  const hesitationMetrics = calculateHesitationMetrics({
+    userTranscript,
+    speechDurationMs,
+    latencyMs,
+  });
 
   if (!cleanSpoken || cleanSpoken.length < 3) {
     return {
@@ -72,6 +84,8 @@ function computeDeterministicEvaluation(
       actionableFeedback: "Hãy nói to, rõ ràng và trọn vẹn cả câu tiếng Anh.",
       hintTierUsed: hintTier,
       attemptNumber: attempt,
+      evaluationSource: "deterministic",
+      hesitationMetrics,
     };
   }
 
@@ -125,7 +139,6 @@ function computeDeterministicEvaluation(
   }
 
   // 3. Retrieval & Independence score
-  // Penalty for hints: tier 0: 100%, tier 1: 90%, tier 2: 75%, tier 3: 50%, tier 4: 15%
   const independenceScore = hintTier === 0 ? 100 : hintTier === 1 ? 90 : hintTier === 2 ? 75 : hintTier === 3 ? 50 : 15;
 
   // Retrieval speed bonus/penalty (ideal: latency < 2500ms)
@@ -182,6 +195,8 @@ function computeDeterministicEvaluation(
     actionableFeedback,
     hintTierUsed: hintTier,
     attemptNumber: attempt,
+    evaluationSource: "deterministic",
+    hesitationMetrics,
   };
 }
 
@@ -209,23 +224,60 @@ export async function evaluateSentenceBuilderAttempt(
 ): Promise<SentenceBuilderEvaluation> {
   const provider = params.provider || "gemini";
   const model = params.model || "auto";
+  const latencyMs = params.latencyMs ?? 2000;
+  const speechDurationMs = params.speechDurationMs ?? 3000;
+  const hintTierUsed = params.hintTierUsed ?? 0;
+  const attemptNumber = params.attemptNumber ?? 1;
 
+  // Compute speech hesitation metrics up-front
+  const hesitationMetrics = calculateHesitationMetrics({
+    userTranscript: params.userTranscript,
+    speechDurationMs,
+    latencyMs,
+  });
+
+  // TIER 1: FAST-PASS MATCH (0ms local evaluation)
+  // If user spoke a clean sentence closely matching expected responses and didn't rely heavily on answers,
+  // evaluate immediately with 0ms latency and 0 API cost.
+  if (!params.forceAi && params.task.expectedResponses?.length > 0) {
+    const fastPassMatch = computeFastPassMatch(
+      params.userTranscript,
+      params.task.expectedResponses,
+      params.task.requiredElements
+    );
+
+    if (fastPassMatch.isMatch && fastPassMatch.matchedResponse) {
+      return buildFastPassEvaluation({
+        task: params.task,
+        userTranscript: params.userTranscript,
+        matchedResponse: fastPassMatch.matchedResponse,
+        confidence: fastPassMatch.confidence,
+        latencyMs,
+        speechDurationMs,
+        hintTierUsed,
+        attemptNumber,
+      });
+    }
+  }
+
+  // If running in test or offline mock mode
   if (provider === "mock") {
     return computeDeterministicEvaluation(params.task, params.userTranscript, {
-      latencyMs: params.latencyMs,
-      speechDurationMs: params.speechDurationMs,
-      hintTierUsed: params.hintTierUsed,
-      attemptNumber: params.attemptNumber,
+      latencyMs,
+      speechDurationMs,
+      hintTierUsed,
+      attemptNumber,
     });
   }
 
+  // TIER 2 & 3: DEEP AI EVALUATION (Gemini/Groq)
   const userPrompt = buildEvaluatorUserPrompt({
     taskJson: JSON.stringify(params.task),
     userTranscript: params.userTranscript,
-    latencyMs: params.latencyMs ?? 2000,
-    speechDurationMs: params.speechDurationMs ?? 3000,
-    hintTierUsed: params.hintTierUsed ?? 0,
-    attemptNumber: params.attemptNumber ?? 1,
+    latencyMs,
+    speechDurationMs,
+    hintTierUsed,
+    attemptNumber,
   });
 
   try {
@@ -251,7 +303,11 @@ export async function evaluateSentenceBuilderAttempt(
       throw new Error("Invalid evaluator schema");
     }
 
-    return validated.data as SentenceBuilderEvaluation;
+    const evaluation = validated.data as SentenceBuilderEvaluation;
+    evaluation.evaluationSource = "ai_llm";
+    evaluation.hesitationMetrics = hesitationMetrics;
+
+    return evaluation;
   } catch (err) {
     if (process.env.NODE_ENV !== "production") {
       console.warn("[SentenceBuilderEvaluator] AI evaluation error:", err);

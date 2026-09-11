@@ -14,6 +14,7 @@ import {
   ArrowRight,
   BookOpen,
   Zap,
+  ChevronDown,
 } from "lucide-react";
 import type { ChunkChainTask, ChunkTrainingTask } from "@/types/chunk-automaticity";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
@@ -34,13 +35,33 @@ export function ChunkPromptCard({
   currentHintTier,
   onSelectHintTier,
 }: Props) {
+  const [isHintsExpanded, setIsHintsExpanded] = useState(true);
   const tts = useBrowserTTS();
 
   const handlePlayAudio = (text: string) => {
     tts.speak(sanitizeTextForTTS(text));
   };
 
+  const cleanChunkPrefix = (text?: string | null): string => {
+    if (!text) return "";
+    return text
+      .replace(/^(chuỗi câu mẫu hoàn chỉnh|câu mẫu hoàn chỉnh|câu mẫu|sample sentence|sample response|model answer):\s*/i, "")
+      .trim();
+  };
+
+  const isFullChunkSentence = (text?: string | null, targetChunk?: string): boolean => {
+    if (!text) return false;
+    const clean = text.trim();
+    if (!clean || clean.includes("______")) return false;
+    if (targetChunk && clean.toLowerCase() === targetChunk.trim().toLowerCase()) return false;
+    return clean.split(/\s+/).length >= 4;
+  };
+
   if (mode === "chain_builder" && chainTask) {
+    const fullChainSpeech =
+      chainTask.expectedAssemblyExample ||
+      cleanChunkPrefix(chainTask.hints?.find((h) => h.tier === 4)?.content) ||
+      "";
     const blockColors = [
       {
         badge: "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30",
@@ -71,10 +92,15 @@ export function ChunkPromptCard({
         <CardContent className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1">
           {/* Top Metadata */}
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-3">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge className="bg-primary text-primary-foreground font-mono text-xs px-2.5 py-0.5 rounded-full">
                 Chain Builder • 4 Blocks
               </Badge>
+              {chainTask.strategyTitleVi && (
+                <Badge variant="secondary" className="text-[11px] font-semibold bg-primary/15 text-primary border border-primary/30 px-2 py-0.5 rounded-full">
+                  {chainTask.strategyTitleVi}
+                </Badge>
+              )}
               <Badge variant="outline" className="text-[11px] font-mono">
                 Chủ đề: {chainTask.topic}
               </Badge>
@@ -88,6 +114,12 @@ export function ChunkPromptCard({
 
           {/* Situation & Target Question */}
           <div className="space-y-2">
+            {chainTask.persona && (
+              <div className="text-xs text-muted-foreground">
+                <span className="font-semibold text-primary">Bối cảnh: </span>
+                <span className="italic text-foreground">{chainTask.persona}</span>
+              </div>
+            )}
             <div className="text-xs text-muted-foreground font-medium">
               Tình huống: <span className="text-foreground">{chainTask.situationVi}</span>
             </div>
@@ -122,7 +154,19 @@ export function ChunkPromptCard({
                 <Layers className="size-3.5 text-primary" />
                 <span>4 Khối ghép câu (Speech Blocks):</span>
               </span>
-              <span className="text-[10px] font-mono text-muted-foreground">Nói liền mạch 4 khối</span>
+              {chainTask.expectedAssemblyExample && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handlePlayAudio(chainTask.expectedAssemblyExample)}
+                  className="h-6 px-2 text-[10px] font-semibold gap-1 rounded-lg border border-primary/30 text-primary hover:bg-primary/10 btn-spring shrink-0"
+                  title="Nghe toàn bộ chuỗi câu mẫu hoàn chỉnh (Full speech)"
+                >
+                  <Volume2 className="size-3" />
+                  <span>Nghe full chuỗi</span>
+                </Button>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -188,74 +232,96 @@ export function ChunkPromptCard({
               </div>
             </div>
           )}
-        </CardContent>
-
-        {/* 4-Tier Inline Stepper Dock */}
-        <div className="p-4 bg-muted/30 border-t border-border/60 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-              <Zap className="size-3 text-amber-500 fill-amber-500" />
-              <span>Gợi ý nấc thang (Inline Stepper):</span>
-            </span>
-            {currentHintTier > 0 && (
-              <button
-                onClick={() => onSelectHintTier(0)}
-                className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2"
-              >
-                Ẩn gợi ý
-              </button>
-            )}
-          </div>
-
-          <div className="grid grid-cols-4 gap-1.5">
-            {[
-              { tier: 1, label: "T1: 4 Khối" },
-              { tier: 2, label: "T2: Từ nối" },
-              { tier: 3, label: "T3: Khung câu" },
-              { tier: 4, label: "T4: Chuỗi mẫu" },
-            ].map((btn) => {
-              const isActive = currentHintTier === btn.tier;
-              return (
-                <button
-                  key={btn.tier}
-                  type="button"
-                  onClick={() => onSelectHintTier(isActive ? 0 : btn.tier)}
-                  className={`py-1.5 px-1 rounded-xl text-xs font-bold transition-all border ${
-                    isActive
-                      ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                      : "bg-background/80 hover:bg-background text-foreground border-border/80"
-                  }`}
-                >
-                  {btn.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Active Hint Content Card */}
-          {currentHint && currentHintTier > 0 && (
-            <div className="p-3.5 rounded-2xl bg-card border border-primary/40 shadow-xs space-y-1.5 animate-in fade-in-0 duration-200">
+          {/* 4-Tier Progressive Hints (Stack List - Open by Default) */}
+          {chainTask.hints && chainTask.hints.length > 0 && (
+            <div className="rounded-2xl border border-amber-500/25 bg-amber-500/5 p-3 space-y-2.5 mt-2 transition-all">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-primary flex items-center gap-1.5">
-                  <Lightbulb className="size-3.5 text-amber-500 fill-amber-500" />
-                  <span>{currentHint.title}</span>
-                </span>
-                <Button
+                <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                  <Sparkles className="size-3.5 text-amber-500" />
+                  <span>Gợi ý nấc thang ghép chuỗi (T1 - T4):</span>
+                </div>
+                <button
                   type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handlePlayAudio(currentHint.content)}
-                  className="size-6 p-0 rounded-md text-primary hover:bg-primary/10"
-                  title="Nghe gợi ý"
+                  onClick={() => setIsHintsExpanded(!isHintsExpanded)}
+                  className="text-[11px] font-semibold text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer transition-colors"
                 >
-                  <Volume2 className="size-3.5" />
-                </Button>
+                  <span>{isHintsExpanded ? "Thu gọn gợi ý" : "Hiện tất cả (T1 - T4)"}</span>
+                  <ChevronDown className={`size-3.5 transition-transform duration-200 ${isHintsExpanded ? "rotate-180" : ""}`} />
+                </button>
               </div>
-              <p className="text-xs font-mono text-foreground leading-relaxed">
-                {currentHint.content}
-              </p>
+
+              {isHintsExpanded && (
+                <div className="space-y-1.5 pt-0.5 animate-in fade-in-0 duration-150">
+                  {chainTask.hints
+                    .filter((h) => h.tier >= 1 && h.tier <= 4)
+                    .map((h) => {
+                      const tierStyles = [
+                        { badge: "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30", border: "border-sky-500/20 bg-card/90" },
+                        { badge: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30", border: "border-indigo-500/20 bg-card/90" },
+                        { badge: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30", border: "border-amber-500/20 bg-card/90" },
+                        { badge: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30", border: "border-emerald-500/20 bg-card/90" },
+                      ];
+                      const style = tierStyles[h.tier - 1] || tierStyles[0];
+                      const isFullSentenceTier = h.tier === 3 || h.tier === 4;
+
+                      return (
+                        <div key={h.tier} className={`p-2.5 rounded-xl border ${style.border} shadow-2xs space-y-1`}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold border ${style.badge}`}>
+                                T{h.tier}
+                              </span>
+                              <span className="text-xs font-bold text-foreground">{h.title}</span>
+                            </div>
+
+                            {isFullSentenceTier && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  if (fullChainSpeech) {
+                                    handlePlayAudio(fullChainSpeech);
+                                  } else if (!h.content.includes("______")) {
+                                    handlePlayAudio(cleanChunkPrefix(h.content));
+                                  }
+                                }}
+                                className="h-6 px-2 text-[10px] gap-1 rounded-lg border border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 shrink-0 font-semibold btn-spring"
+                                title="Nghe chuỗi câu hoàn chỉnh"
+                              >
+                                <Volume2 className="size-3" />
+                                <span>{h.tier === 3 ? "Nghe full chuỗi" : "Nghe mẫu"}</span>
+                              </Button>
+                            )}
+                          </div>
+
+                          <p className="font-mono text-xs md:text-sm font-medium text-foreground/90 pl-0.5 leading-relaxed">
+                            {h.content}
+                          </p>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
             </div>
           )}
+        </CardContent>
+
+        {/* Bottom Bar: Quick Hint Status */}
+        <div className="p-3 bg-muted/30 border-t border-border/60 flex items-center justify-between gap-2">
+          <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+            <Sparkles className="size-3 text-amber-500" />
+            <span>Nấc thang ghép chuỗi</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setIsHintsExpanded(!isHintsExpanded)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 hover:bg-amber-500/20 transition-all cursor-pointer"
+            title="Bấm để ẩn hoặc hiện toàn bộ gợi ý T1-T4"
+          >
+            <Zap className="size-3 text-amber-500" />
+            <span>{isHintsExpanded ? "Gợi ý T1-T4: Đang hiện" : "Gợi ý T1-T4: Đã ẩn (Bấm mở)"}</span>
+          </button>
         </div>
       </Card>
     );
@@ -264,6 +330,16 @@ export function ChunkPromptCard({
   // Single Chunk Mode
   if (mode === "single_chunk" && singleTask) {
     const currentHint = singleTask.hints?.find((h) => h.tier === currentHintTier);
+    const tier4Hint = cleanChunkPrefix(singleTask.hints?.find((h) => h.tier === 4)?.content);
+    const exampleSentence = singleTask.chunk.exampleSentences
+      ?.map(cleanChunkPrefix)
+      .find((s) => isFullChunkSentence(s, singleTask.chunk.canonicalChunk));
+
+    const singleModelSentence =
+      (isFullChunkSentence(tier4Hint, singleTask.chunk.canonicalChunk) && tier4Hint) ||
+      exampleSentence ||
+      tier4Hint ||
+      "";
 
     return (
       <Card className="h-full rounded-3xl border border-border/80 bg-card shadow-sm flex flex-col justify-between overflow-hidden">
@@ -320,16 +396,31 @@ export function ChunkPromptCard({
               <span className="text-xs font-bold text-primary uppercase tracking-wider">
                 Cụm khẩu ngữ mục tiêu:
               </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => handlePlayAudio(singleTask.chunk.canonicalChunk)}
-                className="size-7 p-0 rounded-full text-primary hover:bg-primary/20"
-                title="Nghe cụm từ"
-              >
-                <Volume2 className="size-3.5" />
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handlePlayAudio(singleTask.chunk.canonicalChunk)}
+                  className="size-7 p-0 rounded-full text-primary hover:bg-primary/20"
+                  title="Nghe cụm từ"
+                >
+                  <Volume2 className="size-3.5" />
+                </Button>
+                {singleModelSentence && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handlePlayAudio(singleModelSentence)}
+                    className="h-6 px-2 text-[10px] font-semibold gap-1 rounded-lg border border-primary/30 text-primary hover:bg-primary/10 btn-spring"
+                    title="Nghe câu mẫu hoàn chỉnh"
+                  >
+                    <Volume2 className="size-3" />
+                    <span>Nghe câu mẫu</span>
+                  </Button>
+                )}
+              </div>
             </div>
 
             <div className="font-mono text-base sm:text-lg font-bold text-foreground">
@@ -363,74 +454,100 @@ export function ChunkPromptCard({
               </div>
             </div>
           )}
-        </CardContent>
-
-        {/* 4-Tier Inline Stepper Dock */}
-        <div className="p-4 bg-muted/30 border-t border-border/60 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-              <Zap className="size-3 text-amber-500 fill-amber-500" />
-              <span>Gợi ý nấc thang (Inline Stepper):</span>
-            </span>
-            {currentHintTier > 0 && (
-              <button
-                onClick={() => onSelectHintTier(0)}
-                className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2"
-              >
-                Ẩn gợi ý
-              </button>
-            )}
-          </div>
-
-          <div className="grid grid-cols-4 gap-1.5">
-            {[
-              { tier: 1, label: "T1: Cụm" },
-              { tier: 2, label: "T2: Biến thể" },
-              { tier: 3, label: "T3: Khung câu" },
-              { tier: 4, label: "T4: Câu mẫu" },
-            ].map((btn) => {
-              const isActive = currentHintTier === btn.tier;
-              return (
-                <button
-                  key={btn.tier}
-                  type="button"
-                  onClick={() => onSelectHintTier(isActive ? 0 : btn.tier)}
-                  className={`py-1.5 px-1 rounded-xl text-xs font-bold transition-all border ${
-                    isActive
-                      ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                      : "bg-background/80 hover:bg-background text-foreground border-border/80"
-                  }`}
-                >
-                  {btn.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Active Hint Content Card */}
-          {currentHint && currentHintTier > 0 && (
-            <div className="p-3.5 rounded-2xl bg-card border border-primary/40 shadow-xs space-y-1.5 animate-in fade-in-0 duration-200">
+          {/* 4-Tier Progressive Hints (Stack List - Open by Default) */}
+          {singleTask.hints && singleTask.hints.length > 0 && (
+            <div className="rounded-2xl border border-amber-500/25 bg-amber-500/5 p-3 space-y-2.5 mt-2 transition-all">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-primary flex items-center gap-1.5">
-                  <Lightbulb className="size-3.5 text-amber-500 fill-amber-500" />
-                  <span>{currentHint.title}</span>
-                </span>
-                <Button
+                <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                  <Sparkles className="size-3.5 text-amber-500" />
+                  <span>Gợi ý nấc thang cụm từ (T1 - T4):</span>
+                </div>
+                <button
                   type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handlePlayAudio(currentHint.content)}
-                  className="size-6 p-0 rounded-md text-primary hover:bg-primary/10"
-                  title="Nghe gợi ý"
+                  onClick={() => setIsHintsExpanded(!isHintsExpanded)}
+                  className="text-[11px] font-semibold text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer transition-colors"
                 >
-                  <Volume2 className="size-3.5" />
-                </Button>
+                  <span>{isHintsExpanded ? "Thu gọn gợi ý" : "Hiện tất cả (T1 - T4)"}</span>
+                  <ChevronDown className={`size-3.5 transition-transform duration-200 ${isHintsExpanded ? "rotate-180" : ""}`} />
+                </button>
               </div>
-              <p className="text-xs font-mono text-foreground leading-relaxed">
-                {currentHint.content}
-              </p>
+
+              {isHintsExpanded && (
+                <div className="space-y-1.5 pt-0.5 animate-in fade-in-0 duration-150">
+                  {singleTask.hints
+                    .filter((h) => h.tier >= 1 && h.tier <= 4)
+                    .map((h) => {
+                      const tierStyles = [
+                        { badge: "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30", border: "border-sky-500/20 bg-card/90" },
+                        { badge: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30", border: "border-indigo-500/20 bg-card/90" },
+                        { badge: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30", border: "border-amber-500/20 bg-card/90" },
+                        { badge: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30", border: "border-emerald-500/20 bg-card/90" },
+                      ];
+                      const style = tierStyles[h.tier - 1] || tierStyles[0];
+                      const isFullSentenceTier = h.tier === 3 || h.tier === 4;
+                      const fullSentence =
+                        singleTask.hints?.find((hint) => hint.tier === 4)?.content ||
+                        singleTask.chunk.exampleSentences?.[0] ||
+                        "";
+
+                      return (
+                        <div key={h.tier} className={`p-2.5 rounded-xl border ${style.border} shadow-2xs space-y-1`}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold border ${style.badge}`}>
+                                T{h.tier}
+                              </span>
+                              <span className="text-xs font-bold text-foreground">{h.title}</span>
+                            </div>
+
+                            {isFullSentenceTier && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  if (singleModelSentence) {
+                                    handlePlayAudio(singleModelSentence);
+                                  } else if (!h.content.includes("______")) {
+                                    handlePlayAudio(cleanChunkPrefix(h.content));
+                                  }
+                                }}
+                                className="h-6 px-2 text-[10px] gap-1 rounded-lg border border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 shrink-0 font-semibold btn-spring"
+                                title="Nghe câu mẫu hoàn chỉnh"
+                              >
+                                <Volume2 className="size-3" />
+                                <span>{h.tier === 3 ? "Nghe câu hoàn chỉnh" : "Nghe câu mẫu"}</span>
+                              </Button>
+                            )}
+                          </div>
+
+                          <p className="font-mono text-xs md:text-sm font-medium text-foreground/90 pl-0.5 leading-relaxed">
+                            {h.content}
+                          </p>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
             </div>
           )}
+        </CardContent>
+
+        {/* Bottom Bar: Quick Hint Status */}
+        <div className="p-3 bg-muted/30 border-t border-border/60 flex items-center justify-between gap-2">
+          <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+            <Sparkles className="size-3 text-amber-500" />
+            <span>Nấc thang cụm phản xạ</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setIsHintsExpanded(!isHintsExpanded)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 hover:bg-amber-500/20 transition-all cursor-pointer"
+            title="Bấm để ẩn hoặc hiện toàn bộ gợi ý T1-T4"
+          >
+            <Zap className="size-3 text-amber-500" />
+            <span>{isHintsExpanded ? "Gợi ý T1-T4: Đang hiện" : "Gợi ý T1-T4: Đã ẩn (Bấm mở)"}</span>
+          </button>
         </div>
       </Card>
     );

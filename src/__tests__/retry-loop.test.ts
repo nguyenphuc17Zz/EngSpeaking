@@ -138,11 +138,92 @@ describe("Function 3 — Retry Loop (Correct -> Say Again) Engine", () => {
     expect(session.currentAttemptNumber).toBe(2);
   });
 
-  it("generates deterministic spoken repair challenge with 4-tier hints and vocab", async () => {
+  it("generates deterministic spoken repair challenge with 4-tier hints, vocab, and conversational trap", async () => {
     const challenge = await generateRepairChallenge({ provider: "mock" });
     expect(challenge.erroneousSentence).toBeDefined();
     expect(challenge.betterSentence).toBeDefined();
     expect(challenge.hints.length).toBe(5);
     expect(challenge.suggestedVocabulary.length).toBeGreaterThan(0);
+    expect(challenge.conversationalTrap).toBeDefined();
+    expect(challenge.conversationalTrap?.partnerUtterance).toContain("Wait");
+  });
+
+  it("aligns words with Needleman-Wunsch diff and marks repaired tokens", async () => {
+    const { computeTokenAlignment } = await import("@/lib/foundation/retry-loop/token-alignment");
+
+    const tokens = computeTokenAlignment({
+      originalSentence: "Yesterday I go to the gym after work.",
+      repairedSentence: "Yesterday, I went to the gym after work.",
+      erroneousWord: "go",
+      minimalCorrection: "went",
+    });
+
+    expect(tokens.length).toBeGreaterThan(0);
+    const repairedToken = tokens.find((t) => t.text.includes("went"));
+    expect(repairedToken).toBeDefined();
+    expect(repairedToken?.status).toBe("repaired");
+    expect(repairedToken?.isTargetFix).toBe(true);
+
+    const unchangedToken = tokens.find((t) => t.text.includes("gym"));
+    expect(unchangedToken?.status).toBe("unchanged");
+  });
+
+  it("detects mid-speech self-correction in real-time", async () => {
+    const { detectMidSpeechSelfCorrection } = await import("@/lib/foundation/retry-loop/fast-pass-repair.service");
+
+    // Slip and immediate self-correction
+    expect(detectMidSpeechSelfCorrection("Yesterday I go went to the gym", "go", "went")).toBe(true);
+
+    // Cue word self-correction
+    expect(detectMidSpeechSelfCorrection("Yesterday I go sorry I went to the gym", "go", "went")).toBe(true);
+
+    // No error slip, just correct sentence
+    expect(detectMidSpeechSelfCorrection("Yesterday I went to the gym", "go", "went")).toBe(false);
+  });
+
+  it("evaluates correct speech instantly (<50ms) via Fast-Pass Repair Matcher", async () => {
+    const { computeFastPassRepair } = await import("@/lib/foundation/retry-loop/fast-pass-repair.service");
+
+    const mockCorrection: TargetedCorrection = {
+      errorType: "grammar",
+      priority: 2,
+      patternKey: "past_simple_verb",
+      whatToFix: "Thì Quá khứ đơn",
+      userErroneousText: "go",
+      minimalCorrection: "went",
+      explanationVi: "Dùng went",
+      betterSentence: "Yesterday, I went to the gym after work.",
+      skeletonHint: "Yesterday, I ______ to the gym after work.",
+    };
+
+    const session = createRetrySession({
+      originalTaskId: "test_task_1",
+      sourceContext: "retry_lab",
+      originalPrompt: "Hôm qua tôi đi tập gym.",
+      originalTranscript: "Yesterday I go to the gym after work.",
+      targetCorrection: mockCorrection,
+    });
+
+    // 1. Correct clean repair -> Fast Pass
+    const fpResult = computeFastPassRepair(session, "Yesterday I went to the gym after work", {
+      responseLatencyMs: 1100,
+      speechDurationMs: 1800,
+    });
+
+    expect(fpResult.canFastPass).toBe(true);
+    expect(fpResult.result).toBeDefined();
+    expect(fpResult.result?.isFastPass).toBe(true);
+    expect(fpResult.result?.isTargetErrorResolved).toBe(true);
+    expect(fpResult.result?.overallRepairScore).toBeGreaterThanOrEqual(90);
+    expect(fpResult.result?.diffTokens?.length).toBeGreaterThan(0);
+
+    // 2. Erroneous attempt -> Bypasses Fast Pass
+    const failResult = computeFastPassRepair(session, "Yesterday I go to sleep", {
+      responseLatencyMs: 1100,
+      speechDurationMs: 1800,
+    });
+
+    expect(failResult.canFastPass).toBe(false);
   });
 });
+

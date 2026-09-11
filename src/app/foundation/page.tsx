@@ -119,9 +119,6 @@ export default function FoundationOverview() {
               <div className="size-10 rounded-2xl bg-gradient-to-tr from-primary to-indigo-600 text-primary-foreground flex items-center justify-center shadow-md shadow-primary/20">
                 <Sparkles className="size-5" />
               </div>
-              <Badge className="text-[10px] font-mono font-bold bg-primary text-primary-foreground">
-                Func 1
-              </Badge>
             </div>
 
             <div className="space-y-1">
@@ -129,7 +126,7 @@ export default function FoundationOverview() {
                 Sentence Builder
               </h2>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Khôi phục phản xạ tạo câu có kiểm soát (Level A $\rightarrow$ B $\rightarrow$ C).
+                Khôi phục phản xạ tạo câu có kiểm soát (Level A → B → C).
               </p>
             </div>
           </div>
@@ -203,7 +200,7 @@ export default function FoundationOverview() {
                 Repair Lab
               </h2>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Chu trình Correct $\rightarrow$ Say Again: Sửa lỗi thực tế từ Error Bank.
+                Chu trình Correct → Say Again: Sửa lỗi thực tế từ Error Bank.
               </p>
             </div>
           </div>
@@ -388,7 +385,7 @@ export default function FoundationOverview() {
                 Spoken Vocabulary
               </h2>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Quy trình 2 bước: Phát âm từ đơn $\rightarrow$ Đọc câu trong ngữ cảnh.
+                Quy trình 2 bước: Phát âm từ đơn → Đọc câu trong ngữ cảnh.
               </p>
             </div>
           </div>

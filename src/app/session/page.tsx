@@ -19,7 +19,16 @@ import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 import { sanitizeTextForTTS } from "@/lib/tts/browser";
-import type { ConversationTurn, TurnPedagogy } from "@/types/conversation";
+import { transcribeViaServer } from "@/lib/stt/service";
+import type { ConversationTurn, TurnPedagogy, DiscourseStage, ConversationalTwist } from "@/types/conversation";
+import {
+  calculateSpeechRateWpm,
+  calculateTypeTokenRatio,
+  getDiscourseStage,
+  getScenarioTwist,
+  evaluateTwistResolution,
+  SmartVadStateController,
+} from "@/lib/audio/smart-vad.engine";
 import {
   Mic,
   Square,
@@ -38,6 +47,10 @@ import {
   Loader2,
   Plus,
   X,
+  Zap,
+  AlertTriangle,
+  Radio,
+  LifeBuoy,
 } from "lucide-react";
 
 interface PracticeScenario {
@@ -56,6 +69,14 @@ interface PracticeScenario {
     pitfallsToAvoid: string;
   };
 }
+
+const DISCOURSE_STAGES: { key: DiscourseStage; labelVi: string; icon: string }[] = [
+  { key: "rapport", labelVi: "Khởi động", icon: "🤝" },
+  { key: "discovery", labelVi: "Khai thác", icon: "🔍" },
+  { key: "twist_conflict", labelVi: "Biến cố", icon: "⚡" },
+  { key: "negotiation", labelVi: "Thương lượng", icon: "⚖️" },
+  { key: "resolution", labelVi: "Đúc kết", icon: "🎯" },
+];
 
 const PRESET_SCENARIOS: PracticeScenario[] = [
   {
@@ -180,12 +201,24 @@ export default function SessionPage() {
   const [aiFinishedSpeechTime, setAiFinishedSpeechTime] = useState<number>(Date.now());
   const [speechStartMs, setSpeechStartMs] = useState<number>(0);
 
+  // ─── Live Conversational OS State ─────────────────────────────────────
+  const [handsFreeMode, setHandsFreeMode] = useState(true);
+  const [activeTwist, setActiveTwist] = useState<ConversationalTwist | null>(null);
+  const [activeTwistFeedback, setActiveTwistFeedback] = useState<string | null>(null);
+  const [isLifelineVisible, setIsLifelineVisible] = useState(false);
+  const [lifelineElapsedMs, setLifelineElapsedMs] = useState(0);
+  const isAiSpeakingRef = useRef(false);
+  const smartVadRef = useRef<SmartVadStateController | null>(null);
+
   // ─── Overall Session Evaluation Aggregate ────────────────────────────
   const [sessionStats, setSessionStats] = useState({
     totalTurns: 0,
     scores: [] as number[],
     latencies: [] as number[],
+    wpms: [] as number[],
+    ttrs: [] as number[],
     errorsCount: 0,
+    twistResolved: false,
     startTime: Date.now(),
   });
 
@@ -197,13 +230,15 @@ export default function SessionPage() {
     turnsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [session?.turns]);
 
-  // ─── Keyboard Hotkeys (Space to toggle speaking) ──────────────────────
+  // ─── Keyboard Hotkeys (Space to toggle speaking / Barge-in) ───────────
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (["INPUT", "TEXTAREA"].includes((e.target as HTMLElement)?.tagName)) return;
       if (e.code === "Space") {
         e.preventDefault();
-        if (status === "recording") {
+        if (status === "speaking" || isAiSpeakingRef.current) {
+          handleBargeIn();
+        } else if (status === "recording") {
           handleStopAndProcess();
         } else if (status === "listening" || status === "idle" || status === "ready") {
           handleStartSpeaking();
@@ -214,20 +249,62 @@ export default function SessionPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [status]);
 
-  // ─── Audio Synthesis Playback ─────────────────────────────────────────
+  // ─── Barge-in Interruption Handler (<50ms audio mute) ────────────────
+  const handleBargeIn = useCallback(() => {
+    tts.stop();
+    isAiSpeakingRef.current = false;
+    soundEffects.playMicStart();
+    toast.info("⚡ Đã ngắt lời AI (Barge-in)", "AI đã nhường quyền nói cho bạn.");
+    handleStartSpeaking();
+  }, [tts]);
+
+  // ─── Speaking Controls ────────────────────────────────────────────────
+  const handleStartSpeaking = useCallback(async () => {
+    clearError();
+    soundEffects.playMicStart();
+    speechRec.resetTranscript();
+    setSpeechStartMs(Date.now());
+    setStatus("recording");
+    setIsLifelineVisible(false);
+
+    const sttProvider = settings.stt?.provider || "browser";
+
+    try {
+      await recorder.start();
+      if (sttProvider === "browser") {
+        speechRec.startListening();
+      }
+    } catch {
+      toast.error("Lỗi Microphone", "Vui lòng cho phép truy cập micro.");
+      setStatus("listening");
+    }
+  }, [clearError, recorder, speechRec, setStatus, settings.stt?.provider]);
+
+  // ─── Audio Synthesis Playback with Hands-Free Auto-Mic ────────────────
   const synthesizeAndPlay = useCallback(
     async (text: string) => {
       setStatus("speaking");
+      isAiSpeakingRef.current = true;
       try {
         await tts.speak(sanitizeTextForTTS(text), { lang: "en-US", rate: 0.95 });
       } catch {
         // Fallback
       } finally {
+        isAiSpeakingRef.current = false;
         setStatus("listening");
         setAiFinishedSpeechTime(Date.now());
+
+        // In Hands-Free mode, automatically turn mic back on for the learner
+        if (handsFreeMode) {
+          setTimeout(() => {
+            if (!isProcessing) {
+              handleStartSpeaking();
+            }
+          }, 400);
+        }
       }
     },
-    [setStatus, tts]
+    [setStatus, tts, handsFreeMode, isProcessing, handleStartSpeaking]
   );
 
   // ─── Session Initialization ──────────────────────────────────────────
@@ -235,6 +312,9 @@ export default function SessionPage() {
     async (scenario?: PracticeScenario, mode: "goal" | "free" = sessionMode) => {
       const activeScen = scenario || selectedScenario;
       reset();
+      setActiveTwist(null);
+      setActiveTwistFeedback(null);
+      setIsLifelineVisible(false);
       const s = createSession({
         provider: settings.conversation.provider,
         model: settings.conversation.model,
@@ -248,7 +328,10 @@ export default function SessionPage() {
         totalTurns: 0,
         scores: [],
         latencies: [],
+        wpms: [],
+        ttrs: [],
         errorsCount: 0,
+        twistResolved: false,
         startTime: Date.now(),
       });
 
@@ -303,37 +386,38 @@ export default function SessionPage() {
     [createSession, reset, selectedScenario, sessionMode, settings, addTurn, synthesizeAndPlay]
   );
 
-  // ─── Speaking Controls ────────────────────────────────────────────────
-  const handleStartSpeaking = useCallback(async () => {
-    clearError();
-    soundEffects.playMicStart();
-    speechRec.resetTranscript();
-    setSpeechStartMs(Date.now());
-    setStatus("recording");
-
-    try {
-      await recorder.start();
-      speechRec.startListening();
-    } catch {
-      toast.error("Lỗi Microphone", "Vui lòng cho phép truy cập micro.");
-      setStatus("listening");
-    }
-  }, [clearError, recorder, speechRec, setStatus]);
-
   const handleStopAndProcess = useCallback(async () => {
     soundEffects.playMicStop();
-    speechRec.stopListening();
+    const sttProvider = settings.stt?.provider || "browser";
+    if (sttProvider === "browser") {
+      speechRec.stopListening();
+    }
     setStatus("thinking");
     setIsProcessing(true);
+    setIsLifelineVisible(false);
 
     try {
       const recording = await recorder.stop();
-      await new Promise((r) => setTimeout(r, 250));
+      let spokenText = "";
 
-      const spokenText =
-        speechRec.fullTranscript.trim() ||
-        speechRec.transcript.trim() ||
-        textInput.trim();
+      if (sttProvider !== "browser" && recording?.blob) {
+        try {
+          const res = await transcribeViaServer(recording.blob, {
+            provider: sttProvider === "auto" ? "whisper-local" : sttProvider,
+            model: settings.stt?.model || "auto",
+            language: "en-US",
+          });
+          spokenText = res.text.trim();
+        } catch {
+          spokenText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
+        }
+      } else {
+        await new Promise((r) => setTimeout(r, 250));
+        spokenText =
+          speechRec.fullTranscript.trim() ||
+          speechRec.transcript.trim() ||
+          textInput.trim();
+      }
 
       if (!spokenText) {
         toast.info("Chưa nghe rõ", "Vui lòng nói lại hoặc gõ văn bản.");
@@ -342,8 +426,34 @@ export default function SessionPage() {
         return;
       }
 
-      // Measured Latency from AI finish to speech start
+      // 1. Metrics & Discourse calculation
+      const durationMs = recording?.durationMs || 3500;
       const latencyMs = Math.max(200, speechStartMs - aiFinishedSpeechTime);
+      const turnWpm = calculateSpeechRateWpm(spokenText, durationMs);
+      const turnTtr = calculateTypeTokenRatio(spokenText);
+      const currentDiscourse = getDiscourseStage(sessionStats.totalTurns + 1, selectedScenario.targetTurns);
+
+      // 2. Check for Conversational Twist Injection
+      let currentActiveTwist = activeTwist;
+      if (!currentActiveTwist && sessionMode === "goal") {
+        currentActiveTwist = getScenarioTwist(selectedScenario.id, sessionStats.totalTurns + 1);
+        if (currentActiveTwist) {
+          setActiveTwist(currentActiveTwist);
+          toast.warning("⚡ BIẾN CỐ ĐỐI THOẠI!", currentActiveTwist.titleVi);
+        }
+      }
+
+      // 3. Evaluate Twist Resolution
+      let isTwistResolved = sessionStats.twistResolved;
+      if (currentActiveTwist && !currentActiveTwist.isResolved) {
+        const twistEval = evaluateTwistResolution(currentActiveTwist, spokenText);
+        if (twistEval.isResolved) {
+          currentActiveTwist.isResolved = true;
+          isTwistResolved = true;
+          setActiveTwistFeedback(twistEval.feedbackVi);
+          toast.success("Giải quyết biến cố thành công!", twistEval.feedbackVi);
+        }
+      }
 
       // Create audio URL from recorded blob for self-voice review
       let audioBlobUrl: string | undefined = undefined;
@@ -355,13 +465,17 @@ export default function SessionPage() {
       const userTurnPedagogy: TurnPedagogy = {
         latencyMs,
         audioBlobUrl,
+        speechRateWpm: turnWpm,
+        lexicalDiversityTtr: turnTtr,
+        discourseStage: currentDiscourse,
+        activeTwistAlert: currentActiveTwist?.titleVi,
       };
       const userTurn: ConversationTurn = {
         id: userTurnId,
         role: "user",
         text: spokenText,
         timestamp: new Date().toISOString(),
-        durationMs: recording?.durationMs || 0,
+        durationMs,
         pedagogy: userTurnPedagogy,
       };
 
@@ -390,6 +504,9 @@ export default function SessionPage() {
           turns: turnsPayload,
           currentUserText: spokenText,
           scenarioContext,
+          discourseStage: currentDiscourse,
+          activeTwist: currentActiveTwist,
+          userTurnDurationMs: durationMs,
         }),
       });
 
@@ -410,6 +527,8 @@ export default function SessionPage() {
         nativeReformulation: ped?.nativeReformulation || spokenText,
         turnScore: ped?.turnScore || 85,
         coachTipVi: ped?.coachTipVi,
+        speechRateWpm: ped?.speechRateWpm || turnWpm,
+        lexicalDiversityTtr: ped?.lexicalDiversityTtr || turnTtr,
       };
 
       // Record statistics
@@ -418,7 +537,10 @@ export default function SessionPage() {
         totalTurns: prev.totalTurns + 1,
         scores: [...prev.scores, ped?.turnScore || 85],
         latencies: [...prev.latencies, latencyMs],
+        wpms: [...prev.wpms, turnWpm],
+        ttrs: [...prev.ttrs, turnTtr],
         errorsCount: prev.errorsCount + (ped?.grammarIssue ? 1 : 0),
+        twistResolved: isTwistResolved,
       }));
 
       // Add AI response turn
@@ -462,9 +584,70 @@ export default function SessionPage() {
     selectedScenario,
     settings,
     sessionStats.totalTurns,
+    sessionStats.twistResolved,
+    activeTwist,
     synthesizeAndPlay,
     setStatus,
   ]);
+
+  // ─── Smart VAD Controller Setup ───────────────────────────────────────
+  useEffect(() => {
+    if (!handsFreeMode) {
+      smartVadRef.current?.destroy();
+      smartVadRef.current = null;
+      return;
+    }
+
+    smartVadRef.current = new SmartVadStateController({
+      silenceThresholdMs: 1200,
+      onSilenceEndpoint: () => {
+        if (status === "recording" && !isProcessing) {
+          handleStopAndProcess();
+        }
+      },
+      onBargeIn: () => {
+        if (isAiSpeakingRef.current || status === "speaking") {
+          handleBargeIn();
+        }
+      },
+    });
+
+    return () => {
+      smartVadRef.current?.destroy();
+      smartVadRef.current = null;
+    };
+  }, [handsFreeMode, status, isProcessing, handleStopAndProcess, handleBargeIn]);
+
+  // ─── Interim Transcript Stream to Smart VAD ───────────────────────────
+  useEffect(() => {
+    const liveText = speechRec.fullTranscript || speechRec.transcript || speechRec.interimTranscript;
+    if (liveText) {
+      setIsLifelineVisible(false);
+      if (handsFreeMode && status === "recording") {
+        smartVadRef.current?.notifyInterimTranscript(liveText, isAiSpeakingRef.current);
+      }
+    }
+  }, [speechRec.transcript, speechRec.interimTranscript, speechRec.fullTranscript, handsFreeMode, status]);
+
+  // ─── Silence Hesitation Lifeline Tracker (>3.5s) ───────────────────────
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    if (status === "listening" || (status === "recording" && !speechRec.transcript)) {
+      interval = setInterval(() => {
+        const elapsed = Date.now() - aiFinishedSpeechTime;
+        setLifelineElapsedMs(elapsed);
+        if (elapsed >= 3500 && !isLifelineVisible) {
+          setIsLifelineVisible(true);
+        }
+      }, 250);
+    } else {
+      setIsLifelineVisible(false);
+      setLifelineElapsedMs(0);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [status, aiFinishedSpeechTime, speechRec.transcript, isLifelineVisible]);
 
   const handleRefreshHints = useCallback(async () => {
     setIsLoadingHints(true);
@@ -571,7 +754,26 @@ export default function SessionPage() {
     ? Math.round(sessionStats.latencies.reduce((a, b) => a + b, 0) / sessionStats.latencies.length)
     : 1400;
 
+  const avgWpm = sessionStats.wpms.length
+    ? Math.round(sessionStats.wpms.reduce((a, b) => a + b, 0) / sessionStats.wpms.length)
+    : 120;
+
+  const avgTtr = sessionStats.ttrs.length
+    ? Math.round((sessionStats.ttrs.reduce((a, b) => a + b, 0) / sessionStats.ttrs.length) * 10) / 10
+    : 68.5;
+
   const durationMin = Math.max(1, Math.round((Date.now() - sessionStats.startTime) / 60000));
+
+  const cefrEstimate =
+    avgScore >= 90 && avgWpm >= 130
+      ? "C1"
+      : avgScore >= 78 && avgWpm >= 105
+      ? "B2"
+      : avgScore >= 65
+      ? "B1"
+      : "A2";
+
+  const currentStageKey = getDiscourseStage(sessionStats.totalTurns + 1, selectedScenario.targetTurns);
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)] bg-background select-none overflow-hidden">
@@ -645,8 +847,32 @@ export default function SessionPage() {
           )}
         </div>
 
-        {/* Right: AI Selector + End Session */}
+        {/* Right: Hands-Free Toggle + AI Selector + End Session */}
         <div className="flex items-center gap-1.5 shrink-0">
+          <Button
+            variant={handsFreeMode ? "default" : "outline"}
+            size="sm"
+            onClick={() => {
+              const nextMode = !handsFreeMode;
+              setHandsFreeMode(nextMode);
+              toast.info(
+                nextMode ? "Đã bật Hands-Free Live" : "Đã tắt Hands-Free",
+                nextMode
+                  ? "AI sẽ tự động nhận diện dừng tiếng và tự bật mic sau khi nói."
+                  : "Chuyển sang chế độ bấm thủ công để nói."
+              );
+            }}
+            className={`h-7 px-2 rounded-xl text-xs font-bold gap-1 transition-all ${
+              handsFreeMode
+                ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                : "border-border/80 text-muted-foreground hover:text-foreground"
+            }`}
+            title="Chế độ rảnh tay thông minh (Smart VAD + Auto-mic)"
+          >
+            <Radio className={`size-3 ${handsFreeMode ? "animate-pulse text-white" : ""}`} />
+            <span className="hidden sm:inline">Hands-Free</span>
+          </Button>
+
           <GlobalAiSelector />
 
           {session?.turns && session.turns.length > 0 && (
@@ -726,6 +952,77 @@ export default function SessionPage() {
             </div>
           )}
 
+          {/* Discourse Stage Progression Bar */}
+          {sessionMode === "goal" && (
+            <div className="px-3 py-1.5 bg-muted/40 border-b border-border/50 flex items-center justify-between gap-1 overflow-x-auto text-[10px] shrink-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-muted-foreground font-semibold shrink-0">Giai đoạn:</span>
+                <div className="flex items-center gap-1">
+                  {DISCOURSE_STAGES.map((st, idx) => {
+                    const isCurrent = st.key === currentStageKey;
+                    const currentIdx = DISCOURSE_STAGES.findIndex((s) => s.key === currentStageKey);
+                    const isPast = currentIdx > idx;
+                    return (
+                      <span
+                        key={st.key}
+                        className={`px-1.5 py-0.5 rounded-md font-mono flex items-center gap-0.5 transition-all ${
+                          isCurrent
+                            ? "bg-primary text-primary-foreground font-bold shadow-2xs"
+                            : isPast
+                            ? "bg-muted text-foreground/80 font-medium"
+                            : "text-muted-foreground/50 opacity-60"
+                        }`}
+                      >
+                        <span>{st.icon}</span>
+                        <span>{st.labelVi}</span>
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+              {activeTwist && (
+                <Badge
+                  variant={activeTwist.isResolved ? "outline" : "destructive"}
+                  className="text-[9px] font-mono px-1.5 py-0 h-4.5 gap-1 shrink-0 animate-pulse"
+                >
+                  <AlertTriangle className="size-2.5" />
+                  <span>{activeTwist.isResolved ? "Đã gỡ biến cố" : "Biến cố đang diễn ra"}</span>
+                </Badge>
+              )}
+            </div>
+          )}
+
+          {/* Active Twist Alert Banner */}
+          {activeTwist && !activeTwist.isResolved && (
+            <div className="mx-3 my-2 p-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 flex items-start gap-2.5 shadow-2xs shrink-0 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="size-7 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
+                <Zap className="size-4" />
+              </div>
+              <div className="min-w-0 flex-1 text-xs">
+                <div className="flex items-center gap-1.5 font-bold text-amber-800 dark:text-amber-300">
+                  <span>⚡ Tình huống bất ngờ: {activeTwist.titleVi}</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                  {activeTwist.promptAiVi || activeTwist.descriptionEn}
+                </p>
+                <div className="mt-1 text-[10px] text-amber-700 dark:text-amber-300/90 font-medium">
+                  💡 Gợi ý phản xạ: Hãy giữ bình tĩnh, giải thích lý do hoặc đề xuất một giải pháp xử lý cụ thể.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Active Twist Resolved Feedback Banner */}
+          {activeTwist && activeTwist.isResolved && activeTwistFeedback && (
+            <div className="mx-3 my-2 p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-900 dark:text-emerald-200 flex items-center gap-2 shrink-0 animate-in fade-in duration-300">
+              <CheckCircle2 className="size-4 text-emerald-500 shrink-0" />
+              <div className="text-xs">
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">Xử lý tình huống tốt!</span>{" "}
+                <span className="text-muted-foreground text-[11px]">{activeTwistFeedback}</span>
+              </div>
+            </div>
+          )}
+
           {/* Transcript Message Scroll Area strictly inside */}
           <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-3">
             {!session?.turns || session.turns.length === 0 ? (
@@ -774,6 +1071,42 @@ export default function SessionPage() {
             <div className="mb-2">
               <StatusBadge status={status} />
             </div>
+
+            {/* Hesitation Lifeline Prompt Strip */}
+            {isLifelineVisible && (
+              <div className="w-full mb-2.5 p-2 rounded-xl bg-primary/10 border border-primary/25 text-left space-y-1.5 animate-in fade-in zoom-in-95 duration-200">
+                <div className="flex items-center justify-between text-[11px] font-bold text-primary">
+                  <span className="flex items-center gap-1">
+                    <LifeBuoy className="size-3 animate-spin" />
+                    Phao cứu sinh ngập ngừng:
+                  </span>
+                  <span className="text-[9px] font-mono text-muted-foreground">
+                    {Math.round(lifelineElapsedMs / 1000)}s
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {(dynamicHints?.directStarter
+                    ? [dynamicHints.directStarter, "To be completely honest...", "From my perspective..."]
+                    : [
+                        "To be completely honest...",
+                        "From my perspective...",
+                        "Well, the way I see it is...",
+                      ]
+                  ).map((starter, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        setTextInput(starter);
+                        toast.info("Đã chọn câu mở đầu", starter);
+                      }}
+                      className="text-[10px] px-2 py-0.5 rounded-lg bg-background hover:bg-primary/20 text-foreground border border-border/80 transition-colors font-medium text-left"
+                    >
+                      &ldquo;{starter}&rdquo;
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Speaking Controller Buttons */}
             <div className="w-full flex items-center justify-center gap-1.5">
@@ -931,6 +1264,10 @@ export default function SessionPage() {
         avgTtfwMs={avgLatency}
         overallScore={avgScore}
         errorsDetected={sessionStats.errorsCount}
+        wpm={avgWpm}
+        ttrRatio={avgTtr}
+        twistResolved={sessionStats.twistResolved}
+        cefrEstimate={cefrEstimate}
         onRestart={() => startSession()}
       />
     </div>

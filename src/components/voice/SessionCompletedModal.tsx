@@ -40,6 +40,10 @@ interface SessionCompletedModalProps {
   fluencyScore?: number;
   vocabularyScore?: number;
   errorsDetected?: number;
+  wpm?: number;
+  ttrRatio?: number;
+  twistResolved?: boolean;
+  cefrEstimate?: string;
   onRestart?: () => void;
 }
 
@@ -55,6 +59,10 @@ export function SessionCompletedModal({
   fluencyScore = 82,
   vocabularyScore = 86,
   errorsDetected = 1,
+  wpm = 120,
+  ttrRatio = 72,
+  twistResolved = true,
+  cefrEstimate = "B2",
   onRestart,
 }: SessionCompletedModalProps) {
   useEffect(() => {
@@ -147,32 +155,53 @@ export function SessionCompletedModal({
         </div>
 
         {/* Stats Summary Grid */}
-        <div className="grid grid-cols-3 gap-2 text-xs">
-          <div className="p-2.5 rounded-2xl bg-muted/20 border border-border/40 space-y-1">
-            <div className="flex items-center justify-center text-blue-500 mb-1">
-              <Clock className="size-4" />
+        <div className="grid grid-cols-4 gap-2 text-xs">
+          <div className="p-2 rounded-2xl bg-muted/20 border border-border/40 space-y-0.5">
+            <div className="flex items-center justify-center text-blue-500 mb-0.5">
+              <Clock className="size-3.5" />
             </div>
             <span className="font-mono font-bold text-foreground block">{durationMinutes}m</span>
-            <span className="text-[10px] text-muted-foreground">Thời gian nói</span>
+            <span className="text-[9px] text-muted-foreground">Thời gian</span>
           </div>
 
-          <div className="p-2.5 rounded-2xl bg-muted/20 border border-border/40 space-y-1">
-            <div className="flex items-center justify-center text-purple-500 mb-1">
-              <Zap className="size-4" />
+          <div className="p-2 rounded-2xl bg-muted/20 border border-border/40 space-y-0.5">
+            <div className="flex items-center justify-center text-purple-500 mb-0.5">
+              <Zap className="size-3.5" />
             </div>
             <span className="font-mono font-bold text-foreground block">
               {(avgTtfwMs / 1000).toFixed(1)}s
             </span>
-            <span className="text-[10px] text-muted-foreground">Độ trễ phản xạ</span>
+            <span className="text-[9px] text-muted-foreground">Độ trễ phản xạ</span>
           </div>
 
-          <div className="p-2.5 rounded-2xl bg-muted/20 border border-border/40 space-y-1">
-            <div className="flex items-center justify-center text-emerald-500 mb-1">
-              <Trophy className="size-4" />
+          <div className="p-2 rounded-2xl bg-muted/20 border border-border/40 space-y-0.5">
+            <div className="flex items-center justify-center text-emerald-500 mb-0.5">
+              <Sparkles className="size-3.5" />
             </div>
-            <span className="font-mono font-bold text-foreground block">{turnsCount}</span>
-            <span className="text-[10px] text-muted-foreground">Lượt đối thoại</span>
+            <span className="font-mono font-bold text-foreground block">{wpm} WPM</span>
+            <span className="text-[9px] text-muted-foreground">Tốc độ nói</span>
           </div>
+
+          <div className="p-2 rounded-2xl bg-muted/20 border border-border/40 space-y-0.5">
+            <div className="flex items-center justify-center text-amber-500 mb-0.5">
+              <Trophy className="size-3.5" />
+            </div>
+            <span className="font-mono font-bold text-foreground block">{ttrRatio}%</span>
+            <span className="text-[9px] text-muted-foreground">Đa dạng từ TTR</span>
+          </div>
+        </div>
+
+        {/* Conversational Twist & CEFR Band */}
+        <div className="p-2.5 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-between text-xs text-left">
+          <div className="flex items-center gap-2">
+            <Badge className="bg-primary text-primary-foreground font-mono text-[10px]">
+              CEFR {cefrEstimate}
+            </Badge>
+            <span className="text-muted-foreground text-[11px]">
+              Ứng biến tình huống: <strong className="text-foreground">{twistResolved ? "Giải quyết xuất sắc ✓" : "Cần linh hoạt hơn"}</strong>
+            </span>
+          </div>
+          <span className="font-mono text-[10px] text-primary font-bold">{turnsCount} lượt đối thoại</span>
         </div>
 
         {/* Error Bank Notice */}

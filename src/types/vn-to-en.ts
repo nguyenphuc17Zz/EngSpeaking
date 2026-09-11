@@ -30,6 +30,12 @@ export interface VNToENHint {
   penaltyWeight: number; // 0 for tier 0, 0.1 for tier 1, 0.25 for tier 2, 0.5 for tier 3, 0.9 for tier 4
 }
 
+export interface SayItBetterSet {
+  professional: string; // Chuẩn công sở, trang trọng, lịch sự
+  casual: string;       // Đời thường, tự nhiên, thân mật
+  idiomatic: string;    // Khẩu ngữ bản xứ, sắc nét
+}
+
 export interface VNToENTask {
   id: string;
   category: VNPromptCategory;
@@ -52,6 +58,7 @@ export interface VNToENTask {
     partOfSpeech?: string;
     phonetic?: string;
   }>;
+  sayItBetter?: SayItBetterSet;
   prepTimeSec: number; // 3.0s down to 1.5s (or 0 for direct / rapid fire)
   isRapidFire?: boolean;
   topic: string;
@@ -91,6 +98,8 @@ export interface VNToENEvaluation {
   errors: VNEvaluatedError[];
   betterVersion: string; // Most natural native phrasing
   naturalAlternatives: SemanticAlternative[]; // 2-4 other natural expressions
+  sayItBetter?: SayItBetterSet; // Structured Bộ 3 Say It Better
+  isFastPass?: boolean; // Evaluated within <100ms via client-side Fast-Pass Engine
   
   praisePoints: string[];
   actionableFeedback: string;

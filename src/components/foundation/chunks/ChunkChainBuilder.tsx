@@ -41,19 +41,34 @@ export function ChunkChainBuilder({ task, isRecording }: ChunkChainBuilderProps)
   return (
     <Card className="rounded-3xl border-2 border-primary/30 bg-gradient-to-br from-card via-card to-primary/5 shadow-md overflow-hidden">
       <CardContent className="p-6 md:p-8 space-y-6">
-        {/* Top Header */}
+        {/* Top Header: Title, Strategy Badge, Topic */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/40 pb-4">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Badge className="bg-primary text-primary-foreground font-mono text-xs font-bold gap-1 px-3 py-1 rounded-full">
               <Layers className="size-3.5" />
               <span>Speech Chain Builder (4 Khối ghép)</span>
             </Badge>
+
+            {task.strategyTitleVi && (
+              <Badge variant="secondary" className="text-xs font-semibold bg-primary/15 text-primary border border-primary/30 px-2.5 py-1 rounded-full flex items-center gap-1">
+                <Target className="size-3" />
+                <span>{task.strategyTitleVi}</span>
+              </Badge>
+            )}
           </div>
 
           <Badge variant="outline" className="text-xs font-mono text-muted-foreground border-border/80">
             Chủ đề: <span className="text-foreground font-bold ml-1">{task.topic}</span>
           </Badge>
         </div>
+
+        {/* Persona & Communicative Context */}
+        {task.persona && (
+          <div className="p-3 rounded-2xl bg-primary/5 border border-primary/20 flex items-center gap-2.5 text-xs text-muted-foreground">
+            <span className="font-bold text-primary shrink-0">Bối cảnh giao tiếp:</span>
+            <span className="italic text-foreground">{task.persona}</span>
+          </div>
+        )}
 
         {/* Situation & Target Question */}
         <div className="space-y-2">
@@ -78,10 +93,10 @@ export function ChunkChainBuilder({ task, isRecording }: ChunkChainBuilderProps)
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-foreground flex items-center gap-1.5 uppercase tracking-wider">
               <Sparkles className="size-3.5 text-primary" />
-              <span>Lắp ghép 4 khối khẩu ngữ thành 1 câu hoàn chỉnh:</span>
+              <span>Lắp ghép 4 khối khẩu ngữ thành 1 chuỗi hoàn chỉnh:</span>
             </span>
             <span className="text-[11px] text-muted-foreground italic hidden sm:inline">
-              (Bấm vào khối để đổi biến thể)
+              (Bấm vào các nút nhỏ để đổi biến thể khẩu ngữ)
             </span>
           </div>
 
@@ -93,33 +108,49 @@ export function ChunkChainBuilder({ task, isRecording }: ChunkChainBuilderProps)
               return (
                 <div
                   key={i}
-                  className={`p-4 rounded-2xl border-2 ${theme.border} ${theme.bg} space-y-2.5 transition-all shadow-xs relative`}
+                  className={`p-4 rounded-2xl border-2 ${theme.border} ${theme.bg} flex flex-col justify-between space-y-2.5 transition-all shadow-xs relative`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className={`text-[10px] font-bold uppercase tracking-wider ${theme.text}`}>
-                      {block.labelVi}
-                    </span>
-                    <span className="text-[10px] font-mono text-muted-foreground">Khối {i + 1}</span>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className={`text-[10px] font-bold uppercase tracking-wider ${theme.text}`}>
+                        {block.labelVi}
+                      </span>
+                      <span className="text-[10px] font-mono text-muted-foreground">Khối {i + 1}</span>
+                    </div>
+
+                    {block.rhetoricalRole && (
+                      <p className="text-[10px] text-muted-foreground italic line-clamp-1">
+                        {block.rhetoricalRole}
+                      </p>
+                    )}
                   </div>
 
-                  <p className="font-mono text-sm font-bold text-foreground leading-snug">
+                  <p className="font-mono text-sm font-bold text-foreground leading-snug my-1">
                     "{currentChunk}"
                   </p>
 
-                  {/* Alternative chunk pills */}
-                  {block.alternativeChunks.length > 0 && (
-                    <div className="pt-2 border-t border-border/40 flex flex-wrap gap-1">
-                      {block.alternativeChunks.slice(0, 2).map((alt, altIdx) => (
-                        <button
-                          key={altIdx}
-                          onClick={() => setActiveBlocks((prev) => ({ ...prev, [i]: alt }))}
-                          className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-card/80 border border-border/60 hover:bg-card text-muted-foreground transition-colors"
-                        >
-                          {alt.slice(0, 18)}...
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  <div className="space-y-2 pt-2 border-t border-border/40">
+                    {block.transitionConnector && (
+                      <span className="text-[10px] font-mono text-muted-foreground block">
+                        Từ nối: <span className="font-semibold text-foreground">{block.transitionConnector}</span>
+                      </span>
+                    )}
+
+                    {/* Alternative chunk pills */}
+                    {block.alternativeChunks.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {block.alternativeChunks.slice(0, 2).map((alt, altIdx) => (
+                          <button
+                            key={altIdx}
+                            onClick={() => setActiveBlocks((prev) => ({ ...prev, [i]: alt }))}
+                            className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-card/80 border border-border/60 hover:bg-card text-muted-foreground transition-colors"
+                          >
+                            {alt.slice(0, 18)}...
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}

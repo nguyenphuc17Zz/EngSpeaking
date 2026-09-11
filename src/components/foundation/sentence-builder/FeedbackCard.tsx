@@ -12,6 +12,9 @@ import {
   ArrowRight,
   ThumbsUp,
   Info,
+  Zap,
+  Brain,
+  Gauge,
 } from "lucide-react";
 import type { SentenceBuilderEvaluation } from "@/types/sentence-builder";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
@@ -32,16 +35,66 @@ export function FeedbackCard({ evaluation, onRetry, onContinue }: FeedbackCardPr
   };
 
   const isSuccess = evaluation.isSuccessful;
+  const isFastPass = evaluation.evaluationSource === "fast_pass";
 
   return (
     <Card className="h-full flex flex-col justify-between rounded-3xl border border-border/80 bg-card shadow-sm overflow-hidden animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
       <CardContent className="p-5 md:p-6 flex flex-col justify-between h-full space-y-3">
         {/* Top Header: Overall Score & Mini Metric Badges */}
-        <div className="flex items-center justify-between border-b border-border/40 pb-3 gap-2">
+        <div className="flex flex-col gap-2 border-b border-border/40 pb-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {isFastPass ? (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] font-bold px-2.5 py-0.5 rounded-full border bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 shadow-xs"
+                >
+                  <Zap className="size-3 mr-1 text-amber-500 fill-amber-500" />
+                  Fast-Pass 0ms
+                </Badge>
+              ) : (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] font-bold px-2.5 py-0.5 rounded-full border bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30"
+                >
+                  <Brain className="size-3 mr-1 text-purple-500" />
+                  AI Deep Review
+                </Badge>
+              )}
+
+              {evaluation.hesitationMetrics && (
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                    evaluation.hesitationMetrics.hesitationLevel === "smooth"
+                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                      : evaluation.hesitationMetrics.hesitationLevel === "moderate"
+                      ? "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30"
+                      : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                  }`}
+                >
+                  <Gauge className="size-3 mr-1" />
+                  {evaluation.hesitationMetrics.wpm} wpm
+                </Badge>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-[11px] text-muted-foreground font-medium">Tổng:</span>
+              <span
+                className={`font-mono font-bold text-base md:text-lg ${
+                  isSuccess ? "text-emerald-500" : "text-amber-500"
+                }`}
+              >
+                {evaluation.overallScore}/100
+              </span>
+            </div>
+          </div>
+
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge
               variant="outline"
-              className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                 evaluation.meaningScore >= 75
                   ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
                   : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
@@ -53,7 +106,7 @@ export function FeedbackCard({ evaluation, onRetry, onContinue }: FeedbackCardPr
 
             <Badge
               variant="outline"
-              className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                 evaluation.grammarScore >= 75
                   ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
                   : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
@@ -64,22 +117,11 @@ export function FeedbackCard({ evaluation, onRetry, onContinue }: FeedbackCardPr
 
             <Badge
               variant="outline"
-              className="text-[11px] font-bold px-2.5 py-0.5 rounded-full border bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30"
+              className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30"
             >
               <Sparkles className="size-3 mr-1" />
               Tự nhiên: {evaluation.naturalnessScore}%
             </Badge>
-          </div>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className="text-[11px] text-muted-foreground font-medium">Tổng:</span>
-            <span
-              className={`font-mono font-bold text-base md:text-lg ${
-                isSuccess ? "text-emerald-500" : "text-amber-500"
-              }`}
-            >
-              {evaluation.overallScore}/100
-            </span>
           </div>
         </div>
 

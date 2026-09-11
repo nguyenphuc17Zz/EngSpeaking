@@ -11,38 +11,7 @@ import {
 } from "./lexicon-db.service";
 import type { SpokenWordItem } from "@/types/vocabulary-context";
 
-export const INITIAL_DEFAULT_WORD: SpokenWordItem = lookupLexiconWord("decision") || {
-  id: "lex_decision",
-  word: "decision",
-  ipaUS: "/dɪˈsɪʒ.ən/",
-  ipaUK: "/dɪˈsɪʒ.ən/",
-  partOfSpeech: "noun",
-  cefrLevel: "B1",
-  meaningVi: "Quyết định dứt khoát",
-  englishDefinition: "A choice that you make about something after thinking about several possibilities.",
-  stressedSyllableIndex: 2,
-  stressExplanationVi: "Trọng âm rơi vào âm tiết thứ hai của từ 'decision'.",
-  endingSoundGuideVi: "Bật âm cuối /ʒ.ən/ mềm mại và tự nhiên.",
-  collocations: [
-    { phrase: "make a decision", meaningVi: "đưa ra một quyết định", exampleSentence: "We have to make a tough decision today." },
-    { phrase: "reach a decision", meaningVi: "đi đến quyết định thống nhất", exampleSentence: "The committee finally reached a decision." },
-  ],
-  contextSentences: [
-    {
-      id: "s1_decision",
-      domain: "workplace",
-      domainTitleVi: "Công việc & Giao tiếp (Workplace)",
-      sentenceEn: "We need to consider this decision carefully during the meeting.",
-      sentenceVi: "Chúng ta cần xem xét điều này cẩn thận trong cuộc họp.",
-      targetWordHighlighted: "decision",
-      linkingSoundHints: "need to -> need-tuh",
-    },
-  ],
-  wordMasteryScore: 0,
-  sentenceMasteryScore: 0,
-  isMastered: false,
-  practiceCount: 0,
-};
+export { INITIAL_DEFAULT_WORD } from "./default-word";
 
 function cleanJson(text: string): unknown {
   const trimmed = text.trim();
@@ -131,6 +100,8 @@ export async function searchSpokenDictionary(
           phrase: `use ${cleanWord}`,
           meaningVi: `sử dụng ${cleanWord}`,
           exampleSentence: `You can use ${cleanWord} in spoken English.`,
+          collocationType: "verb_noun",
+          pmiStrength: "high",
         },
       ],
       contextSentences: [
@@ -144,6 +115,12 @@ export async function searchSpokenDictionary(
           linkingSoundHints: "focus on -> focus-on",
         },
       ],
+      spontaneousChallenge: {
+        promptEn: `In a spoken conversation, reply in 1-2 sentences using "${cleanWord}".`,
+        promptVi: `Trong một cuộc hội thoại, hãy tự nói 1-2 câu ứng biến có chứa từ "${cleanWord}".`,
+        targetCollocation: `use ${cleanWord}`,
+        suggestedOpeningEn: `When discussing this, I believe...`,
+      },
       wordMasteryScore: 0,
       sentenceMasteryScore: 0,
       isMastered: false,
@@ -159,6 +136,7 @@ ${dictApiData?.phonetic ? `Verified phonetic IPA: ${dictApiData.phonetic}` : ""}
 ${dictApiData?.definition ? `Standard definition: ${dictApiData.definition}` : ""}
 Return strict JSON matching the schema.`;
 
+  let lastErrorMsg = "";
   try {
     const res = await generateTextWithRouting({
       provider,
@@ -175,47 +153,25 @@ Return strict JSON matching the schema.`;
     if (!parsed) throw new Error("Could not parse JSON");
     if (!parsed.id) parsed.id = `word_${cleanWord}_${Date.now()}`;
     if (!parsed.word) parsed.word = cleanWord;
+    if (!parsed.spontaneousChallenge) {
+      parsed.spontaneousChallenge = {
+        promptEn: `Speak 1-2 spontaneous sentences using "${cleanWord}".`,
+        promptVi: `Tự nói 1-2 câu phản xạ có chứa từ "${cleanWord}".`,
+        targetCollocation: `use ${cleanWord}`,
+      };
+    }
 
     const validated = spokenWordItemSchema.safeParse(parsed);
-    if (!validated.success) throw new Error("Schema error");
+    if (!validated.success) throw new Error(`Schema validation error: ${validated.error.message.slice(0, 100)}`);
     return validated.data as SpokenWordItem;
-  } catch {
+  } catch (err: any) {
+    lastErrorMsg = err?.message || String(err);
     const fallbackLocal = lookupLexiconWord(cleanWord);
     if (fallbackLocal) return fallbackLocal;
 
-    return {
-      id: `word_${cleanWord}`,
-      word: cleanWord,
-      ipaUS: dictApiData?.phonetic || `/${cleanWord}/`,
-      partOfSpeech: dictApiData?.partOfSpeech || "noun",
-      cefrLevel: "B1",
-      meaningVi: `Từ vựng "${cleanWord}"`,
-      englishDefinition: dictApiData?.definition || `Definition of ${cleanWord}`,
-      stressedSyllableIndex: 1,
-      stressExplanationVi: `Trọng âm của từ "${cleanWord}"`,
-      endingSoundGuideVi: "Bật âm cuối rõ ràng",
-      collocations: [
-        {
-          phrase: `use ${cleanWord}`,
-          meaningVi: `sử dụng ${cleanWord}`,
-          exampleSentence: `I often use ${cleanWord} in conversation.`,
-        },
-      ],
-      contextSentences: [
-        {
-          id: "s1",
-          domain: "daily_life",
-          domainTitleVi: "Đời sống (Daily Life)",
-          sentenceEn: `This is a great example of ${cleanWord}.`,
-          sentenceVi: `Đây là một ví dụ tuyệt vời.`,
-          targetWordHighlighted: cleanWord,
-        },
-      ],
-      wordMasteryScore: 0,
-      sentenceMasteryScore: 0,
-      isMastered: false,
-      practiceCount: 0,
-    };
+    throw new Error(
+      `Không thể tra cứu chuyên sâu từ "${cleanWord}" từ AI: ${lastErrorMsg}. Vui lòng thử lại hoặc đổi AI Model / Provider.`
+    );
   }
 }
 
@@ -246,6 +202,7 @@ export async function generateDynamicRandomWord(options: {
 Generate complete phonetic IPA, Vietnamese definition, stress guide, 2 collocations, and 2 context sentences.
 Return strict JSON matching the schema.`;
 
+  let lastErrorMsg = "";
   try {
     const res = await generateTextWithRouting({
       provider,
@@ -264,9 +221,17 @@ Return strict JSON matching the schema.`;
       const validated = spokenWordItemSchema.safeParse(parsed);
       if (validated.success) {
         return validated.data as SpokenWordItem;
+      } else {
+        lastErrorMsg = `Schema validation error: ${validated.error.message.slice(0, 100)}`;
       }
+    } else {
+      lastErrorMsg = "AI không trả về JSON hợp lệ";
     }
-  } catch {}
+  } catch (err: any) {
+    lastErrorMsg = err?.message || String(err);
+  }
 
-  return getRandomLexiconWord({ cefrLevel: level });
+  throw new Error(
+    `Không thể tạo ngẫu nhiên từ mới từ AI: ${lastErrorMsg || "Lỗi không xác định"}. Vui lòng thử lại hoặc đổi AI Model / Provider.`
+  );
 }

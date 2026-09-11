@@ -49,7 +49,7 @@ const KEYBINDINGS: KeybindingItem[] = [
   {
     keys: ["H"],
     title: "Mở khay gợi ý 5 tầng",
-    description: "Mở danh sách gợi ý cấp độ từ Từ khoá $\\rightarrow$ Khung câu $\\rightarrow$ Mẫu câu bản xứ.",
+    description: "Mở danh sách gợi ý cấp độ từ Từ khoá → Khung câu → Mẫu câu bản xứ.",
     contextBadge: "Sentence Builder",
     category: "sentence_builder",
   },

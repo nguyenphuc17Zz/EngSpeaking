@@ -4,6 +4,7 @@
 import { generateTextWithRouting } from "@/lib/ai";
 import { latencyEvaluationSchema } from "@/lib/validation/latency-schemas";
 import { LATENCY_EVALUATOR_SYSTEM, buildLatencyEvaluatorUserPrompt } from "@/lib/ai/prompts/latency-prompts";
+import { detectBufferChunk } from "./fast-pass.service";
 import type {
   LatencyTask,
   LatencyEvaluation,
@@ -16,6 +17,7 @@ export interface EvaluateLatencyParams {
   userTranscript: string;
   responseLatencyMs: number;
   speechDurationMs?: number;
+  speechOnsetMs?: number;
   provider?: string;
   model?: string;
 }
@@ -28,7 +30,8 @@ function computeDeterministicLatencyEvaluation(
   task: LatencyTask,
   userTranscript: string,
   responseLatencyMs: number,
-  speechDurationMs: number = 2500
+  speechDurationMs: number = 2500,
+  speechOnsetMs?: number
 ): LatencyEvaluation {
   const cleanSpoken = cleanText(userTranscript);
   const targetLatency = task.targetLatencyMs || 3000;
@@ -119,6 +122,8 @@ function computeDeterministicLatencyEvaluation(
     coachFeedbackVi = "Hãy thả lỏng và thử dùng các cụm đệm (Buffer phrases) để bắt đầu câu trơn tru hơn.";
   }
 
+  const bufferRes = detectBufferChunk(userTranscript, task.bufferChunks);
+
   return {
     overallScore,
     accuracyScore,
@@ -138,6 +143,8 @@ function computeDeterministicLatencyEvaluation(
     coachFeedbackVi,
     betterResponse: task.sampleResponses[0] || userTranscript,
     praisePoints: praisePoints.length > 0 ? praisePoints : ["Đã hoàn thành phản xạ."],
+    bufferUsed: bufferRes.bufferUsed,
+    speechOnsetMs: speechOnsetMs ?? responseLatencyMs,
   };
 }
 
@@ -171,7 +178,8 @@ export async function evaluateLatencyAttempt(
       params.task,
       params.userTranscript,
       params.responseLatencyMs,
-      params.speechDurationMs
+      params.speechDurationMs,
+      params.speechOnsetMs
     );
   }
 
@@ -206,14 +214,19 @@ export async function evaluateLatencyAttempt(
       throw new Error("Invalid latency evaluation schema");
     }
 
-    return validated.data as LatencyEvaluation;
+    const evaluation = validated.data as LatencyEvaluation;
+    if (params.speechOnsetMs !== undefined && evaluation.speechOnsetMs === undefined) {
+      evaluation.speechOnsetMs = params.speechOnsetMs;
+    }
+    return evaluation;
   } catch (err) {
     if (provider === "mock") {
       return computeDeterministicLatencyEvaluation(
         params.task,
         params.userTranscript,
         params.responseLatencyMs,
-        params.speechDurationMs
+        params.speechDurationMs,
+        params.speechOnsetMs
       );
     }
     throw err;

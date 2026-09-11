@@ -32,6 +32,10 @@ export const circumlocutionTaskSchema = z.object({
   tierHints: z.array(survivalHintTierSchema).optional(),
   sampleExplanations: z.array(z.string()).default([]),
   suggestedVocabulary: z.array(survivalVocabularyItemSchema).optional(),
+  genus: z.string().optional(),
+  differentia: z.string().optional(),
+  semanticKeyAnchors: z.array(z.string()).default([]),
+  tabooLemmas: z.array(z.string()).default([]),
 });
 
 export const survivalScenarioTaskSchema = z.object({
@@ -53,6 +57,17 @@ export const survivalEvaluationSchema = z.object({
   strategyUsed: z.string().default("circumlocution"),
   targetWordAvoided: z.boolean().optional(),
   conceptClarityScore: z.number().min(0).max(100),
+  genusDetected: z.boolean().optional(),
+  differentiaDetected: z.boolean().optional(),
+  semanticPrecisionScore: z.number().min(0).max(100).optional(),
+  listenerGuess: z.string().optional(),
+  clarityBreakdown: z
+    .object({
+      genusScore: z.number().default(0),
+      functionScore: z.number().default(0),
+      ambiguityPenalty: z.number().default(0),
+    })
+    .optional(),
   repairInitiationLatencyMs: z.number().default(2000),
   naturalnessScore: z.number().min(0).max(100),
   overallScore: z.number().min(0).max(100),

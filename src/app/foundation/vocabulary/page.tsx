@@ -13,6 +13,7 @@ import { ArrowLeft, BookOpen, Sparkles, AlertTriangle } from "lucide-react";
 import { useVocabularyStore } from "@/stores/vocabulary-context-store";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import { transcribeViaServer } from "@/lib/stt/service";
 import { soundEffects } from "@/lib/audio/audio-chimes";
 import { GlobalAiSelector } from "@/components/common/GlobalAiSelector";
 import { SpeakingController } from "@/components/foundation/sentence-builder/SpeakingController";
@@ -46,16 +47,22 @@ export default function VocabularyContextPage() {
   const recorder = useAudioRecorder();
   const speechRec = useSpeechRecognition("en-US");
 
+  const [speakingMode, setSpeakingMode] = useState<"guided" | "spontaneous">("guided");
   const [currentHintTier, setCurrentHintTier] = useState(0);
   const [autoStartMic, setAutoStartMic] = useState(false);
   const [recordingDurationMs, setRecordingDurationMs] = useState(0);
   const [promptDisplayTime, setPromptDisplayTime] = useState<number>(Date.now());
+  const [pendingSpokenText, setPendingSpokenText] = useState<string | null>(null);
   const durationRef = useRef<NodeJS.Timeout | null>(null);
 
   // Reset hint tier on step or word change
   useEffect(() => {
     setCurrentHintTier(0);
+    setPendingSpokenText(null);
     setPromptDisplayTime(Date.now());
+    if (activeStep === 1) {
+      setSpeakingMode("guided");
+    }
   }, [activeStep, currentWord.id]);
 
   // Recording duration timer
@@ -77,9 +84,19 @@ export default function VocabularyContextPage() {
   const handleStartRecord = useCallback(async () => {
     soundEffects.playMicStart();
     speechRec.resetTranscript();
+    setPendingSpokenText(null);
+
+    let sttProvider = "browser";
+    try {
+      const { useSettingsStore } = await import("@/stores/settings-store");
+      sttProvider = useSettingsStore.getState().stt?.provider || "browser";
+    } catch {}
+
     try {
       await recorder.start();
-      speechRec.startListening();
+      if (sttProvider === "browser") {
+        speechRec.startListening();
+      }
     } catch {
       toast.error("Không thể mở Micro", "Vui lòng cấp quyền truy cập micro.");
     }
@@ -103,8 +120,10 @@ export default function VocabularyContextPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             step: activeStep,
+            mode: speakingMode,
             wordItem: currentWord,
             sentenceItem: currentWord.contextSentences[selectedSentenceIndex],
+            spontaneousChallenge: currentWord.spontaneousChallenge,
             userTranscript: spokenText,
             provider,
             model,
@@ -126,24 +145,71 @@ export default function VocabularyContextPage() {
         toast.error("Lỗi đánh giá", "Không thể hoàn tất đánh giá lúc này.");
       } finally {
         useVocabularyStore.setState({ isEvaluating: false });
+        setPendingSpokenText(null);
       }
     },
-    [activeStep, currentWord, selectedSentenceIndex, processWordEvaluation, processSentenceEvaluation]
+    [activeStep, speakingMode, currentWord, selectedSentenceIndex, processWordEvaluation, processSentenceEvaluation]
   );
 
+  // Stop recording -> Store in pending review state
   const handleStopRecord = useCallback(async () => {
     if (recorder.status !== "recording") return;
     soundEffects.playMicStop();
-    speechRec.stopListening();
+
+    let sttProvider = "browser";
+    let sttModel = "auto";
     try {
-      await recorder.stop();
-      await new Promise((r) => setTimeout(r, 400));
-      const spokenText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
-      await executeEvaluation(spokenText);
+      const { useSettingsStore } = await import("@/stores/settings-store");
+      const settings = useSettingsStore.getState();
+      sttProvider = settings.stt?.provider || "browser";
+      sttModel = settings.stt?.model || "auto";
+    } catch {}
+
+    if (sttProvider === "browser") {
+      speechRec.stopListening();
+    }
+
+    try {
+      const recording = await recorder.stop();
+      let spokenText = "";
+
+      if (sttProvider !== "browser" && recording?.blob) {
+        try {
+          const res = await transcribeViaServer(recording.blob, {
+            provider: sttProvider === "auto" ? "whisper-local" : sttProvider,
+            model: sttModel,
+            language: "en-US",
+          });
+          spokenText = res.text.trim();
+        } catch {
+          spokenText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
+        }
+      } else {
+        await new Promise((r) => setTimeout(r, 250));
+        spokenText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
+      }
+
+      if (!spokenText) {
+        toast.info("Chưa phát hiện giọng nói", "Vui lòng bấm mic và thử nói lại.");
+        return;
+      }
+      setPendingSpokenText(spokenText);
     } catch {
       toast.error("Lỗi xử lý", "Không thể dừng micro.");
     }
-  }, [recorder, speechRec, executeEvaluation]);
+  }, [recorder, speechRec]);
+
+  // Confirm submit pending speech
+  const handleConfirmSubmit = useCallback(async () => {
+    if (!pendingSpokenText) return;
+    await executeEvaluation(pendingSpokenText);
+  }, [pendingSpokenText, executeEvaluation]);
+
+  // Re-record
+  const handleReRecord = useCallback(() => {
+    setPendingSpokenText(null);
+    handleStartRecord();
+  }, [handleStartRecord]);
 
   const handleSubmitTextFallback = useCallback(
     async (text: string) => {
@@ -155,24 +221,34 @@ export default function VocabularyContextPage() {
   // Retry: clear eval, reset mic
   const handleRetry = useCallback(() => {
     resetEvaluations();
+    setPendingSpokenText(null);
     speechRec.resetTranscript();
     setPromptDisplayTime(Date.now());
   }, [resetEvaluations, speechRec]);
 
   // Continue after feedback
   const handleContinue = useCallback(() => {
+    setPendingSpokenText(null);
     const eval1 = lastWordEvaluation;
+    const eval2 = lastSentenceEvaluation;
     if (activeStep === 1 && eval1?.isSuccessful) {
       // Auto-advance to Step 2
       setActiveStep(2);
+      setSpeakingMode("guided");
     } else if (activeStep === 1) {
       // Retry Step 1
       handleRetry();
-    } else {
-      // Step 2 done → shuffle next word
+    } else if (activeStep === 2 && speakingMode === "guided" && eval2?.isSuccessful) {
+      // Advance to Spontaneous challenge
+      setSpeakingMode("spontaneous");
+      handleRetry();
+    } else if (activeStep === 2 && eval2?.isSuccessful) {
+      // Step 2 Spontaneous done → shuffle next word
       shuffleRandomWord();
+    } else {
+      handleRetry();
     }
-  }, [activeStep, lastWordEvaluation, setActiveStep, handleRetry, shuffleRandomWord]);
+  }, [activeStep, speakingMode, lastWordEvaluation, lastSentenceEvaluation, setActiveStep, handleRetry, shuffleRandomWord]);
 
   const hasEvaluation =
     (activeStep === 1 && !!lastWordEvaluation) ||
@@ -195,21 +271,30 @@ export default function VocabularyContextPage() {
           handleRetry();
         } else if (recorder.status === "recording") {
           handleStopRecord();
+        } else if (pendingSpokenText) {
+          handleReRecord();
         } else if (!isEvaluating && !isSearching) {
           handleStartRecord();
         }
       } else if (e.code === "Backspace" && recorder.status === "recording") {
         e.preventDefault();
         speechRec.resetTranscript();
+        setPendingSpokenText(null);
         toast.info("Đã xóa câu nói dở", "Tiếp tục nói lại từ đầu...");
-      } else if (e.code === "KeyH" && !hasEvaluation) {
+      } else if (e.code === "KeyH" && !hasEvaluation && !isEvaluating) {
         e.preventDefault();
         setCurrentHintTier((prev) => (prev >= 4 ? 0 : prev + 1));
-      } else if (e.code === "Enter" && hasEvaluation) {
+      } else if (e.code === "Enter") {
+        if (pendingSpokenText && !isEvaluating) {
+          e.preventDefault();
+          handleConfirmSubmit();
+        } else if (hasEvaluation) {
+          e.preventDefault();
+          handleContinue();
+        }
+      } else if (e.code === "KeyR" && recorder.status !== "recording" && !hasEvaluation && !isEvaluating) {
         e.preventDefault();
-        handleContinue();
-      } else if (e.code === "KeyR" && recorder.status !== "recording" && !hasEvaluation) {
-        e.preventDefault();
+        setPendingSpokenText(null);
         shuffleRandomWord();
       } else if (e.code === "Escape") {
         e.preventDefault();
@@ -224,8 +309,11 @@ export default function VocabularyContextPage() {
     isEvaluating,
     isSearching,
     hasEvaluation,
+    pendingSpokenText,
     handleStartRecord,
     handleStopRecord,
+    handleConfirmSubmit,
+    handleReRecord,
     handleRetry,
     handleContinue,
     shuffleRandomWord,
@@ -234,7 +322,7 @@ export default function VocabularyContextPage() {
   ]);
 
   return (
-    <div className="fixed inset-0 h-screen w-screen bg-background text-foreground flex flex-col overflow-hidden z-40 select-none">
+    <div className="w-full min-h-[calc(100vh-8rem)] bg-card text-foreground flex flex-col overflow-hidden rounded-3xl border border-border/80 shadow-xs select-none">
       {/* ── Studio Header ── */}
       <header className="h-14 border-b border-border/60 px-4 sm:px-6 flex items-center justify-between bg-card/60 backdrop-blur-md shrink-0 gap-3">
         {/* Left: Back + Title */}
@@ -328,6 +416,8 @@ export default function VocabularyContextPage() {
               onSelectHintTier={setCurrentHintTier}
               isEnriching={isSearching}
               onDeepEnrichWithAI={deepEnrichWithAI}
+              speakingMode={speakingMode}
+              onSelectSpeakingMode={setSpeakingMode}
             />
           )}
         </div>
@@ -346,6 +436,10 @@ export default function VocabularyContextPage() {
                   ? "Sang Bước 2: Câu ngữ cảnh →"
                   : activeStep === 1
                   ? "Thử lại phát âm"
+                  : activeStep === 2 && speakingMode === "guided" && lastSentenceEvaluation?.isSuccessful
+                  ? "Thử thách phản xạ tự do →"
+                  : activeStep === 2 && !lastSentenceEvaluation?.isSuccessful
+                  ? "Nói lại câu này"
                   : "Từ tiếp theo →"
               }
             />
@@ -368,7 +462,13 @@ export default function VocabularyContextPage() {
               onSubmitTextFallback={handleSubmitTextFallback}
               onOpenHints={() => setCurrentHintTier((prev) => (prev >= 4 ? 0 : prev + 1))}
               isEvaluating={isEvaluating}
-              onResetLiveTranscript={() => speechRec.resetTranscript()}
+              onResetLiveTranscript={() => {
+                speechRec.resetTranscript();
+                setPendingSpokenText(null);
+              }}
+              pendingText={pendingSpokenText}
+              onConfirmSubmit={handleConfirmSubmit}
+              onReRecord={handleReRecord}
             />
           )}
         </div>
@@ -382,8 +482,10 @@ export default function VocabularyContextPage() {
             <span>
               {hasEvaluation
                 ? "Nói lại"
+                : pendingSpokenText
+                ? "Thu âm lại"
                 : recorder.status === "recording"
-                ? "Dừng & Chấm"
+                ? "Dừng nói"
                 : "Bật mic"}
             </span>
           </span>
@@ -401,6 +503,12 @@ export default function VocabularyContextPage() {
             <span className="flex items-center gap-1">
               <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono font-bold">R</kbd>
               <span>Đổi từ ngẫu nhiên</span>
+            </span>
+          )}
+          {pendingSpokenText && !isEvaluating && (
+            <span className="flex items-center gap-1 text-primary font-bold">
+              <kbd className="px-1.5 py-0.5 rounded bg-primary text-primary-foreground text-[10px] font-mono">Enter</kbd>
+              <span>Nộp bài chấm điểm</span>
             </span>
           )}
           {hasEvaluation && (

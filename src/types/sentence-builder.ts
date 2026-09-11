@@ -64,6 +64,7 @@ export interface SentenceBuilderTask {
   topic: string; // e.g. "work", "daily_routine", "food", "travel", "technology"
   prepTimeSec: number; // 3.0s down to 1.5s
   modelAudioSample?: string;
+  targetErrorPatternKey?: string; // Links task to ErrorBank weakness
 }
 
 export interface EvaluatedError {
@@ -73,6 +74,13 @@ export interface EvaluatedError {
   correction: string;
   explanation: string;
   patternKey?: string; // e.g. "past_tense_regular_ed", "article_omission"
+}
+
+export interface HesitationMetrics {
+  wpm: number;
+  durationMs: number;
+  hesitationLevel: "smooth" | "moderate" | "hesitant";
+  pauseEstimatedSec: number;
 }
 
 export interface SentenceBuilderEvaluation {
@@ -101,6 +109,9 @@ export interface SentenceBuilderEvaluation {
   
   hintTierUsed: number; // 0-4
   attemptNumber: number; // 1, 2, 3...
+
+  evaluationSource?: "fast_pass" | "ai_llm" | "deterministic";
+  hesitationMetrics?: HesitationMetrics;
 }
 
 export interface SentenceBuilderSkillMastery {

@@ -51,6 +51,17 @@ export interface ErrorExample {
   timestamp: string;
 }
 
+export type FossilizationLevel = "emerging" | "habitual" | "fossilized";
+
+export type L1InterferenceType =
+  | "tense_drop"
+  | "ending_sound_omission"
+  | "copula_drop"
+  | "collocation_calque"
+  | "preposition_calque"
+  | "plural_drop"
+  | "filler_transfer";
+
 export interface MasterErrorRecord {
   id: string;
   patternKey: string; // e.g. "past_simple_base_form"
@@ -92,6 +103,21 @@ export interface MasterErrorRecord {
   lastSeenAt: string;
   nextReviewDueAt?: string; // Spaced review interval
   reviewStage: number; // 0 -> 1 (10m) -> 2 (1d) -> 3 (3d) -> 4 (7d) -> 5 (14d) -> 6 (30d)
+
+  // 1. FSRS Spaced Repetition (DSR Model)
+  fsrsStability: number; // Days memory is stable (R >= 90%)
+  fsrsDifficulty: number; // 1.0 (easiest) to 10.0 (hardest)
+  retrievability: number; // Current retention probability % (0 - 100)
+  lastReviewAt?: string;
+
+  // 2. Bayesian Knowledge Tracing (BKT)
+  pMastery: number; // Probability of mastery (0.0 to 1.0)
+  isSlip?: boolean; // Last mistake was classified as a slip under fluency pressure
+
+  // 3. L1 Vietnamese Interference & Fossilization Index
+  fossilizationScore: number; // 0 to 100
+  fossilizationLevel: FossilizationLevel;
+  l1InterferenceType?: L1InterferenceType;
 
   examples: ErrorExample[];
   priorityScore: number; // Calculated dynamically for curriculum ranking

@@ -134,10 +134,12 @@ function generateRealisticSentences(raw: RawLexiconEntry): {
 }
 
 export function synthesizeSpokenWordItem(raw: RawLexiconEntry): SpokenWordItem {
-  const collocations = (raw.c || []).map((col) => ({
+  const collocations = (raw.c || []).map((col, idx) => ({
     phrase: col,
     meaningVi: `cụm từ "${col}"`,
     exampleSentence: `In daily conversation, we frequently say "${col}".`,
+    collocationType: (idx === 0 ? "verb_noun" : "adj_noun") as "verb_noun" | "adj_noun",
+    pmiStrength: "high" as const,
   }));
 
   if (collocations.length === 0) {
@@ -145,6 +147,8 @@ export function synthesizeSpokenWordItem(raw: RawLexiconEntry): SpokenWordItem {
       phrase: `use ${raw.w}`,
       meaningVi: `sử dụng ${raw.w}`,
       exampleSentence: `You can use "${raw.w}" in conversation.`,
+      collocationType: "verb_noun",
+      pmiStrength: "high",
     });
   }
 
@@ -152,6 +156,7 @@ export function synthesizeSpokenWordItem(raw: RawLexiconEntry): SpokenWordItem {
     raw.s === 1 ? "nhất" : raw.s === 2 ? "thứ hai" : raw.s === 3 ? "thứ ba" : "thứ tư";
 
   const s = generateRealisticSentences(raw);
+  const primaryCollocation = collocations[0]?.phrase || raw.w;
 
   return {
     id: `lex_${raw.w}`,
@@ -186,6 +191,12 @@ export function synthesizeSpokenWordItem(raw: RawLexiconEntry): SpokenWordItem {
         linkingSoundHints: s.link2,
       },
     ],
+    spontaneousChallenge: {
+      promptEn: `In a spoken conversation about your daily work or life, speak 1-2 spontaneous sentences using "${raw.w}".`,
+      promptVi: `Trong một cuộc trò chuyện hàng ngày, hãy tự nói 1-2 câu phản xạ có chứa từ "${raw.w}".`,
+      targetCollocation: primaryCollocation,
+      suggestedOpeningEn: `Honestly, when dealing with this, I prefer to...`,
+    },
     wordMasteryScore: 0,
     sentenceMasteryScore: 0,
     isMastered: false,

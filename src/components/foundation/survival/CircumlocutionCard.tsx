@@ -74,6 +74,27 @@ export function CircumlocutionCard({
           </div>
         </div>
 
+        {/* Aristotelian 2-Step Definition Formula */}
+        <div className="grid sm:grid-cols-2 gap-2.5 p-3.5 rounded-2xl bg-muted/30 border border-border/70 text-xs">
+          <div className="p-2.5 rounded-xl bg-card border border-border/50 space-y-1 shadow-2xs">
+            <span className="font-bold text-primary flex items-center gap-1.5 text-[11px] uppercase tracking-wide">
+              🏷️ 1. Chủng loại (Genus Proximum)
+            </span>
+            <p className="font-mono text-muted-foreground text-[11px]">
+              "It's a kind of <span className="text-foreground font-semibold">{task.genus || task.category}</span>..."
+            </p>
+          </div>
+
+          <div className="p-2.5 rounded-xl bg-card border border-border/50 space-y-1 shadow-2xs">
+            <span className="font-bold text-primary flex items-center gap-1.5 text-[11px] uppercase tracking-wide">
+              ⚙️ 2. Công dụng cốt lõi (Differentia)
+            </span>
+            <p className="font-mono text-muted-foreground text-[11px]">
+              "...that you use to <span className="text-foreground font-semibold">{task.differentia || task.hints.functionHint || "..."}</span>"
+            </p>
+          </div>
+        </div>
+
         {/* 4-Tier Property Ladder Hints Accordion */}
         <div className="p-4 rounded-2xl bg-card border border-border/70 space-y-3 shadow-xs">
           <div className="flex items-center justify-between">

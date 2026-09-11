@@ -74,12 +74,33 @@ export function LatencyFeedbackCard({
       <CardContent className="p-5 md:p-6 flex flex-col justify-between h-full space-y-4">
         {/* Top Badges & Latency Metric */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/40 pb-3">
-          <Badge
-            variant="outline"
-            className={`text-xs font-semibold px-3 py-1 rounded-full border ${quadInfo.color}`}
-          >
-            {quadInfo.label}
-          </Badge>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge
+              variant="outline"
+              className={`text-xs font-semibold px-3 py-1 rounded-full border ${quadInfo.color}`}
+            >
+              {quadInfo.label}
+            </Badge>
+
+            {evaluation.isFastPass && (
+              <Badge
+                variant="outline"
+                className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border-sky-500/40 bg-sky-500/10 text-sky-600 dark:text-sky-400 gap-1 shadow-2xs"
+              >
+                <Zap className="size-3 text-sky-500 fill-sky-500" />
+                <span>Fast-Pass (&lt;30ms)</span>
+              </Badge>
+            )}
+
+            {evaluation.bufferUsed && (
+              <Badge
+                variant="outline"
+                className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 gap-1"
+              >
+                <span>🎯 Cụm đệm: "{evaluation.bufferUsed}"</span>
+              </Badge>
+            )}
+          </div>
 
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 font-mono text-sm font-bold">
@@ -90,6 +111,11 @@ export function LatencyFeedbackCard({
               <span className="text-xs text-muted-foreground font-normal">
                 / {(evaluation.targetLatencyMs / 1000).toFixed(1)}s target
               </span>
+              {evaluation.speechOnsetMs !== undefined && (
+                <span className="text-[10px] font-mono text-muted-foreground border-l border-border/60 pl-2">
+                  Bật âm: {(evaluation.speechOnsetMs / 1000).toFixed(2)}s
+                </span>
+              )}
             </div>
           </div>
         </div>

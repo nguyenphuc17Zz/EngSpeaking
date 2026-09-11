@@ -22,18 +22,25 @@ import {
   Loader2,
   Delete,
   Volume2,
+  Settings2,
+  Dices,
+  GitFork,
+  Target,
 } from "lucide-react";
 
 import { useChunkStore } from "@/stores/chunk-store";
+import { useSettingsStore } from "@/stores/settings-store";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { soundEffects } from "@/lib/audio/audio-chimes";
+import { transcribeViaServer } from "@/lib/stt/service";
 import { Waveform } from "@/components/voice/Waveform";
 
 import { ChunkPromptCard } from "@/components/foundation/chunks/ChunkPromptCard";
 import { ChunkFeedbackCard } from "@/components/foundation/chunks/ChunkFeedbackCard";
 import { MyChunksDrawer } from "@/components/foundation/chunks/MyChunksDrawer";
 import { GlobalAiSelector } from "@/components/common/GlobalAiSelector";
+import { SpeakingController } from "@/components/foundation/sentence-builder/SpeakingController";
 
 export default function ChunkAutomaticityPage() {
   const router = useRouter();
@@ -42,8 +49,11 @@ export default function ChunkAutomaticityPage() {
     library,
     currentChainTask,
     currentSingleTask,
+    selectedStrategy,
+    setSelectedStrategy,
     isGenerating,
     isEvaluating,
+    setIsEvaluating,
     generationError,
     lastChainEvaluation,
     lastSingleEvaluation,
@@ -64,7 +74,9 @@ export default function ChunkAutomaticityPage() {
   const [recordingDurationMs, setRecordingDurationMs] = useState(0);
   const [promptDisplayTime, setPromptDisplayTime] = useState<number>(Date.now());
   const [currentHintTier, setCurrentHintTier] = useState<number>(0);
-  const [fallbackTextInput, setFallbackTextInput] = useState("");
+  const [autoStartMic, setAutoStartMic] = useState(false);
+  const [pendingSpokenText, setPendingSpokenText] = useState<string | null>(null);
+  const [pendingLatencyMs, setPendingLatencyMs] = useState<number>(2000);
   const durationRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize
@@ -81,7 +93,7 @@ export default function ChunkAutomaticityPage() {
   useEffect(() => {
     setPromptDisplayTime(Date.now());
     setCurrentHintTier(0);
-    setFallbackTextInput("");
+    setPendingSpokenText(null);
   }, [currentChainTask?.id, currentSingleTask?.id]);
 
   // Recording duration timer
@@ -104,135 +116,142 @@ export default function ChunkAutomaticityPage() {
   const handleStartRecord = useCallback(async () => {
     soundEffects.playMicStart();
     speechRec.resetTranscript();
-    setFallbackTextInput("");
+    setPendingSpokenText(null);
+    const settings = useSettingsStore.getState();
+    const isBrowserSTT = (settings.stt?.provider || "browser") === "browser";
     try {
       await recorder.start();
-      speechRec.startListening();
+      if (isBrowserSTT) {
+        speechRec.startListening();
+      }
     } catch {
       toast.error("Không thể mở Micro", "Vui lòng cấp quyền truy cập micro trong trình duyệt.");
     }
   }, [recorder, speechRec]);
 
-  // Stop Mic and Evaluate
+  // Execute AI evaluation
+  const executeEvaluation = useCallback(
+    async (spokenText: string, measuredLatency: number) => {
+      if (!spokenText.trim()) return;
+
+      setIsEvaluating(true);
+      try {
+        // Load active provider & model
+        let provider = "gemini";
+        let model = "auto";
+        try {
+          const { useSettingsStore } = await import("@/stores/settings-store");
+          const settings = useSettingsStore.getState();
+          provider = settings.generation?.provider || settings.activeProvider || "gemini";
+          model =
+            settings.generation?.model ||
+            (provider === "groq" ? settings.preferredGroqModel : settings.preferredGeminiModel) ||
+            "auto";
+        } catch {}
+
+        const res = await fetch("/api/foundation/chunks/evaluate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode,
+            task: mode === "chain_builder" ? currentChainTask : currentSingleTask,
+            userTranscript: spokenText,
+            responseLatencyMs: measuredLatency,
+            provider,
+            model,
+          }),
+        });
+
+        const data = await res.json();
+        if (data.evaluation) {
+          soundEffects.playAIReady();
+          if (mode === "chain_builder") {
+            processChainEvaluation(data.evaluation);
+          } else {
+            processSingleEvaluation(data.evaluation);
+          }
+        } else {
+          toast.error("Lỗi đánh giá", data.error || "Không thể hoàn tất đánh giá lúc này.");
+        }
+      } catch {
+        toast.error("Lỗi đánh giá", "Không thể hoàn tất đánh giá lúc này.");
+      } finally {
+        setIsEvaluating(false);
+        setPendingSpokenText(null);
+      }
+    },
+    [
+      mode,
+      currentChainTask,
+      currentSingleTask,
+      processChainEvaluation,
+      processSingleEvaluation,
+      setIsEvaluating,
+    ]
+  );
+
+  // Stop Mic -> Store in pending review state
   const handleStopRecord = useCallback(async () => {
     if (recorder.status !== "recording") return;
 
     soundEffects.playMicStop();
-    speechRec.stopListening();
+    const settings = useSettingsStore.getState();
+    const sttProvider = settings.stt?.provider || "browser";
+    const sttModel =
+      settings.stt?.model ||
+      (sttProvider === "groq" ? "whisper-large-v3" : "onnx-community/whisper-tiny.en");
 
+    speechRec.stopListening();
     const measuredLatency = Math.max(500, Date.now() - promptDisplayTime);
 
     try {
-      await recorder.stop();
-      await new Promise((r) => setTimeout(r, 400));
-      const spokenText =
-        speechRec.fullTranscript.trim() || speechRec.transcript.trim() || fallbackTextInput.trim();
+      const recording = await recorder.stop();
+      let spokenText = "";
+
+      if (sttProvider !== "browser" && recording?.blob) {
+        try {
+          const res = await transcribeViaServer(recording.blob, {
+            provider: sttProvider === "auto" ? "whisper-local" : sttProvider,
+            model: sttModel,
+            language: "en-US",
+          });
+          spokenText = res.text.trim();
+        } catch {
+          spokenText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
+        }
+      } else {
+        await new Promise((r) => setTimeout(r, 400));
+        spokenText =
+          speechRec.fullTranscript.trim() || speechRec.transcript.trim();
+      }
 
       if (!spokenText) {
-        toast.error("Chưa nhận diện được giọng nói", "Vui lòng nói to rõ ràng hơn hoặc nhập chữ thay thế.");
+        toast.error("Chưa nhận diện được giọng nói", "Vui lòng bấm mic và nói lại.");
         return;
       }
 
-      // Load active provider & model
-      let provider = "gemini";
-      let model = "auto";
-      try {
-        const { useSettingsStore } = await import("@/stores/settings-store");
-        const settings = useSettingsStore.getState();
-        provider = settings.generation?.provider || settings.activeProvider || "gemini";
-        model =
-          settings.generation?.model ||
-          (provider === "groq" ? settings.preferredGroqModel : settings.preferredGeminiModel) ||
-          "auto";
-      } catch {}
-
-      const res = await fetch("/api/foundation/chunks/evaluate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode,
-          task: mode === "chain_builder" ? currentChainTask : currentSingleTask,
-          userTranscript: spokenText,
-          responseLatencyMs: measuredLatency,
-          provider,
-          model,
-        }),
-      });
-
-      const data = await res.json();
-      if (data.evaluation) {
-        soundEffects.playAIReady();
-        if (mode === "chain_builder") {
-          processChainEvaluation(data.evaluation);
-        } else {
-          processSingleEvaluation(data.evaluation);
-        }
-      } else {
-        toast.error("Lỗi đánh giá", data.error || "Không thể hoàn tất đánh giá lúc này.");
-      }
+      setPendingSpokenText(spokenText);
+      setPendingLatencyMs(measuredLatency);
     } catch {
-      toast.error("Lỗi đánh giá", "Không thể hoàn tất đánh giá lúc này.");
+      toast.error("Lỗi xử lý", "Không thể dừng micro.");
     }
-  }, [
-    recorder,
-    speechRec,
-    fallbackTextInput,
-    promptDisplayTime,
-    mode,
-    currentChainTask,
-    currentSingleTask,
-    processChainEvaluation,
-    processSingleEvaluation,
-  ]);
+  }, [recorder, speechRec, promptDisplayTime]);
 
-  // Text submit fallback
-  const handleSubmitFallbackText = async () => {
-    if (!fallbackTextInput.trim()) return;
-    const measuredLatency = Math.max(500, Date.now() - promptDisplayTime);
+  // Confirm submit pending speech
+  const handleConfirmSubmit = useCallback(async () => {
+    if (!pendingSpokenText) return;
+    await executeEvaluation(pendingSpokenText, pendingLatencyMs);
+  }, [pendingSpokenText, pendingLatencyMs, executeEvaluation]);
 
-    let provider = "gemini";
-    let model = "auto";
-    try {
-      const { useSettingsStore } = await import("@/stores/settings-store");
-      const settings = useSettingsStore.getState();
-      provider = settings.generation?.provider || settings.activeProvider || "gemini";
-      model =
-        settings.generation?.model ||
-        (provider === "groq" ? settings.preferredGroqModel : settings.preferredGeminiModel) ||
-        "auto";
-    } catch {}
-
-    try {
-      const res = await fetch("/api/foundation/chunks/evaluate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode,
-          task: mode === "chain_builder" ? currentChainTask : currentSingleTask,
-          userTranscript: fallbackTextInput.trim(),
-          responseLatencyMs: measuredLatency,
-          provider,
-          model,
-        }),
-      });
-
-      const data = await res.json();
-      if (data.evaluation) {
-        soundEffects.playAIReady();
-        if (mode === "chain_builder") {
-          processChainEvaluation(data.evaluation);
-        } else {
-          processSingleEvaluation(data.evaluation);
-        }
-      }
-    } catch {
-      toast.error("Lỗi đánh giá", "Không thể hoàn tất đánh giá lúc này.");
-    }
-  };
+  // Re-record
+  const handleReRecord = useCallback(() => {
+    setPendingSpokenText(null);
+    handleStartRecord();
+  }, [handleStartRecord]);
 
   const handleContinue = () => {
+    setPendingSpokenText(null);
     speechRec.resetTranscript();
-    setFallbackTextInput("");
     if (mode === "chain_builder") {
       fetchNextChainTask();
     } else {
@@ -242,8 +261,8 @@ export default function ChunkAutomaticityPage() {
 
   const handleRetryCurrent = () => {
     useChunkStore.setState({ lastChainEvaluation: null, lastSingleEvaluation: null });
+    setPendingSpokenText(null);
     speechRec.resetTranscript();
-    setFallbackTextInput("");
     setPromptDisplayTime(Date.now());
   };
 
@@ -258,19 +277,27 @@ export default function ChunkAutomaticityPage() {
           handleRetryCurrent();
         } else if (recorder.status === "recording") {
           handleStopRecord();
+        } else if (pendingSpokenText) {
+          handleReRecord();
         } else if (!isEvaluating && !isGenerating) {
           handleStartRecord();
         }
       } else if (e.code === "Backspace" && recorder.status === "recording") {
         e.preventDefault();
         speechRec.resetTranscript();
+        setPendingSpokenText(null);
         toast.info("Đã xóa câu nói dở", "Tiếp tục nói lại từ đầu...");
-      } else if (e.code === "KeyH" && !lastChainEvaluation && !lastSingleEvaluation) {
+      } else if (e.code === "KeyH" && !lastChainEvaluation && !lastSingleEvaluation && !isEvaluating) {
         e.preventDefault();
         setCurrentHintTier((prev) => (prev >= 4 ? 0 : prev + 1));
-      } else if (e.code === "Enter" && (lastChainEvaluation || lastSingleEvaluation)) {
-        e.preventDefault();
-        handleContinue();
+      } else if (e.code === "Enter") {
+        if (pendingSpokenText && !isEvaluating) {
+          e.preventDefault();
+          handleConfirmSubmit();
+        } else if (lastChainEvaluation || lastSingleEvaluation) {
+          e.preventDefault();
+          handleContinue();
+        }
       } else if (e.code === "Escape") {
         e.preventDefault();
         router.push("/foundation");
@@ -280,20 +307,22 @@ export default function ChunkAutomaticityPage() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
+    lastChainEvaluation,
+    lastSingleEvaluation,
     recorder.status,
     isEvaluating,
     isGenerating,
-    lastChainEvaluation,
-    lastSingleEvaluation,
+    pendingSpokenText,
     handleStartRecord,
     handleStopRecord,
-    handleContinue,
+    handleConfirmSubmit,
+    handleReRecord,
     router,
     speechRec,
   ]);
 
   return (
-    <div className="fixed inset-0 h-screen w-screen bg-background text-foreground flex flex-col justify-between overflow-hidden z-40 select-none">
+    <div className="w-full min-h-[calc(100vh-8rem)] bg-card text-foreground flex flex-col justify-between overflow-hidden rounded-3xl border border-border/80 shadow-xs select-none">
       {/* Studio Header */}
       <header className="h-14 border-b border-border/60 px-4 sm:px-6 flex items-center justify-between bg-card/60 backdrop-blur-md shrink-0">
         <div className="flex items-center gap-3">
@@ -347,6 +376,37 @@ export default function ChunkAutomaticityPage() {
             </button>
           </div>
 
+          {/* Pragmatic Strategy Selector (Chain Builder) */}
+          {mode === "chain_builder" && (
+            <div className="hidden lg:flex items-center gap-1.5 bg-muted/60 px-2 py-1 rounded-xl border border-border/60 text-xs">
+              <GitFork className="size-3.5 text-primary shrink-0" />
+              <select
+                value={selectedStrategy}
+                onChange={(e) => setSelectedStrategy(e.target.value as any)}
+                className="bg-transparent border-0 text-xs font-semibold text-foreground focus:outline-none cursor-pointer pr-1"
+                title="Chọn chiến lược lập luận ngữ dụng"
+              >
+                <option value="all">Ngẫu nhiên mọi chiến lược</option>
+                <option value="opinion_defense">Lập trường & Biện minh</option>
+                <option value="concession_counter">Nhượng bộ & Phản biện (7.5+)</option>
+                <option value="problem_solution">Chẩn đoán & Giải pháp</option>
+                <option value="hypothetical_projection">Giả định & Hệ quả</option>
+                <option value="cause_effect_chain">Chuỗi nhân quả động</option>
+              </select>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => fetchNextChainTask()}
+                disabled={isGenerating || isEvaluating}
+                className="h-6 w-6 p-0 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted shrink-0"
+                title="Đổi tình huống AI ngẫu nhiên mới"
+              >
+                <Dices className="size-3.5" />
+              </Button>
+            </div>
+          )}
+
           <Button
             variant="outline"
             size="sm"
@@ -389,18 +449,26 @@ export default function ChunkAutomaticityPage() {
                 <h3 className="text-sm font-bold text-foreground">Không thể tạo bài tập từ AI</h3>
                 <p className="text-xs text-muted-foreground max-w-sm">{generationError}</p>
               </div>
-              <Button
-                size="sm"
-                onClick={() => {
-                  clearGenerationError();
-                  if (mode === "chain_builder") fetchNextChainTask();
-                  else fetchNextSingleTask();
-                }}
-                className="rounded-xl font-bold text-xs gap-1.5 h-9 px-4 btn-spring"
-              >
-                <RotateCcw className="size-3.5" />
-                <span>Thử lại ngay</span>
-              </Button>
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    clearGenerationError();
+                    if (mode === "chain_builder") fetchNextChainTask();
+                    else fetchNextSingleTask();
+                  }}
+                  className="rounded-xl font-bold text-xs gap-1.5 h-9 px-4 btn-spring"
+                >
+                  <RotateCcw className="size-3.5" />
+                  <span>Thử lại ngay</span>
+                </Button>
+                <Link href="/settings">
+                  <Button variant="outline" size="sm" className="rounded-xl text-xs h-9 px-3 gap-1.5">
+                    <Settings2 className="size-3.5" />
+                    <span>Cài đặt AI Model</span>
+                  </Button>
+                </Link>
+              </div>
             </Card>
           ) : (
             <ChunkPromptCard
@@ -423,122 +491,32 @@ export default function ChunkAutomaticityPage() {
               onContinue={handleContinue}
             />
           ) : (
-            <Card className="h-full rounded-3xl border border-border/80 bg-card shadow-sm flex flex-col justify-between p-5 sm:p-6 overflow-hidden">
-              {/* Top Prompt Guidance */}
-              <div className="space-y-2 border-b border-border/40 pb-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
-                    <Mic className="size-4 text-primary" />
-                    <span>Bộ Điều Khiển Thu Âm Khẩu Ngữ (Speaking Controller)</span>
-                  </span>
-
-                  {recorder.status === "recording" && (
-                    <Badge className="bg-red-500 text-white font-mono text-[10px] animate-pulse">
-                      ● Đang thu âm ({(recordingDurationMs / 1000).toFixed(1)}s)
-                    </Badge>
-                  )}
-                </div>
-
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  {mode === "chain_builder"
-                    ? "Hãy nối liền cả 4 khối thành 1 phát ngôn hoàn chỉnh không ngập ngừng."
-                    : "Hãy dùng cụm mục tiêu để phản xạ thành câu trả lời tự nhiên."}
-                </p>
-              </div>
-
-              {/* Center Recording Area & Waveform */}
-              <div className="flex-1 flex flex-col items-center justify-center py-6 space-y-4 text-center">
-                {recorder.status === "recording" ? (
-                  <div className="w-full space-y-4 animate-in fade-in-0">
-                    <Waveform active={true} variant="primary" />
-
-                    <div className="min-h-16 p-3.5 rounded-2xl bg-muted/40 border border-border/60 max-w-md mx-auto">
-                      <p className="font-mono text-sm sm:text-base font-bold text-foreground">
-                        "{speechRec.fullTranscript || speechRec.transcript || "Đang lắng nghe..."}"
-                      </p>
-                    </div>
-
-                    <div className="flex items-center justify-center gap-2 text-[11px] text-muted-foreground">
-                      <kbd className="px-1.5 py-0.5 rounded bg-muted font-mono font-bold">Backspace</kbd>
-                      <span>để xóa câu nói dở</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <button
-                      type="button"
-                      onClick={handleStartRecord}
-                      disabled={isGenerating || isEvaluating}
-                      className="size-24 sm:size-28 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground flex flex-col items-center justify-center shadow-lg shadow-primary/25 btn-spring mx-auto transition-transform hover:scale-105 active:scale-95"
-                    >
-                      <Mic className="size-8 sm:size-10 mb-1" />
-                      <span className="text-[10px] font-bold font-mono uppercase tracking-wider">
-                        Bấm nói
-                      </span>
-                    </button>
-
-                    <div className="text-xs text-muted-foreground">
-                      <span>Nhấn phím </span>
-                      <kbd className="px-1.5 py-0.5 rounded bg-muted font-mono font-bold text-foreground">
-                        Space
-                      </kbd>
-                      <span> để kích hoạt micro rảnh tay</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Bottom Controller & Fallback Text Input */}
-              <div className="pt-4 border-t border-border/40 space-y-3">
-                {recorder.status === "recording" ? (
-                  <Button
-                    size="lg"
-                    variant="destructive"
-                    onClick={handleStopRecord}
-                    disabled={isEvaluating}
-                    className="w-full h-12 rounded-2xl font-bold gap-2 text-sm shadow-md animate-pulse"
-                  >
-                    {isEvaluating ? (
-                      <>
-                        <Loader2 className="size-4 animate-spin" />
-                        <span>AI đang phân tích độ trễ & liên kết khối...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Square className="size-4 fill-white" />
-                        <span>Hoàn tất & Đánh giá ngay</span>
-                        <kbd className="px-1.5 py-0.5 text-[10px] bg-white/20 rounded font-mono">
-                          Space
-                        </kbd>
-                      </>
-                    )}
-                  </Button>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={fallbackTextInput}
-                      onChange={(e) => setFallbackTextInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          handleSubmitFallbackText();
-                        }
-                      }}
-                      placeholder="Hoặc gõ câu bạn định nói vào đây nếu micro có sự cố..."
-                      className="flex-1 h-10 px-3 rounded-xl border border-border/80 bg-background text-xs text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-primary font-mono"
-                    />
-                    <Button
-                      size="sm"
-                      onClick={handleSubmitFallbackText}
-                      disabled={!fallbackTextInput.trim() || isEvaluating}
-                      className="h-10 px-4 rounded-xl text-xs font-bold shrink-0"
-                    >
-                      Gửi
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </Card>
+            <SpeakingController
+              status={
+                isEvaluating
+                  ? "processing"
+                  : recorder.status === "recording"
+                  ? "recording"
+                  : "idle"
+              }
+              isListening={speechRec.isListening}
+              liveTranscript={speechRec.fullTranscript || speechRec.transcript}
+              durationMs={recordingDurationMs}
+              autoStartMic={autoStartMic}
+              onToggleAutoStartMic={setAutoStartMic}
+              onStartRecord={handleStartRecord}
+              onStopRecord={handleStopRecord}
+              onSubmitTextFallback={(text) => executeEvaluation(text, 1500)}
+              onOpenHints={() => setCurrentHintTier((prev) => (prev >= 4 ? 0 : prev + 1))}
+              isEvaluating={isEvaluating}
+              onResetLiveTranscript={() => {
+                speechRec.resetTranscript();
+                setPendingSpokenText(null);
+              }}
+              pendingText={pendingSpokenText}
+              onConfirmSubmit={handleConfirmSubmit}
+              onReRecord={handleReRecord}
+            />
           )}
         </div>
       </main>
@@ -548,20 +526,40 @@ export default function ChunkAutomaticityPage() {
         <div className="flex items-center gap-4 overflow-x-auto">
           <span className="flex items-center gap-1.5">
             <kbd className="px-1 py-0.5 rounded bg-muted border text-[10px]">Space</kbd>
-            <span>Bật/Tắt Mic & Thử lại</span>
+            <span>
+              {lastChainEvaluation || lastSingleEvaluation
+                ? "Nói lại"
+                : pendingSpokenText
+                ? "Thu âm lại"
+                : recorder.status === "recording"
+                ? "Dừng nói"
+                : "Bật mic"}
+            </span>
           </span>
-          <span className="flex items-center gap-1.5">
-            <kbd className="px-1 py-0.5 rounded bg-muted border text-[10px]">Backspace</kbd>
-            <span>Xóa câu dở</span>
-          </span>
+          {recorder.status === "recording" && (
+            <span className="flex items-center gap-1.5 text-red-500 font-semibold animate-pulse">
+              <kbd className="px-1 py-0.5 rounded bg-red-500/20 text-red-500 border border-red-500/30 text-[10px]">
+                Backspace
+              </kbd>
+              <span>Xóa câu dở</span>
+            </span>
+          )}
           <span className="flex items-center gap-1.5">
             <kbd className="px-1 py-0.5 rounded bg-muted border text-[10px]">H</kbd>
             <span>Đổi gợi ý T1-T4</span>
           </span>
-          <span className="flex items-center gap-1.5">
-            <kbd className="px-1 py-0.5 rounded bg-muted border text-[10px]">Enter</kbd>
-            <span>Chuỗi tiếp theo</span>
-          </span>
+          {pendingSpokenText && !isEvaluating && (
+            <span className="flex items-center gap-1.5 text-primary font-bold">
+              <kbd className="px-1 py-0.5 rounded bg-primary text-primary-foreground border text-[10px]">Enter</kbd>
+              <span>Nộp bài chấm điểm</span>
+            </span>
+          )}
+          {(lastChainEvaluation || lastSingleEvaluation) && (
+            <span className="flex items-center gap-1.5 text-primary font-bold">
+              <kbd className="px-1 py-0.5 rounded bg-primary text-primary-foreground border text-[10px]">Enter</kbd>
+              <span>Chuỗi tiếp theo</span>
+            </span>
+          )}
           <span className="flex items-center gap-1.5">
             <kbd className="px-1 py-0.5 rounded bg-muted border text-[10px]">Esc</kbd>
             <span>Thoát Studio</span>

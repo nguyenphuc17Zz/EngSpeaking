@@ -21,6 +21,8 @@ import {
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import { useSettingsStore } from "@/stores/settings-store";
+import { transcribeViaServer } from "@/lib/stt/service";
 import { MicButton } from "@/components/voice/MicButton";
 import { Waveform } from "@/components/voice/Waveform";
 import { soundEffects } from "@/lib/audio/audio-chimes";
@@ -65,9 +67,13 @@ export function RetryFeedbackPanel({
     soundEffects.playMicStart();
     speechRec.resetTranscript();
     setRecordingStartTime(Date.now());
+    const settings = useSettingsStore.getState();
+    const isBrowserSTT = (settings.stt?.provider || "browser") === "browser";
     try {
       await recorder.start();
-      speechRec.startListening();
+      if (isBrowserSTT) {
+        speechRec.startListening();
+      }
     } catch {}
   };
 
@@ -75,13 +81,35 @@ export function RetryFeedbackPanel({
   const handleStopRecord = async () => {
     if (recorder.status !== "recording") return;
     soundEffects.playMicStop();
+    const settings = useSettingsStore.getState();
+    const sttProvider = settings.stt?.provider || "browser";
+    const sttModel =
+      settings.stt?.model ||
+      (sttProvider === "groq" ? "whisper-large-v3" : "onnx-community/whisper-tiny.en");
+
     speechRec.stopListening();
     const durationMs = Math.max(600, Date.now() - recordingStartTime);
 
     try {
-      await recorder.stop();
-      await new Promise((r) => setTimeout(r, 400));
-      const spokenText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
+      const recording = await recorder.stop();
+      let spokenText = "";
+
+      if (sttProvider !== "browser" && recording?.blob) {
+        try {
+          const res = await transcribeViaServer(recording.blob, {
+            provider: sttProvider === "auto" ? "whisper-local" : sttProvider,
+            model: sttModel,
+            language: "en-US",
+          });
+          spokenText = res.text.trim();
+        } catch {
+          spokenText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
+        }
+      } else {
+        await new Promise((r) => setTimeout(r, 400));
+        spokenText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
+      }
+
       if (spokenText) {
         const res = await onRecordAttempt(spokenText, durationMs);
         if (res?.isSuccessful) {

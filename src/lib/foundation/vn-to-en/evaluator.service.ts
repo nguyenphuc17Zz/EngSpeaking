@@ -226,6 +226,11 @@ function computeDeterministicVNEvaluation(
     ],
     praisePoints: praisePoints.length > 0 ? praisePoints : ["Đã nỗ lực phản xạ khẩu ngữ."],
     actionableFeedback,
+    sayItBetter: task.sayItBetter || {
+      professional: task.expectedResponses[0] || betterVersion,
+      casual: task.expectedResponses[1] || task.expectedResponses[0] || betterVersion,
+      idiomatic: task.expectedResponses[2] || task.expectedResponses[0] || betterVersion,
+    },
     hintTierUsed: hintTier,
     attemptNumber: attempt,
   };
@@ -297,7 +302,11 @@ export async function evaluateVNToENAttempt(
       throw new Error("Invalid evaluator schema");
     }
 
-    return validated.data as VNToENEvaluation;
+    const evalData = validated.data as VNToENEvaluation;
+    if (!evalData.sayItBetter && params.task.sayItBetter) {
+      evalData.sayItBetter = params.task.sayItBetter;
+    }
+    return evalData;
   } catch (err) {
     if (provider === "mock") {
       return computeDeterministicVNEvaluation(params.task, params.userTranscript, {

@@ -43,6 +43,12 @@ export interface CircumlocutionTask {
   tierHints?: SurvivalHintTier[];
   sampleExplanations: string[];
   suggestedVocabulary?: SurvivalVocabularyItem[];
+  
+  // Aristotelian Definition Properties
+  genus?: string; // e.g. "a kitchen appliance"
+  differentia?: string; // e.g. "used to heat food quickly using electromagnetic waves"
+  semanticKeyAnchors?: string[]; // e.g. ["heat", "warm", "food", "kitchen", "quick"]
+  tabooLemmas?: string[]; // e.g. ["microwave", "microwaving", "microwaved"]
 }
 
 export interface SurvivalScenarioTask {
@@ -63,9 +69,18 @@ export interface SurvivalEvaluationResult {
   communicationRecovered: boolean;
   strategyUsed: SurvivalSkillType;
   
-  // Circumlocution specific
+  // Circumlocution specific & Aristotelian Evaluation
   targetWordAvoided?: boolean;
   conceptClarityScore: number; // 0-100
+  genusDetected?: boolean; // Identified hypernym / category
+  differentiaDetected?: boolean; // Identified core function / distinguishing feature
+  semanticPrecisionScore?: number; // 0-100: How precisely this specifies target word
+  listenerGuess?: string; // Native speaker's guess, e.g. "A microwave oven!"
+  clarityBreakdown?: {
+    genusScore: number;
+    functionScore: number;
+    ambiguityPenalty: number;
+  };
   
   // Latency & Naturalness
   repairInitiationLatencyMs: number;

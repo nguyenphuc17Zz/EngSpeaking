@@ -8,6 +8,7 @@ import {
   buildRepairEvaluatorUserPrompt,
 } from "@/lib/ai/prompts/retry-loop-prompts";
 import type { TargetedCorrection, RepairEvaluationResult } from "@/types/retry-loop";
+import { computeTokenAlignment } from "./token-alignment";
 
 export interface EvaluateRepairAttemptParams {
   targetCorrection: TargetedCorrection;
@@ -66,6 +67,13 @@ function computeDeterministicRepairEvaluation(
     feedbackMessage = "Rất tốt! Bạn đã tự phát hiện và sửa lỗi ngay trong khi nói (Self-Correction bonus +100).";
   }
 
+  const diffTokens = computeTokenAlignment({
+    originalSentence: params.originalTranscript || params.targetCorrection.userErroneousText,
+    repairedSentence: params.userRetryTranscript,
+    erroneousWord: params.targetCorrection.userErroneousText,
+    minimalCorrection: params.targetCorrection.minimalCorrection,
+  });
+
   return {
     isTargetErrorResolved,
     isMeaningMaintained,
@@ -77,6 +85,8 @@ function computeDeterministicRepairEvaluation(
     isSuccessful,
     shouldEscalateSupport,
     canAdvance,
+    isMidSpeechSelfCorrection: selfCorrectionDetected,
+    diffTokens,
   };
 }
 
@@ -140,7 +150,16 @@ export async function evaluateRepairAttempt(
       throw new Error("Invalid repair evaluation schema");
     }
 
-    return validated.data as RepairEvaluationResult;
+    const evalData = validated.data as RepairEvaluationResult;
+    if (!evalData.diffTokens || evalData.diffTokens.length === 0) {
+      evalData.diffTokens = computeTokenAlignment({
+        originalSentence: params.originalTranscript || params.targetCorrection.userErroneousText,
+        repairedSentence: params.userRetryTranscript,
+        erroneousWord: params.targetCorrection.userErroneousText,
+        minimalCorrection: params.targetCorrection.minimalCorrection,
+      });
+    }
+    return evalData;
   } catch (err) {
     if (provider === "mock") {
       return computeDeterministicRepairEvaluation(params);

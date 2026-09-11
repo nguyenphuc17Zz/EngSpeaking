@@ -73,23 +73,26 @@ function cleanJson(text: string): unknown {
 }
 
 export function computeDeterministicDiagnostic(records: MasterErrorRecord[]): SpokenDiagnosticReport {
-  const totalOccurrences = records.reduce((acc, r) => acc + (r.frequency || 1), 0);
-  const retrievalCount = records.filter((r) => r.gapType === "retrieval_gap" || r.averageLatencyMs > 3000).length;
-  const retrievalPercent = records.length > 0 ? Math.min(90, Math.max(60, Math.round((retrievalCount / records.length) * 100))) : 80;
+  const retrievalCount = records.filter(
+    (r) => r.gapType === "retrieval_gap" || (r.pMastery && r.pMastery >= 0.6) || r.averageLatencyMs > 3000
+  ).length;
+  const retrievalPercent = records.length > 0 ? Math.min(90, Math.max(50, Math.round((retrievalCount / records.length) * 100))) : 80;
   const knowledgePercent = 100 - retrievalPercent;
 
-  const topPersistent = records.find((r) => r.status === "persistent" || r.frequency > 2);
+  const topPersistent = records.find(
+    (r) => r.fossilizationLevel === "fossilized" || r.status === "persistent" || r.frequency > 2
+  );
 
   return {
     id: `diag_${Date.now()}`,
     generatedAt: new Date().toISOString(),
     primaryBottleneckVi: topPersistent
-      ? `Điểm nghẽn lớn nhất: Thói quen lặp lại ở "${topPersistent.labelVi}". Kiến thức lý thuyết tốt nhưng tốc độ truy xuất tự động (Spoken Retrieval) chưa bắt kịp ý nghĩ.`
+      ? `Điểm nghẽn lớn nhất: Thói quen lặp lại ở "${topPersistent.labelVi}" (Nguy cơ hóa đá: ${topPersistent.fossilizationScore || 65}%). Kiến thức nền tảng đã làm chủ ${(topPersistent.pMastery ? Math.round(topPersistent.pMastery * 100) : 75)}% nhưng tốc độ truy xuất tự động (Spoken Retrieval) chưa bắt kịp ý nghĩ.`
       : "Vùng vận động khẩu ngữ bị nghẽn ở các thì quá khứ và phản xạ dịch thô nguyên từ từ tiếng Việt.",
     retrievalVsKnowledgeRatio: {
       retrievalGapPercent: retrievalPercent,
       knowledgeGapPercent: knowledgePercent,
-      explanationVi: `80% lỗi xuất phát từ độ trễ truy xuất phản xạ dưới áp lực nói nhanh (Retrieval Gap), không phải do bạn chưa biết ngữ pháp. Hãy tập trung luyện phản xạ câu ngắn thay vì học thêm lý thuyết.`,
+      explanationVi: `${retrievalPercent}% lỗi xuất phát từ độ trễ truy xuất phản xạ dưới áp lực nói nhanh (Retrieval Gap), không phải do bạn chưa biết ngữ pháp. Hãy tập trung luyện phản xạ câu ngắn thay vì học thêm lý thuyết.`,
     },
     l1InterferencePatterns: [
       {
@@ -145,6 +148,11 @@ export async function generateSpokenDiagnosticReport(
     frequency: r.frequency,
     recoveryRate: r.recoveryRate,
     status: r.status,
+    pMastery: r.pMastery ? Math.round(r.pMastery * 100) : undefined,
+    fossilizationLevel: r.fossilizationLevel,
+    fossilizationScore: r.fossilizationScore,
+    fsrsStabilityDays: r.fsrsStability,
+    retrievability: r.retrievability,
     averageLatencyMs: r.averageLatencyMs,
     sampleUserText: r.examples[0]?.userText,
     sampleCorrection: r.examples[0]?.correction,

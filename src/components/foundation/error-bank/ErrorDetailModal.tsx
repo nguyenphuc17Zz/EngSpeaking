@@ -4,7 +4,6 @@ import Link from "next/link";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
@@ -12,18 +11,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/lib/toast";
 import {
-  Brain,
   RotateCcw,
-  Clock,
-  Zap,
-  AlertTriangle,
-  CheckCircle2,
   Flag,
   ArrowRight,
   Target,
-  Sparkles,
-  HelpCircle,
   Volume2,
+  Brain,
+  Timer,
+  Flame,
+  CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
 import type { MasterErrorRecord } from "@/types/error-bank";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
@@ -67,6 +64,10 @@ export function ErrorDetailModal({
     }
   };
 
+  const pMastery = Math.round((record.pMastery ?? 0.3) * 100);
+  const currentR = record.retrievability ?? 90;
+  const fossilScore = record.fossilizationScore ?? 45;
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto rounded-3xl p-6 md:p-8 bg-card border border-border/80 shadow-2xl space-y-6">
@@ -91,6 +92,52 @@ export function ErrorDetailModal({
           <DialogDescription className="text-xs text-muted-foreground">
             {record.descriptionVi}
           </DialogDescription>
+        </div>
+
+        {/* Math Engine Insights Cards */}
+        <div className="grid sm:grid-cols-3 gap-3">
+          {/* 1. BKT Mastery */}
+          <div className="p-3.5 rounded-2xl bg-primary/5 border border-primary/20 space-y-1">
+            <div className="flex items-center justify-between text-xs font-bold text-primary">
+              <span className="flex items-center gap-1.5">
+                <Brain className="size-3.5" /> BKT Mastery
+              </span>
+              <span>{pMastery}%</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-tight">
+              {pMastery >= 75
+                ? "Bạn đã làm chủ quy tắc vững vàng. Vấp lỗi chủ yếu do tốc độ nói."
+                : "Đang củng cố nền tảng nhận thức cho quy tắc này."}
+            </p>
+          </div>
+
+          {/* 2. FSRS Spaced Memory */}
+          <div className="p-3.5 rounded-2xl bg-violet-500/5 border border-violet-500/20 space-y-1">
+            <div className="flex items-center justify-between text-xs font-bold text-violet-600 dark:text-violet-400">
+              <span className="flex items-center gap-1.5">
+                <Timer className="size-3.5" /> FSRS Trí nhớ
+              </span>
+              <span>{currentR}%</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-tight">
+              Độ bền S: {record.fsrsStability?.toFixed(1) || "1.0"} ngày. {currentR < 90 ? "Đến hạn ôn tập!" : "Ký ức còn tươi mới."}
+            </p>
+          </div>
+
+          {/* 3. Fossilization Risk */}
+          <div className="p-3.5 rounded-2xl bg-rose-500/5 border border-rose-500/20 space-y-1">
+            <div className="flex items-center justify-between text-xs font-bold text-rose-600 dark:text-rose-400">
+              <span className="flex items-center gap-1.5">
+                <Flame className="size-3.5" /> Hóa đá L1
+              </span>
+              <span>{fossilScore}%</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-tight">
+              {fossilScore >= 65
+                ? "Thói quen mẹ đẻ ăn sâu, cần phản xạ tốc độ để bẻ gãy."
+                : "Thói quen đang được điều chỉnh tích cực."}
+            </p>
+          </div>
         </div>
 
         {/* 4 Quantitative Metrics */}
@@ -142,9 +189,9 @@ export function ErrorDetailModal({
 
                 <div className="flex items-center justify-between font-mono">
                   <div className="flex items-baseline gap-2 flex-1">
-                    <span className="line-through text-red-500 font-semibold">"{ex.userText}"</span>
+                    <span className="line-through text-red-500 font-semibold">&ldquo;{ex.userText}&rdquo;</span>
                     <span className="text-muted-foreground">→</span>
-                    <span className="text-emerald-600 dark:text-emerald-400 font-bold">"{ex.correction}"</span>
+                    <span className="text-emerald-600 dark:text-emerald-400 font-bold">&ldquo;{ex.correction}&rdquo;</span>
                   </div>
                   <Button
                     type="button"

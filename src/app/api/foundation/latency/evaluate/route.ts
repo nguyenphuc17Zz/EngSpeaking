@@ -9,6 +9,7 @@ export async function POST(req: NextRequest) {
       userTranscript = "",
       responseLatencyMs = 2000,
       speechDurationMs = 2500,
+      speechOnsetMs,
       provider,
       model,
     } = body;
@@ -22,6 +23,7 @@ export async function POST(req: NextRequest) {
       userTranscript,
       responseLatencyMs,
       speechDurationMs,
+      speechOnsetMs,
       provider,
       model,
     });

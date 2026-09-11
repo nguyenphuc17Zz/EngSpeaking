@@ -11,1104 +11,2303 @@ import { triggerConfetti } from "@/components/ui/confetti";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import { transcribeViaServer } from "@/lib/stt/service";
+import { useSettingsStore } from "@/stores/settings-store";
 import { soundEffects } from "@/lib/audio/audio-chimes";
-import { SentencePracticeCard } from "@/components/foundation/shadowing/SentencePracticeCard";
+import { WordLookupPopup } from "@/components/foundation/shadowing/WordLookupPopup";
 import {
   computeShadowingScore,
   type ShadowingScoreResult,
 } from "@/lib/foundation/shadowing/pronunciation-scorer";
-import { generateDeterministicEnhancement } from "@/lib/foundation/shadowing/deterministic-chunker";
+import {
+  CORODOMO_VIDEO_PRESETS,
+  type CorodomoVideoLesson,
+  type CorodomoSegment,
+  extractYouTubeVideoId,
+} from "@/lib/foundation/shadowing/corodomo-presets";
+import {
+  getSentenceWordsWithIpa,
+  type WordIpaToken,
+} from "@/lib/foundation/shadowing/ipa-dictionary";
+import {
+  getShadowingHistory,
+  saveToShadowingHistory,
+  removeFromShadowingHistory,
+  clearShadowingHistory,
+  type ShadowingHistoryItem,
+} from "@/lib/foundation/shadowing/shadowing-history.service";
+import {
+  getVideoLibrary,
+  addVideoToLibrary,
+  updateVideoInLibrary,
+  deleteVideoFromLibrary,
+  resetVideoLibraryToDefaults,
+  type SavedVideoLesson,
+} from "@/lib/foundation/shadowing/shadowing-library.service";
+import { lookupLexiconWord } from "@/lib/foundation/vocabulary/lexicon-db.service";
+import { SessionCompletedModal } from "@/components/voice/SessionCompletedModal";
 import {
   ArrowLeft,
-  Headphones,
-  Link as LinkIcon,
-  Clipboard,
-  Library,
-  BookOpen,
-  Trash2,
-  Loader2,
-  Activity,
-  Video,
-  X,
-  PlusCircle,
-  FileText,
+  Play,
+  Pause,
+  ChevronLeft,
+  ChevronRight,
   Sparkles,
+  Search,
+  PlusCircle,
+  X,
+  Loader2,
+  CheckCircle2,
+  Volume2,
+  Download,
+  Copy,
+  Check,
+  Eye,
+  EyeOff,
+  Type,
+  Languages,
+  Mic,
+  MicOff,
+  Repeat,
+  Keyboard,
+  Video,
+  ChevronDown,
+  ChevronUp,
+  History,
+  Trash2,
+  ExternalLink,
+  Clock,
+  Award,
+  Layers,
+  Film,
+  Library,
+  Pencil,
+  RotateCcw,
 } from "lucide-react";
-import type {
-  YouTubeTranscriptSegment,
-  LinguisticAnalysisResult,
-  SavedYouTubeItem,
-} from "@/types/shadowing";
+import { cn } from "@/lib/utils";
 
-type SubtitleLayer = "en" | "thought_groups" | "ipa" | "vi" | "hidden";
+declare global {
+  interface Window {
+    YT: any;
+    onYouTubeIframeAPIReady: () => void;
+  }
+}
 
-export default function YouTubeShadowingPage() {
+type MainView = "hub" | "studio";
+type StudioMode = "shadowing" | "pronounce";
+
+function YouTubeIcon({ className = "size-5" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+    </svg>
+  );
+}
+
+export default function CorodomoShadowingStudioPage() {
   const router = useRouter();
+  const settings = useSettingsStore();
   const tts = useBrowserTTS();
   const recorder = useAudioRecorder();
   const speechRec = useSpeechRecognition("en-US");
 
-  // ─── Video State (Pure real data, no hardcoded segments) ────────────
-  const [youtubeUrl, setYoutubeUrl] = useState("");
-  const [currentVideoId, setCurrentVideoId] = useState<string | null>(null);
-  const [videoTitle, setVideoTitle] = useState("");
-  const [channelName, setChannelName] = useState("");
-  const [segments, setSegments] = useState<YouTubeTranscriptSegment[]>([]);
+  // ─── Top-Level View State: "hub" (Màn chính) | "studio" (Phòng học) ─
+  const [currentView, setCurrentView] = useState<MainView>("hub");
+  const [activeMode, setActiveMode] = useState<StudioMode>("shadowing");
+
+  // ─── Lesson & Practice State ─────────────────────────────────────────
+  const [activeLesson, setActiveLesson] = useState<CorodomoVideoLesson>(CORODOMO_VIDEO_PRESETS[0]);
   const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
+  const activeSegmentIndexRef = useRef(0);
+  activeSegmentIndexRef.current = activeSegmentIndex;
 
-  // ─── Deterministic Analysis Result (Zero AI, 0ms computation) ──────
-  const [analysis, setAnalysis] = useState<LinguisticAnalysisResult | null>(null);
+  // ─── History State ───────────────────────────────────────────────────
+  const [watchHistory, setWatchHistory] = useState<ShadowingHistoryItem[]>([]);
 
-  // ─── UI State ─────────────────────────────────────────────────────────
-  const [rightTab, setRightTab] = useState<"transcript" | "deck">("transcript");
-  const [subtitleLayer, setSubtitleLayer] = useState<SubtitleLayer>("thought_groups");
+  // ─── Playback & Sync State ───────────────────────────────────────────
+  const [isPlayingVideo, setIsPlayingVideo] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
+  const [autoPauseEnabled, setAutoPauseEnabled] = useState(false);
+  const [isLooping, setIsLooping] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [isVideoHidden, setIsVideoHidden] = useState(false);
+  const [fontSizeLevel, setFontSizeLevel] = useState<"md" | "lg" | "xl">("lg");
 
-  // ─── Recording State ─────────────────────────────────────────────────
-  const [recordingStatus, setRecordingStatus] = useState<"idle" | "listening" | "recording" | "evaluating">("idle");
+  // ─── Subtitle Toggles ([Phụ đề] & [Bản dịch]) ────────────────────────
+  const [showSubtitle, setShowSubtitle] = useState(true);
+  const [showTranslation, setShowTranslation] = useState(true);
+
+  // ─── Recording & Scoring State (Phát âm mode) ────────────────────────
+  const [recordingStatus, setRecordingStatus] = useState<
+    "idle" | "listening" | "recording" | "evaluating"
+  >("idle");
   const [score, setScore] = useState<ShadowingScoreResult | null>(null);
   const [userAudioUrl, setUserAudioUrl] = useState<string | null>(null);
-  const [isLooping, setIsLooping] = useState(false);
+  const [sentenceScores, setSentenceScores] = useState<Record<string, ShadowingScoreResult>>({});
   const [recordingStartMs, setRecordingStartMs] = useState(0);
 
-  // ─── Session Stats ────────────────────────────────────────────────────
-  const [sessionScores, setSessionScores] = useState<number[]>([]);
+  // ─── UI & Input State ────────────────────────────────────────────────
+  const [customUrlInput, setCustomUrlInput] = useState("");
+  const [showAddVideoModal, setShowAddVideoModal] = useState(false);
+  const [modalUrlInput, setModalUrlInput] = useState("");
+  const youtubeInputRef = useRef<HTMLInputElement | null>(null);
+  const [isLoadingCustomUrl, setIsLoadingCustomUrl] = useState(false);
+  const [transcriptSearch, setTranscriptSearch] = useState("");
+  const [showCompletedModal, setShowCompletedModal] = useState(false);
+  const [showSubtitleAccordion, setShowSubtitleAccordion] = useState(true);
+  const [elapsedSec, setElapsedSec] = useState(0);
 
-  // ─── Library State ───────────────────────────────────────────────────
-  const [libraryItems, setLibraryItems] = useState<SavedYouTubeItem[]>([]);
-  const [showLibrary, setShowLibrary] = useState(false);
-
-  // ─── Loading State (Pure network fetch for subtitles only) ───────────
-  const [isLoadingTranscript, setIsLoadingTranscript] = useState(false);
-
-  // ─── Custom Script Modal State ────────────────────────────────────────
-  const [showCustomScriptModal, setShowCustomScriptModal] = useState(false);
-  const [customScriptText, setCustomScriptText] = useState("");
-
-  // ─── Deck (saved words) ──────────────────────────────────────────────
+  // ─── Word Lookup Popup State ─────────────────────────────────────────
+  const [popupWord, setPopupWord] = useState<any | null>(null);
+  const [popupAnchor, setPopupAnchor] = useState<HTMLElement | null>(null);
   const [vocabDeck, setVocabDeck] = useState<any[]>([]);
 
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const currentSegment = segments[activeSegmentIndex] || null;
+  // ─── Refs ────────────────────────────────────────────────────────────
+  const playerRef = useRef<any>(null);
+  const playerContainerRef = useRef<HTMLDivElement | null>(null);
+  const timelineItemRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const autoPauseTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isUserInteractingTimeline = useRef(false);
 
-  // ─── YouTube Controls ────────────────────────────────────────────────
-  const seekYouTubeTo = useCallback((startTime: number, autoPlay = true) => {
-    if (iframeRef.current?.contentWindow) {
-      iframeRef.current.contentWindow.postMessage(
-        JSON.stringify({ event: "command", func: "seekTo", args: [startTime, true] }),
-        "*"
-      );
-      if (autoPlay) {
-        iframeRef.current.contentWindow.postMessage(
-          JSON.stringify({ event: "command", func: "playVideo", args: [] }),
-          "*"
-        );
-      }
-      if (playbackSpeed !== 1.0) {
-        setTimeout(() => {
-          iframeRef.current?.contentWindow?.postMessage(
-            JSON.stringify({ event: "command", func: "setPlaybackRate", args: [playbackSpeed] }),
-            "*"
-          );
-        }, 300);
-      }
-    }
-  }, [playbackSpeed]);
+  // ─── Video Library (CRUD) State ──────────────────────────────────────
+  const [videoLibrary, setVideoLibrary] = useState<SavedVideoLesson[]>([]);
+  const [libraryCefrFilter, setLibraryCefrFilter] = useState<string>("all");
+  const [librarySearch, setLibrarySearch] = useState<string>("");
+  const [editingLesson, setEditingLesson] = useState<SavedVideoLesson | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editChannel, setEditChannel] = useState("");
+  const [editCefr, setEditCefr] = useState("B1");
 
-  const pauseYouTube = useCallback(() => {
-    iframeRef.current?.contentWindow?.postMessage(
-      JSON.stringify({ event: "command", func: "pauseVideo", args: [] }),
-      "*"
-    );
+  // ─── Load History & Library on Mount ─────────────────────────────────
+  useEffect(() => {
+    setWatchHistory(getShadowingHistory());
+    setVideoLibrary(getVideoLibrary());
   }, []);
 
-  const loopTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const handleOpenEditModal = (lesson: SavedVideoLesson, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingLesson(lesson);
+    setEditTitle(lesson.title);
+    setEditChannel(lesson.channel);
+    setEditCefr(lesson.cefrLevel || "B1");
+  };
 
-  // ─── Play Native segment (with Loop support) ──────────────────────────
-  const handlePlayNative = useCallback(() => {
-    if (!currentSegment) return;
-    if (loopTimeoutRef.current) clearTimeout(loopTimeoutRef.current);
-    pauseYouTube();
-    tts.speak(currentSegment.text);
-    seekYouTubeTo(currentSegment.start_time, true);
-    const dur = (currentSegment.end_time - currentSegment.start_time) / playbackSpeed;
-    loopTimeoutRef.current = setTimeout(() => {
-      pauseYouTube();
-      if (isLooping) {
-        handlePlayNative();
-      }
-    }, dur * 1000 + 400);
-  }, [currentSegment, seekYouTubeTo, pauseYouTube, tts, playbackSpeed, isLooping]);
-
-  const handleToggleLoop = useCallback(() => {
-    setIsLooping((prev) => {
-      const next = !prev;
-      if (!next && loopTimeoutRef.current) {
-        clearTimeout(loopTimeoutRef.current);
-      }
-      return next;
+  const handleSaveEdit = () => {
+    if (!editingLesson) return;
+    const updated = updateVideoInLibrary(editingLesson.id, {
+      title: editTitle.trim() || editingLesson.title,
+      channel: editChannel.trim() || editingLesson.channel,
+      cefrLevel: editCefr,
     });
+    setVideoLibrary(updated);
+    if (activeLesson.id === editingLesson.id) {
+      setActiveLesson((prev) => ({
+        ...prev,
+        title: editTitle.trim() || prev.title,
+        channel: editChannel.trim() || prev.channel,
+        cefrLevel: editCefr,
+      }));
+    }
+    setEditingLesson(null);
+    toast.success("Đã cập nhật bài học!");
+  };
+
+  const handleDeleteFromLibrary = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = deleteVideoFromLibrary(id);
+    setVideoLibrary(updated);
+    toast.info("Đã xóa bài học khỏi thư viện");
+  };
+
+  const handleResetDefaults = () => {
+    const defaults = resetVideoLibraryToDefaults();
+    setVideoLibrary(defaults);
+    toast.success("Đã khôi phục các bài học mặc định!");
+  };
+
+  const filteredLibrary = useMemo(() => {
+    return videoLibrary.filter((item) => {
+      const matchesCefr =
+        libraryCefrFilter === "all" ||
+        item.cefrLevel?.toLowerCase() === libraryCefrFilter.toLowerCase();
+      const matchesQuery =
+        !librarySearch.trim() ||
+        item.title.toLowerCase().includes(librarySearch.toLowerCase()) ||
+        item.channel.toLowerCase().includes(librarySearch.toLowerCase());
+      return matchesCefr && matchesQuery;
+    });
+  }, [videoLibrary, libraryCefrFilter, librarySearch]);
+
+  const currentSegment: CorodomoSegment =
+    activeLesson.segments[activeSegmentIndex] || activeLesson.segments[0];
+
+  // Tokenize current sentence with IPA above every word
+  const currentSentenceTokens: WordIpaToken[] = useMemo(() => {
+    if (!currentSegment?.text) return [];
+    return getSentenceWordsWithIpa(currentSegment.text);
+  }, [currentSegment?.text]);
+
+  // ─── Load YouTube IFrame API ──────────────────────────────────────────
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    if (!window.YT) {
+      const tag = document.createElement("script");
+      tag.src = "https://www.youtube.com/iframe_api";
+      const firstScriptTag = document.getElementsByTagName("script")[0];
+      firstScriptTag?.parentNode?.insertBefore(tag, firstScriptTag);
+    }
   }, []);
 
-  // ─── Navigate Segments ────────────────────────────────────────────────
-  const goToSegment = useCallback(
-    (idx: number) => {
-      if (loopTimeoutRef.current) clearTimeout(loopTimeoutRef.current);
-      pauseYouTube();
-      setActiveSegmentIndex(idx);
+  // ─── Initialize / Update YouTube Player Instance ─────────────────────
+  const initYouTubePlayer = useCallback(
+    (videoId: string) => {
+      if (typeof window === "undefined" || currentView !== "studio") return;
+
+      const createPlayer = () => {
+        const el = document.getElementById("corodomo-yt-player");
+        if (!el || !window.YT || !window.YT.Player) return;
+
+        if (playerRef.current) {
+          try {
+            playerRef.current.destroy();
+          } catch {}
+        }
+
+        playerRef.current = new window.YT.Player("corodomo-yt-player", {
+          videoId,
+          playerVars: {
+            enablejsapi: 1,
+            rel: 0,
+            modestbranding: 1,
+            controls: 1,
+            playsinline: 1,
+            origin: typeof window !== "undefined" ? window.location.origin : undefined,
+          },
+          events: {
+            onReady: () => {
+              playerRef.current?.setPlaybackRate(playbackSpeed);
+            },
+            onStateChange: (event: any) => {
+              if (event.data === 1) setIsPlayingVideo(true);
+              else if (event.data === 2 || event.data === 0) setIsPlayingVideo(false);
+            },
+          },
+        });
+      };
+
+      if (window.YT && window.YT.Player) {
+        createPlayer();
+      } else {
+        window.onYouTubeIframeAPIReady = createPlayer;
+      }
+    },
+    [playbackSpeed, currentView]
+  );
+
+  useEffect(() => {
+    if (currentView === "studio" && activeLesson?.youtubeId) {
+      initYouTubePlayer(activeLesson.youtubeId);
+    }
+    return () => {
+      if (playerRef.current) {
+        try {
+          playerRef.current.destroy();
+        } catch {}
+      }
+    };
+  }, [currentView, activeLesson?.youtubeId, initYouTubePlayer]);
+
+  // ─── Real-Time Sentence Synchronization Tracking (Hysteresis Engine) ───
+  useEffect(() => {
+    if (currentView !== "studio") return;
+
+    let animId: number;
+    let lastTimeCheck = 0;
+
+    const syncLoop = () => {
+      if (playerRef.current && typeof playerRef.current.getCurrentTime === "function") {
+        const now = performance.now();
+        if (now - lastTimeCheck > 120) {
+          lastTimeCheck = now;
+          try {
+            const time = playerRef.current.getCurrentTime();
+            if (typeof time === "number" && !isNaN(time)) {
+              setCurrentTime(time);
+
+              const segments = activeLesson.segments;
+              if (segments.length > 0) {
+                const curIdx = activeSegmentIndexRef.current;
+                const currentSeg = segments[curIdx];
+                let matchedIdx = -1;
+
+                // 1. Fast Path: Check if playback is within the active sentence (+ 350ms hysteresis)
+                if (
+                  currentSeg &&
+                  time >= currentSeg.start_time - 0.15 &&
+                  time <= currentSeg.end_time + 0.35
+                ) {
+                  matchedIdx = curIdx;
+                } else {
+                  // 2. Monotonic Lookahead: Next segment
+                  const nextSeg = segments[curIdx + 1];
+                  if (
+                    nextSeg &&
+                    time >= nextSeg.start_time - 0.15 &&
+                    time <= nextSeg.end_time + 0.35
+                  ) {
+                    matchedIdx = curIdx + 1;
+                  } else {
+                    // 3. Fallback scan with tight tolerance
+                    matchedIdx = segments.findIndex(
+                      (seg) => time >= seg.start_time - 0.15 && time < seg.end_time + 0.25
+                    );
+
+                    // 4. Natural Pause Bridge: If between two sentences, stay attached without flickering
+                    if (matchedIdx === -1) {
+                      for (let s = 0; s < segments.length; s++) {
+                        const seg = segments[s];
+                        const next = segments[s + 1];
+                        if (time >= seg.end_time && next && time < next.start_time) {
+                          matchedIdx = time >= next.start_time - 0.15 ? s + 1 : s;
+                          break;
+                        }
+                      }
+                    }
+                  }
+                }
+
+                if (matchedIdx !== -1 && matchedIdx !== activeSegmentIndexRef.current) {
+                  activeSegmentIndexRef.current = matchedIdx;
+                  setActiveSegmentIndex(matchedIdx);
+                }
+              }
+            }
+          } catch {}
+        }
+      }
+      animId = requestAnimationFrame(syncLoop);
+    };
+
+    animId = requestAnimationFrame(syncLoop);
+    return () => cancelAnimationFrame(animId);
+  }, [currentView, activeLesson.segments]);
+
+  // ─── Auto-Scroll Timeline Row into View as Video Plays ───────────────
+  useEffect(() => {
+    if (currentView !== "studio") return;
+    const el = timelineItemRefs.current[activeSegmentIndex];
+    if (el && !isUserInteractingTimeline.current) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [activeSegmentIndex, currentView]);
+
+  // ─── Live Session Timer ──────────────────────────────────────────────
+  useEffect(() => {
+    const id = setInterval(() => {
+      setElapsedSec((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // ─── Update History Progress ─────────────────────────────────────────
+  const syncProgressToHistory = useCallback(
+    (completedCount?: number, targetIndex?: number) => {
+      const cCount = completedCount ?? Object.keys(sentenceScores).length;
+      const scores = Object.values(sentenceScores);
+      const avg = scores.length
+        ? Math.round(scores.reduce((a, b) => a + b.overall, 0) / scores.length)
+        : undefined;
+      const updated = saveToShadowingHistory(
+        activeLesson,
+        cCount,
+        avg,
+        targetIndex ?? activeSegmentIndex
+      );
+      setWatchHistory(updated);
+    },
+    [activeLesson, sentenceScores, activeSegmentIndex]
+  );
+
+  // ─── Player Controls ─────────────────────────────────────────────────
+  const playVideo = useCallback(() => {
+    if (playerRef.current && typeof playerRef.current.playVideo === "function") {
+      playerRef.current.playVideo();
+    }
+    setIsPlayingVideo(true);
+  }, []);
+
+  const pauseVideo = useCallback(() => {
+    if (playerRef.current && typeof playerRef.current.pauseVideo === "function") {
+      playerRef.current.pauseVideo();
+    }
+    setIsPlayingVideo(false);
+  }, []);
+
+  const seekToSegment = useCallback(
+    (index: number, autoPlay = true) => {
+      if (!activeLesson.segments[index]) return;
+      if (autoPauseTimerRef.current) clearTimeout(autoPauseTimerRef.current);
+
+      setActiveSegmentIndex(index);
+      activeSegmentIndexRef.current = index;
       setScore(null);
       setUserAudioUrl(null);
       speechRec.resetTranscript();
+
+      const seg = activeLesson.segments[index];
+      if (playerRef.current && typeof playerRef.current.seekTo === "function") {
+        playerRef.current.seekTo(seg.start_time, true);
+        if (autoPlay) {
+          playerRef.current.playVideo();
+          setIsPlayingVideo(true);
+
+          if (autoPauseEnabled) {
+            const durationSec = Math.max(1, seg.end_time - seg.start_time);
+            const durationMs = (durationSec / playbackSpeed) * 1000;
+            autoPauseTimerRef.current = setTimeout(() => {
+              pauseVideo();
+              if (isLooping) {
+                seekToSegment(index, true);
+              }
+            }, durationMs + 150);
+          }
+        }
+      }
+
+      syncProgressToHistory(undefined, index);
     },
-    [speechRec, pauseYouTube]
+    [activeLesson.segments, playbackSpeed, autoPauseEnabled, isLooping, pauseVideo, speechRec, syncProgressToHistory]
   );
 
-  // ─── Recording Logic ──────────────────────────────────────────────────
+  const handlePlayNative = useCallback(() => {
+    seekToSegment(activeSegmentIndex, true);
+  }, [activeSegmentIndex, seekToSegment]);
+
+  const handlePrevSegment = useCallback(() => {
+    if (activeSegmentIndex > 0) {
+      seekToSegment(activeSegmentIndex - 1, true);
+    }
+  }, [activeSegmentIndex, seekToSegment]);
+
+  const handleNextSegment = useCallback(() => {
+    if (activeSegmentIndex < activeLesson.segments.length - 1) {
+      seekToSegment(activeSegmentIndex + 1, true);
+    } else {
+      setShowCompletedModal(true);
+    }
+  }, [activeSegmentIndex, activeLesson.segments.length, seekToSegment]);
+
+  const handleSpeedChange = (speed: number) => {
+    setPlaybackSpeed(speed);
+    if (playerRef.current && typeof playerRef.current.setPlaybackRate === "function") {
+      playerRef.current.setPlaybackRate(speed);
+    }
+    toast.info(`Tốc độ phát: ${speed}x`);
+  };
+
+  // ─── Recording & Scoring (Chế độ Luyện Phát Âm) ───────────────────────
   const handleStartRecord = useCallback(async () => {
-    if (loopTimeoutRef.current) clearTimeout(loopTimeoutRef.current);
-    pauseYouTube();
+    pauseVideo();
     soundEffects.playMicStart();
-    setScore(null);
-    setUserAudioUrl(null);
     speechRec.resetTranscript();
     setRecordingStartMs(Date.now());
+    setRecordingStatus("recording");
+
+    const sttProvider = settings.stt?.provider || "browser";
     try {
-      setRecordingStatus("recording");
       await recorder.start();
-      speechRec.startListening();
+      if (sttProvider === "browser") {
+        speechRec.startListening();
+      }
     } catch {
-      toast.error("Lỗi Micro", "Không thể mở micro. Hãy cấp quyền truy cập.");
+      toast.error("Lỗi Microphone", "Vui lòng cho phép quyền truy cập micro.");
       setRecordingStatus("idle");
     }
-  }, [recorder, speechRec, pauseYouTube]);
+  }, [pauseVideo, recorder, speechRec, settings.stt?.provider]);
 
   const handleStopRecord = useCallback(async () => {
-    if (!currentSegment) return;
     soundEffects.playMicStop();
-    speechRec.stopListening();
+    const sttProvider = settings.stt?.provider || "browser";
+    if (sttProvider === "browser") {
+      speechRec.stopListening();
+    }
     setRecordingStatus("evaluating");
 
     try {
       const recording = await recorder.stop();
+      let spokenText = "";
+
+      if (sttProvider !== "browser" && recording?.blob) {
+        try {
+          const res = await transcribeViaServer(recording.blob, {
+            provider: sttProvider === "auto" ? "whisper-local" : sttProvider,
+            model: settings.stt?.model || "auto",
+            language: "en-US",
+          });
+          spokenText = res.text.trim();
+        } catch {
+          spokenText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
+        }
+      } else {
+        await new Promise((r) => setTimeout(r, 250));
+        spokenText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
+      }
+
+      if (!spokenText) {
+        toast.info("Chưa nghe rõ giọng nói", "Vui lòng nói to và rõ ràng hơn.");
+        setRecordingStatus("idle");
+        return;
+      }
+
+      const durationMs = recording?.durationMs || Math.max(1000, Date.now() - recordingStartMs);
+      const expectedDurMs = (currentSegment.end_time - currentSegment.start_time) * 1000;
+
+      const evalResult = computeShadowingScore(
+        currentSegment.text,
+        spokenText,
+        durationMs,
+        expectedDurMs
+      );
+
+      setScore(evalResult);
+      const updatedScores = {
+        ...sentenceScores,
+        [currentSegment.segment_id]: evalResult,
+      };
+      setSentenceScores(updatedScores);
+
+      // Persist to history
+      syncProgressToHistory(Object.keys(updatedScores).length);
+
       if (recording?.blob) {
         const audioUrl = URL.createObjectURL(recording.blob);
         setUserAudioUrl(audioUrl);
       }
 
-      await new Promise((r) => setTimeout(r, 350));
-      const spokenText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
-
-      const durationMs = Date.now() - recordingStartMs;
-      const expectedMs = ((currentSegment.end_time - currentSegment.start_time) * 1000) / playbackSpeed;
-      const stressWords = analysis?.segments_enhancement?.find(
-        (e) => e.segment_id === currentSegment.segment_id
-      )?.stress_words ?? [];
-
-      const result = computeShadowingScore(
-        currentSegment.text,
-        spokenText,
-        durationMs,
-        expectedMs,
-        stressWords
-      );
-
-      setScore(result);
-      setSessionScores((prev) => [...prev, result.overall]);
-
-      if (result.overall >= 85) {
+      if (evalResult.overall >= 85) {
         soundEffects.playSuccessFanfare();
         triggerConfetti();
       } else {
         soundEffects.playAIReady();
       }
     } catch {
-      toast.error("Lỗi xử lý", "Không thể hoàn tất chấm điểm.");
+      toast.error("Lỗi chấm điểm", "Không thể hoàn tất đánh giá phát âm.");
     } finally {
       setRecordingStatus("idle");
     }
-  }, [recorder, speechRec, recordingStartMs, currentSegment, playbackSpeed, analysis]);
+  }, [
+    recorder,
+    speechRec,
+    settings.stt?.provider,
+    settings.stt?.model,
+    recordingStartMs,
+    currentSegment,
+    sentenceScores,
+    syncProgressToHistory,
+  ]);
 
-  const handleSaveWordToDeck = useCallback((word: any) => {
-    setVocabDeck((prev) => {
-      const exists = prev.some((w) => w.word.toLowerCase() === word.word.toLowerCase());
-      if (exists) {
-        toast.info("Đã có trong Deck", `"${word.word}" đã được lưu trước đó.`);
-        return prev;
-      }
-      toast.success("Đã lưu vào Flashcard Deck!", `"${word.word}"`);
-      return [
-        {
-          word: word.word,
-          meaning: word.meaning,
-          ipa: word.ipa,
-          cefrLevel: word.cefrLevel,
-          partOfSpeech: word.partOfSpeech,
-        },
-        ...prev,
-      ];
-    });
-  }, []);
-
-  const handleRetry = useCallback(() => {
-    setScore(null);
-    speechRec.resetTranscript();
-    setRecordingStatus("idle");
-  }, [speechRec]);
-
-  // ─── Library Persistence ──────────────────────────────────────────────
-  const saveToLibrary = useCallback(
-    async (
-      videoId: string,
-      title: string,
-      channel: string,
-      segs: YouTubeTranscriptSegment[],
-      enhancement: LinguisticAnalysisResult
-    ) => {
-      try {
-        const item: SavedYouTubeItem = {
-          id: `yt_${videoId}`,
-          youtubeId: videoId,
-          title,
-          channel: channel || "YouTube Video",
-          thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
-          cefrLevel: "Standard",
-          duration: `${Math.round(segs.reduce((acc, s) => Math.max(acc, s.end_time), 0))}s`,
-          segmentsCount: segs.length,
-          savedAt: new Date().toISOString(),
-          favorite: false,
-          segments: segs,
-          analysis: enhancement,
-        };
-        const res = await fetch("/api/shadowing/library", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ item }),
-        });
-        const data = await res.json();
-        if (data.items) setLibraryItems(data.items);
-      } catch {}
-    },
-    []
-  );
-
-  const handleLoadFromLibrary = useCallback(
-    (item: SavedYouTubeItem) => {
-      if (!item.segments || item.segments.length === 0) {
-        toast.error("Lỗi dữ liệu", "Mục này không có transcript.");
-        return;
-      }
-      setCurrentVideoId(item.youtubeId);
-      setVideoTitle(item.title);
-      setChannelName(item.channel || "YouTube");
-      setSegments(item.segments);
-      setActiveSegmentIndex(0);
-      setScore(null);
-      setSessionScores([]);
-      setShowLibrary(false);
-
-      const enhanced = item.analysis || generateDeterministicEnhancement(item.segments);
-      setAnalysis(enhanced);
-      toast.success("Đã nạp video từ thư viện!", `"${item.title}"`);
-    },
-    []
-  );
-
-  const handleDeleteFromLibrary = async (item: SavedYouTubeItem, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    try {
-      const res = await fetch(`/api/shadowing/library?youtubeId=${item.youtubeId}`, {
-        method: "DELETE",
-      });
-      const data = await res.json();
-      if (data.success) {
-        setLibraryItems(data.items || []);
-        toast.success("Đã xóa video", `"${item.title}"`);
-        if (currentVideoId === item.youtubeId) {
-          setCurrentVideoId(null);
-          setVideoTitle("");
-          setChannelName("");
-          setSegments([]);
-          setAnalysis(null);
-        }
-      } else {
-        toast.error("Lỗi xóa video", data.error || "Không thể xóa video.");
-      }
-    } catch {
-      toast.error("Lỗi xóa video", "Không thể hoàn tất lúc này.");
-    }
-  };
-
-  const handleClearCurrentVideo = () => {
-    pauseYouTube();
-    setCurrentVideoId(null);
-    setVideoTitle("");
-    setChannelName("");
-    setSegments([]);
-    setAnalysis(null);
-    setScore(null);
-    setSessionScores([]);
-  };
-
-  const fetchLibrary = useCallback(async () => {
-    try {
-      const res = await fetch("/api/shadowing/library");
-      const data = await res.json();
-      if (Array.isArray(data.items)) {
-        setLibraryItems(data.items);
-      }
-    } catch {}
-  }, []);
-
+  // ─── Keyboard Hotkeys (Space to Record/Play, Enter to Check/Next) ─────
   useEffect(() => {
-    fetchLibrary();
-  }, [fetchLibrary]);
+    if (currentView !== "studio") return;
 
-  // ─── Instant Deterministic Loader (0ms Latency) ─────────────────────
-  const handleLoadVideo = useCallback(
-    async (urlOrId: string) => {
-      const clean = urlOrId.trim();
-      if (!clean) return;
-
-      const existing = libraryItems.find(
-        (i) => i.youtubeId === clean || clean.includes(i.youtubeId)
-      );
-      if (existing && existing.segments.length > 0) {
-        handleLoadFromLibrary(existing);
-        return;
-      }
-
-      setIsLoadingTranscript(true);
-      setScore(null);
-      setSessionScores([]);
-      try {
-        const res = await fetch("/api/shadowing/youtube-transcript", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: clean }),
-        });
-        const data = await res.json();
-
-        if (!res.ok || !data.success || !data.segments || data.segments.length === 0) {
-          toast.error("Không có phụ đề YouTube", data.error || "Video không có phụ đề tiếng Anh hợp lệ.");
-          if (data.canUseCustomScript) {
-            setShowCustomScriptModal(true);
-          }
-          return;
-        }
-
-        setCurrentVideoId(data.videoId);
-        const title = data.title || `YouTube (${data.videoId})`;
-        const channel = data.channel || "YouTube";
-        setVideoTitle(title);
-        setChannelName(channel);
-        setSegments(data.segments);
-        setActiveSegmentIndex(0);
-
-        // Instant deterministic Thought Groups & Stress Words calculation (0ms, no AI)
-        const enhanced = generateDeterministicEnhancement(data.segments);
-        setAnalysis(enhanced);
-
-        toast.success("Nạp video thành công!", `${data.segments.length} câu phụ đề bản xứ`);
-        triggerConfetti();
-
-        await saveToLibrary(data.videoId, title, channel, data.segments, enhanced);
-      } catch (err: unknown) {
-        toast.error("Lỗi nạp video", err instanceof Error ? err.message : String(err));
-      } finally {
-        setIsLoadingTranscript(false);
-      }
-    },
-    [libraryItems, handleLoadFromLibrary, saveToLibrary]
-  );
-
-  const handleLoadCustomScript = async () => {
-    const clean = customScriptText.trim();
-    if (!clean) {
-      toast.error("Thiếu nội dung", "Vui lòng dán nội dung bài nói tiếng Anh.");
-      return;
-    }
-    setIsLoadingTranscript(true);
-    setShowCustomScriptModal(false);
-    setScore(null);
-    setSessionScores([]);
-    try {
-      const res = await fetch("/api/shadowing/youtube-transcript", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: youtubeUrl.trim() || undefined,
-          customScript: clean,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success || !data.segments || data.segments.length === 0) {
-        toast.error("Lỗi phân tích", data.error || "Không thể phân tách câu bài nói.");
-        return;
-      }
-      setCurrentVideoId(data.videoId && data.videoId !== "custom_video" ? data.videoId : null);
-      const title = data.title || "Custom Transcript";
-      setVideoTitle(title);
-      setChannelName("Custom Script");
-      setSegments(data.segments);
-      setActiveSegmentIndex(0);
-
-      // Instant deterministic enhancement (0ms)
-      const enhanced = generateDeterministicEnhancement(data.segments);
-      setAnalysis(enhanced);
-
-      toast.success("Nạp bài nói thành công!", `${data.segments.length} câu luyện tập`);
-      triggerConfetti();
-
-      await saveToLibrary(data.videoId || "custom", title, "Custom Script", data.segments, enhanced);
-    } catch (err: unknown) {
-      toast.error("Lỗi", err instanceof Error ? err.message : String(err));
-    } finally {
-      setIsLoadingTranscript(false);
-    }
-  };
-
-  // ─── Keyboard Shortcuts ────────────────────────────────────────────────
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (["INPUT", "TEXTAREA"].includes((e.target as HTMLElement)?.tagName)) return;
 
       if (e.code === "Space") {
         e.preventDefault();
-        if (score) {
-          handleRetry();
-        } else if (recordingStatus === "recording") {
-          handleStopRecord();
-        } else if (recordingStatus === "idle") {
-          handleStartRecord();
+        if (activeMode === "pronounce") {
+          if (recordingStatus === "recording") {
+            handleStopRecord();
+          } else if (recordingStatus === "idle") {
+            handlePlayNative();
+          }
+        } else {
+          if (isPlayingVideo) pauseVideo();
+          else playVideo();
         }
-      } else if (e.code === "ArrowRight" || e.code === "BracketRight") {
+      } else if (e.code === "Enter") {
         e.preventDefault();
-        if (activeSegmentIndex < segments.length - 1) goToSegment(activeSegmentIndex + 1);
-      } else if (e.code === "ArrowLeft" || e.code === "BracketLeft") {
-        e.preventDefault();
-        if (activeSegmentIndex > 0) goToSegment(activeSegmentIndex - 1);
-      } else if (e.code === "Enter" && score) {
-        e.preventDefault();
-        if (activeSegmentIndex < segments.length - 1) goToSegment(activeSegmentIndex + 1);
-      } else if (e.code === "KeyR" && recordingStatus === "idle" && !score) {
-        e.preventDefault();
-        handleRetry();
-      } else if (e.code === "KeyP") {
+        if (activeMode === "pronounce") {
+          if (recordingStatus === "idle") {
+            handleStartRecord();
+          } else if (recordingStatus === "recording") {
+            handleStopRecord();
+          }
+        }
+      } else if (e.code === "KeyR" && score) {
         e.preventDefault();
         handlePlayNative();
-      } else if (e.code === "Escape") {
+      } else if (e.code === "ArrowLeft") {
         e.preventDefault();
-        router.push("/foundation");
+        handlePrevSegment();
+      } else if (e.code === "ArrowRight") {
+        e.preventDefault();
+        handleNextSegment();
       }
     };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
-    score,
+    currentView,
+    activeMode,
     recordingStatus,
-    activeSegmentIndex,
-    segments.length,
-    goToSegment,
-    handleRetry,
+    isPlayingVideo,
+    score,
     handleStartRecord,
     handleStopRecord,
     handlePlayNative,
-    router,
+    playVideo,
+    pauseVideo,
+    handlePrevSegment,
+    handleNextSegment,
   ]);
 
-  const avgScore = useMemo(() => {
-    if (sessionScores.length === 0) return null;
-    return Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
-  }, [sessionScores]);
+  // ─── Word Lookup Handler ─────────────────────────────────────────────
+  const handleWordClick = (word: string, e?: React.MouseEvent<HTMLElement>) => {
+    const clean = word.toLowerCase().replace(/[^\w']/g, "");
+    if (!clean) return;
 
-  const handlePasteClipboard = async () => {
-    try {
-      const text = await navigator.clipboard.readText();
-      if (text) {
-        setYoutubeUrl(text);
-        handleLoadVideo(text);
-      }
-    } catch {
-      toast.error("Không thể dán", "Vui lòng dán thủ công bằng Ctrl+V.");
+    const lexiconMatch = lookupLexiconWord(clean);
+    let popupData: any;
+
+    if (lexiconMatch) {
+      popupData = {
+        word: lexiconMatch.word,
+        ipa: lexiconMatch.ipaUS || lexiconMatch.ipaUK || "",
+        meaning: lexiconMatch.meaningVi,
+        partOfSpeech: lexiconMatch.partOfSpeech,
+        contextSentence: currentSegment.text,
+        cefrLevel: lexiconMatch.cefrLevel,
+      };
+    } else {
+      popupData = {
+        word: clean,
+        ipa: "",
+        meaning: "Từ vựng trong câu thoại video",
+        partOfSpeech: "word",
+        contextSentence: currentSegment.text,
+        cefrLevel: "B1",
+      };
+    }
+
+    setPopupWord(popupData);
+    if (e?.currentTarget) {
+      setPopupAnchor(e.currentTarget);
+    } else {
+      setPopupAnchor(document.body);
     }
   };
 
+  const handleSaveWordToDeck = (word: any) => {
+    setVocabDeck((prev) => {
+      if (prev.some((w) => w.word.toLowerCase() === word.word.toLowerCase())) return prev;
+      return [word, ...prev];
+    });
+    toast.success(`Đã lưu "${word.word}" vào sổ từ vựng!`);
+  };
+
+  // ─── Load Custom YouTube URL Handler ─────────────────────────────────
+  const handleLoadCustomYouTubeUrl = async (customUrl?: string) => {
+    const urlToLoad = customUrl || customUrlInput;
+    const videoId = extractYouTubeVideoId(urlToLoad);
+
+    if (!videoId) {
+      toast.error("Link YouTube không hợp lệ", "Vui lòng nhập đường dẫn hoặc ID video YouTube 11 ký tự.");
+      return;
+    }
+
+    setIsLoadingCustomUrl(true);
+    toast.info("Đang tải phụ đề YouTube...", "Vui lòng chờ trong giây lát.");
+
+    try {
+      const res = await fetch("/api/shadowing/youtube-transcript", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: urlToLoad }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.segments || data.segments.length === 0) {
+        throw new Error(data.error || "Không tìm thấy phụ đề cho video này.");
+      }
+
+      const loadedLesson: CorodomoVideoLesson = {
+        id: `custom_${videoId}`,
+        youtubeId: videoId,
+        title: data.title || `YouTube Video (${videoId})`,
+        channel: data.channel || "YouTube",
+        cefrLevel: "Custom",
+        playlistName: "Video Tự Chọn",
+        playlistId: `custom_pl_${videoId}`,
+        thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+        duration: "10:00",
+        segments: data.segments.map((s: any, idx: number) => ({
+          segment_id: s.segment_id || `seg_${String(idx + 1).padStart(3, "0")}`,
+          text: s.text,
+          start_time: s.start_time,
+          end_time: s.end_time,
+          translationVi: s.translationVi || "",
+          thoughtGroups: s.text,
+          ipa: s.ipa || "",
+          wordsWithIpa: s.wordsWithIpa,
+        })),
+      };
+
+      setActiveLesson(loadedLesson);
+      setActiveSegmentIndex(0);
+      setScore(null);
+      setUserAudioUrl(null);
+      setSentenceScores({});
+      setCustomUrlInput("");
+      setModalUrlInput("");
+      setShowAddVideoModal(false);
+
+      // Save to video library (Create) & History
+      const updatedLib = addVideoToLibrary(loadedLesson);
+      setVideoLibrary(updatedLib);
+      const updatedHistory = saveToShadowingHistory(loadedLesson, 0, undefined, 0);
+      setWatchHistory(updatedHistory);
+      setCurrentView("studio");
+
+      toast.success("Nạp video thành công!", `Đã lưu vào thư viện với ${loadedLesson.segments.length} câu phụ đề.`);
+    } catch (err: unknown) {
+      toast.error("Không thể lấy phụ đề", err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsLoadingCustomUrl(false);
+    }
+  };
+
+  const handleSelectLesson = (lesson: CorodomoVideoLesson, startIdx = 0) => {
+    setActiveLesson(lesson);
+    setActiveSegmentIndex(startIdx);
+    setScore(null);
+    setUserAudioUrl(null);
+    setSentenceScores({});
+
+    // Save to history & Enter Studio View
+    const updatedHistory = saveToShadowingHistory(lesson, 0, undefined, startIdx);
+    setWatchHistory(updatedHistory);
+    setCurrentView("studio");
+    toast.success("Đã mở bài học!", lesson.title);
+  };
+
+  const handleSelectHistoryItem = (item: ShadowingHistoryItem) => {
+    // If we have full lessonData preserved in history
+    if (item.lessonData && item.lessonData.segments && item.lessonData.segments.length > 0) {
+      handleSelectLesson(item.lessonData, item.lastSegmentIndex || 0);
+      return;
+    }
+
+    // Otherwise check if it matches a preset
+    const presetMatch = CORODOMO_VIDEO_PRESETS.find((p) => p.youtubeId === item.youtubeId);
+    if (presetMatch) {
+      handleSelectLesson(presetMatch, item.lastSegmentIndex || 0);
+      return;
+    }
+
+    // Fallback: Re-extract transcript via YouTube ID
+    handleLoadCustomYouTubeUrl(`https://www.youtube.com/watch?v=${item.youtubeId}`);
+  };
+
+  const handleRemoveHistoryItem = (youtubeId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = removeFromShadowingHistory(youtubeId);
+    setWatchHistory(updated);
+    toast.info("Đã xóa khỏi lịch sử học tập");
+  };
+
+  const handleClearHistory = () => {
+    clearShadowingHistory();
+    setWatchHistory([]);
+    toast.info("Đã xóa toàn bộ lịch sử học tập");
+  };
+
+  // ─── Paste from Clipboard Helper ────────────────────────────────────
+  const handlePasteClipboard = async (isModal = false) => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        if (isModal) {
+          setModalUrlInput(text.trim());
+        } else {
+          setCustomUrlInput(text.trim());
+        }
+        toast.info("Đã dán liên kết từ Clipboard!");
+      }
+    } catch {
+      toast.info("Vui lòng dán trực tiếp vào ô nhập.");
+    }
+  };
+
+  // ─── Filtered Segments for Sidebar ───────────────────────────────────
+  const filteredSegments = useMemo(() => {
+    if (!transcriptSearch.trim()) return activeLesson.segments;
+    const q = transcriptSearch.toLowerCase();
+    return activeLesson.segments.filter(
+      (s) =>
+        s.text.toLowerCase().includes(q) ||
+        (s.translationVi && s.translationVi.toLowerCase().includes(q))
+    );
+  }, [activeLesson.segments, transcriptSearch]);
+
+  const completedCount = Object.keys(sentenceScores).length;
+  const progressPercent = Math.round((completedCount / (activeLesson.segments.length || 1)) * 100);
+
+  // Download transcript as text
+  const handleDownloadTranscript = () => {
+    const textContent = activeLesson.segments
+      .map((s, i) => `${i + 1}. [${s.start_time}s - ${s.end_time}s]\n${s.text}\n${s.translationVi || ""}\n`)
+      .join("\n");
+    const blob = new Blob([textContent], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${activeLesson.title.replace(/[^\w\s]/gi, "")}_transcript.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Đã tải xuống file phụ đề!");
+  };
+
+  const handleCopyTranscript = () => {
+    const textContent = activeLesson.segments.map((s) => s.text).join("\n");
+    navigator.clipboard.writeText(textContent);
+    toast.success("Đã sao chép toàn bộ lời thoại vào Clipboard!");
+  };
+
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] bg-background select-none overflow-hidden">
-      {/* ── TOP NAV BAR ── */}
-      <header className="h-14 border-b border-border/80 bg-card/80 backdrop-blur-md px-3 sm:px-4 flex items-center justify-between gap-3 shrink-0 z-10">
-        {/* Left: Back + Title */}
-        <div className="flex items-center gap-2 min-w-0 shrink-0">
-          <Link href="/foundation">
-            <Button variant="ghost" size="sm" className="size-8 p-0 rounded-xl" title="Quay lại">
-              <ArrowLeft className="size-4" />
-            </Button>
-          </Link>
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="size-7 rounded-xl bg-gradient-to-tr from-primary to-indigo-600 text-primary-foreground flex items-center justify-center shrink-0">
-              <Headphones className="size-4" />
-            </div>
-            <span className="font-bold text-sm tracking-tight text-foreground truncate">
-              Shadowing Studio
-            </span>
-            {videoTitle && (
-              <Badge variant="secondary" className="text-[10px] font-mono hidden md:inline-flex">
-                {videoTitle.length > 30 ? videoTitle.slice(0, 30) + "…" : videoTitle}
-              </Badge>
-            )}
-          </div>
-        </div>
-
-        {/* Center: URL Input */}
-        <div className="flex-1 max-w-md hidden md:flex items-center gap-2 mx-4">
-          <div className="relative flex-1">
-            <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Dán link YouTube bất kỳ..."
-              value={youtubeUrl}
-              onChange={(e) => setYoutubeUrl(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleLoadVideo(youtubeUrl);
-              }}
-              className="pl-9 pr-8 h-8 rounded-xl text-xs bg-background border-border/80"
-            />
-            <button
-              onClick={handlePasteClipboard}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              title="Dán từ Clipboard"
-            >
-              <Clipboard className="size-3.5" />
-            </button>
-          </div>
-          <Button
-            onClick={() => handleLoadVideo(youtubeUrl)}
-            disabled={isLoadingTranscript || !youtubeUrl.trim()}
-            size="sm"
-            className="h-8 px-3 rounded-xl text-xs font-bold gap-1.5 shrink-0"
-          >
-            {isLoadingTranscript ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <Sparkles className="size-3.5" />
-            )}
-            <span className="hidden sm:inline">
-              {isLoadingTranscript ? "Đang tải..." : "Nạp Video"}
-            </span>
-          </Button>
-        </div>
-
-        {/* Right: Stats + Speed + Clear Video + Library */}
-        <div className="flex items-center gap-2 shrink-0">
-          {segments.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleClearCurrentVideo}
-              className="h-8 px-2.5 rounded-xl text-xs font-semibold text-muted-foreground hover:text-foreground gap-1"
-              title="Đổi video khác"
-            >
-              <PlusCircle className="size-3.5 text-primary" />
-              <span className="hidden sm:inline">Đổi video</span>
-            </Button>
-          )}
-
-          {avgScore !== null && (
-            <div className="hidden sm:flex items-center gap-1.5 text-xs font-mono font-bold px-2.5 py-1 rounded-xl bg-muted/60 border border-border/60">
-              <Activity className="size-3.5 text-primary" />
-              <span
-                className={
-                  avgScore >= 80 ? "text-emerald-500" : avgScore >= 65 ? "text-amber-500" : "text-red-500"
-                }
-              >
-                {avgScore}
-              </span>
-              <span className="text-muted-foreground">avg ({sessionScores.length})</span>
-            </div>
-          )}
-
-          {/* Speed Control */}
-          <div className="flex items-center gap-0.5 bg-muted/60 p-0.5 rounded-xl border border-border/60">
-            {[0.75, 1.0, 1.25].map((spd) => (
-              <button
-                key={spd}
-                onClick={() => setPlaybackSpeed(spd)}
-                className={`text-[11px] font-mono font-bold px-2 py-1 rounded-lg transition-all ${
-                  playbackSpeed === spd
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {spd}x
-              </button>
-            ))}
-          </div>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowLibrary(!showLibrary)}
-            className="h-8 rounded-xl text-xs font-bold gap-1 border-border/80"
-            title="Thư viện Video"
-          >
-            <Library className="size-3.5" />
-            <span className="hidden sm:inline">Thư viện ({libraryItems.length})</span>
-          </Button>
-        </div>
-      </header>
-
-      {/* ── MAIN CONTENT ── */}
-      {segments.length === 0 ? (
-        /* Empty State: YouTube Link Input Hero (100% pure real user input) */
-        <main className="flex-1 flex flex-col items-center justify-center p-4 overflow-y-auto">
-          <div className="max-w-xl w-full space-y-6 text-center animate-in fade-in-0 zoom-in-95 duration-200">
-            <div className="size-16 rounded-3xl bg-primary/10 border border-primary/20 text-primary mx-auto flex items-center justify-center shadow-lg">
-              <Headphones className="size-8" />
-            </div>
-
-            <div className="space-y-2">
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-foreground tracking-tight">
-                Nhập link YouTube để bắt đầu Shadowing
-              </h2>
-              <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
-                Hệ thống tải transcript phụ đề bản xứ trực tiếp từ YouTube và ngắt nhịp thở Thought Groups theo cấu trúc ngữ âm tức thì.
-              </p>
-            </div>
-
-            {/* Input Box */}
-            <div className="flex flex-col sm:flex-row gap-2 max-w-lg mx-auto">
-              <div className="relative flex-1">
-                <LinkIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                <Input
-                  type="text"
-                  placeholder="Dán link YouTube (e.g. https://www.youtube.com/watch?v=...)"
-                  value={youtubeUrl}
-                  onChange={(e) => setYoutubeUrl(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleLoadVideo(youtubeUrl);
-                  }}
-                  className="pl-10 pr-9 h-11 rounded-2xl text-xs sm:text-sm bg-card border-border/80 shadow-xs"
-                />
-                <button
-                  onClick={handlePasteClipboard}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  title="Dán từ Clipboard"
-                >
-                  <Clipboard className="size-4" />
-                </button>
-              </div>
-
-              <Button
-                onClick={() => handleLoadVideo(youtubeUrl)}
-                disabled={isLoadingTranscript || !youtubeUrl.trim()}
-                className="h-11 px-5 rounded-2xl text-xs sm:text-sm font-bold gap-2 shrink-0 shadow-md"
-              >
-                {isLoadingTranscript ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Sparkles className="size-4" />
-                )}
-                <span>{isLoadingTranscript ? "Đang tải phụ đề..." : "Nạp Video"}</span>
-              </Button>
-            </div>
-
-            {/* Alternative: Custom Script Input button */}
-            <div className="flex items-center justify-center pt-1">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowCustomScriptModal(true)}
-                className="h-8 px-3.5 rounded-xl text-xs font-semibold gap-1.5 border-border/80 text-muted-foreground hover:text-foreground"
-              >
-                <FileText className="size-3.5 text-primary" />
-                <span>✍️ Dán bài nói thủ công (Custom Script)</span>
-              </Button>
-            </div>
-
-            {/* Saved Library Items if any */}
-            {libraryItems.length > 0 && (
-              <div className="pt-6 border-t border-border/60 space-y-3 text-left">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                    Video trong thư viện của bạn ({libraryItems.length}):
-                  </span>
-                </div>
-                <div className="grid gap-2">
-                  {libraryItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className="p-3 rounded-2xl bg-card border border-border/70 hover:border-primary/40 transition-all flex items-center justify-between gap-3 group"
-                    >
-                      <button
-                        onClick={() => handleLoadFromLibrary(item)}
-                        className="flex items-center gap-3 text-left min-w-0 flex-1"
-                      >
-                        <img
-                          src={item.thumbnail}
-                          alt={item.title}
-                          className="w-16 aspect-video rounded-xl object-cover bg-black/10 shrink-0"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">
-                            {item.title}
-                          </p>
-                          <p className="text-[11px] text-muted-foreground font-mono">
-                            {item.channel} • {item.duration} • {item.segmentsCount} câu
-                          </p>
-                        </div>
-                      </button>
-
-                      <div className="flex items-center gap-1 shrink-0">
-                        <Button
-                          size="sm"
-                          onClick={() => handleLoadFromLibrary(item)}
-                          className="rounded-xl text-xs font-bold h-8"
-                        >
-                          Luyện tập
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => handleDeleteFromLibrary(item, e)}
-                          className="size-8 p-0 rounded-xl text-muted-foreground hover:text-red-500 hover:bg-red-500/10"
-                          title="Xóa video khỏi thư viện"
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </main>
-      ) : (
-        /* Active Practice View */
-        <main className="flex-1 p-3 sm:p-4 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-3 lg:gap-4">
-          {/* LEFT (6 cols): YouTube Player */}
-          <div className="lg:col-span-6 h-full flex flex-col gap-3 overflow-hidden">
-            {/* YouTube Player */}
-            <div className="rounded-3xl border border-border/80 bg-black overflow-hidden shadow-xs shrink-0">
-              <div className="relative aspect-video w-full bg-black">
-                {isLoadingTranscript ? (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80">
-                    <Loader2 className="size-8 text-primary animate-spin" />
-                    <p className="text-xs text-white/70 font-semibold">Đang tải transcript từ YouTube...</p>
-                  </div>
-                ) : currentVideoId ? (
-                  <iframe
-                    ref={iframeRef}
-                    src={`https://www.youtube.com/embed/${currentVideoId}?enablejsapi=1&rel=0&modestbranding=1`}
-                    title={videoTitle}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    className="absolute inset-0 w-full h-full"
-                  />
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Video className="size-12 text-white/20" />
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Transcript & Deck Tabs */}
-            <div className="flex-1 flex flex-col min-h-0 rounded-3xl border border-border/80 bg-card overflow-hidden">
-              <div className="flex items-center gap-0.5 px-3 pt-2.5 pb-0 border-b border-border/40 bg-muted/20 shrink-0">
-                {[
-                  { id: "transcript" as const, label: `Transcript (${segments.length})` },
-                  { id: "deck" as const, label: `Deck (${vocabDeck.length})` },
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setRightTab(tab.id)}
-                    className={`text-xs font-bold px-3 py-2 rounded-t-xl transition-all border-b-2 ${
-                      rightTab === tab.id
-                        ? "border-primary text-primary bg-card"
-                        : "border-transparent text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Transcript List */}
-              {rightTab === "transcript" && (
-                <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-                  {segments.map((seg, idx) => {
-                    const segScore = sessionScores[idx];
-                    const isActive = idx === activeSegmentIndex;
-                    return (
-                      <button
-                        key={seg.segment_id}
-                        onClick={() => goToSegment(idx)}
-                        className={`w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all flex items-start gap-2 ${
-                          isActive
-                            ? "bg-primary/10 border border-primary/30 text-foreground"
-                            : "hover:bg-muted/50 text-muted-foreground border border-transparent"
-                        }`}
-                      >
-                        <span
-                          className={`font-mono font-bold text-[10px] shrink-0 mt-0.5 ${
-                            isActive ? "text-primary" : "text-muted-foreground/60"
-                          }`}
-                        >
-                          {idx + 1}
-                        </span>
-                        <span className={`flex-1 leading-relaxed ${isActive ? "font-semibold text-foreground" : ""}`}>
-                          {seg.text}
-                        </span>
-                        {segScore !== undefined && (
-                          <span
-                            className={`font-mono font-extrabold text-[11px] shrink-0 ${
-                              segScore >= 85
-                                ? "text-emerald-500"
-                                : segScore >= 65
-                                ? "text-amber-500"
-                                : "text-red-500"
-                            }`}
-                          >
-                            {segScore}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Vocab Deck */}
-              {rightTab === "deck" && (
-                <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                  {vocabDeck.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-center text-xs text-muted-foreground gap-2 py-8">
-                      <BookOpen className="size-8 text-muted-foreground/30" />
-                      <p>Nhấp vào bất kỳ từ nào trên phụ đề để tra từ điển 10k từ và lưu vào Flashcard</p>
-                    </div>
-                  ) : (
-                    vocabDeck.map((w: any, i: number) => (
-                      <div
-                        key={i}
-                        className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-muted/40 border border-border/70 hover:border-primary/40 transition-all text-xs"
-                      >
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <button
-                            onClick={() => tts.speak(w.word)}
-                            className="size-7 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 flex items-center justify-center shrink-0 transition-colors"
-                            title="Nghe phát âm"
-                          >
-                            <span className="text-xs">🔊</span>
-                          </button>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5">
-                              <p className="font-bold text-foreground font-mono truncate">{w.word}</p>
-                              {w.ipa && <span className="text-[10px] text-muted-foreground font-mono">{w.ipa}</span>}
-                            </div>
-                            <p className="text-[11px] text-muted-foreground truncate">{w.meaning}</p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-1 shrink-0">
-                          {w.cefrLevel && (
-                            <Badge variant="outline" className="text-[10px] font-mono">
-                              {w.cefrLevel}
-                            </Badge>
-                          )}
-                          <button
-                            onClick={() => {
-                              setVocabDeck((prev) => prev.filter((_, idx) => idx !== i));
-                              toast.success("Đã xóa khỏi Flashcard", `"${w.word}"`);
-                            }}
-                            className="size-7 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-500/10 flex items-center justify-center transition-colors"
-                            title="Xóa khỏi Deck"
-                          >
-                            <Trash2 className="size-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* RIGHT (6 cols): Sentence Practice Card */}
-          <div className="lg:col-span-6 h-full overflow-hidden">
-            {currentSegment && (
-              <SentencePracticeCard
-                segment={currentSegment}
-                segmentIndex={activeSegmentIndex}
-                totalSegments={segments.length}
-                analysis={analysis}
-                subtitleLayer={subtitleLayer}
-                onSubtitleLayerChange={setSubtitleLayer}
-                status={recordingStatus}
-                liveTranscript={speechRec.fullTranscript || speechRec.transcript}
-                score={score}
-                userAudioUrl={userAudioUrl}
-                isLooping={isLooping}
-                onToggleLoop={handleToggleLoop}
-                onPlayNative={handlePlayNative}
-                onStartRecord={handleStartRecord}
-                onStopRecord={handleStopRecord}
-                onRetry={handleRetry}
-                onNext={() => {
-                  if (activeSegmentIndex < segments.length - 1) goToSegment(activeSegmentIndex + 1);
-                }}
-                onPrev={() => {
-                  if (activeSegmentIndex > 0) goToSegment(activeSegmentIndex - 1);
-                }}
-                onSaveWordToDeck={handleSaveWordToDeck}
-              />
-            )}
-          </div>
-        </main>
+    <div
+      className={cn(
+        "flex flex-col bg-background select-none",
+        currentView === "studio" ? "h-[calc(100vh-3.5rem)] overflow-hidden" : "min-h-full"
       )}
+    >
+      <WordLookupPopup
+        word={popupWord}
+        anchorEl={popupAnchor}
+        onClose={() => {
+          setPopupWord(null);
+          setPopupAnchor(null);
+        }}
+        onSaveToDeck={handleSaveWordToDeck}
+      />
 
-      {/* ── LIBRARY MODAL DRAWER ── */}
-      {showLibrary && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-card border border-border/80 rounded-3xl max-w-2xl w-full max-h-[80vh] flex flex-col overflow-hidden shadow-2xl animate-in fade-in-0 zoom-in-95 duration-150">
-            <div className="p-4 border-b border-border/60 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Library className="size-5 text-primary" />
-                <h3 className="font-bold text-base text-foreground">Thư viện Video Shadowing</h3>
+      {/* ══════════════════════════════════════════════════════════════════════
+          VIEW 1: SHADOWING HUB (MÀN CHÍNH - LỊCH SỬ & DÁN LINK YOUTUBE)
+      ══════════════════════════════════════════════════════════════════════ */}
+      {currentView === "hub" && (
+        <div className="w-full max-w-6xl mx-auto p-4 sm:p-6 lg:p-8 space-y-8 pb-28">
+          {/* Header Bar */}
+          <div className="flex items-center justify-between gap-3 border-b border-border/60 pb-4 shrink-0">
+            <div className="flex items-center gap-2.5">
+              <Link href="/foundation">
+                <Button variant="ghost" size="sm" className="size-8 p-0 rounded-xl" title="Quay lại Hub Foundation">
+                  <ArrowLeft className="size-4" />
+                </Button>
+              </Link>
+              <div>
+                <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground flex items-center gap-2">
+                  <Film className="size-6 text-emerald-500" />
+                  <span>Shadowing Hub</span>
+                  <Badge variant="outline" className="text-xs font-mono border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
+                    Corodomo Style
+                  </Badge>
+                </h1>
+                <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+                  Luyện nói đuổi theo video YouTube với phiên âm IPA xếp tầng và chấm điểm phát âm AI
+                </p>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowLibrary(false)}
-                className="rounded-full size-8 p-0"
-              >
-                <X className="size-4" />
-              </Button>
             </div>
 
-            <div className="p-4 flex-1 overflow-y-auto space-y-3">
-              {libraryItems.length === 0 ? (
-                <div className="text-center py-12 text-xs text-muted-foreground space-y-2">
-                  <Library className="size-8 text-muted-foreground/30 mx-auto" />
-                  <p>Chưa có video nào trong thư viện.</p>
-                  <p className="text-[11px]">Dán một link YouTube để tải và tự động lưu vào đây.</p>
+            {/* Quick Resume Button if active video available */}
+            {activeLesson && (
+              <Button
+                onClick={() => setCurrentView("studio")}
+                className="h-9 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5 shadow-sm shrink-0"
+              >
+                <Play className="size-3.5 fill-current" />
+                <span>Tiếp tục bài đang học</span>
+              </Button>
+            )}
+          </div>
+
+          {/* ── HERO SECTION: PROMINENT YOUTUBE LINK EXTRACTOR ── */}
+          <div className="shrink-0 min-h-fit w-full p-6 sm:p-8 rounded-3xl bg-card border-2 border-emerald-500/60 shadow-xl space-y-5 relative bg-gradient-to-br from-card via-card to-emerald-500/10">
+            {/* Top Badge & Title */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3.5">
+              <div className="flex items-center gap-3">
+                <div className="size-11 rounded-2xl bg-red-600 text-white flex items-center justify-center shadow-lg shadow-red-600/30 shrink-0">
+                  <YouTubeIcon className="size-6" />
                 </div>
-              ) : (
-                libraryItems.map((item) => (
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base sm:text-lg font-black text-foreground">
+                      Thêm bài học mới từ YouTube
+                    </h2>
+                    <Badge className="bg-red-600 text-white text-[10px] font-black px-2 py-0.5 shadow-xs">
+                      YouTube URL
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Tự động lấy 100% transcript, gắn phiên âm IPA từng từ và lưu vào kho video bài học
+                  </p>
+                </div>
+              </div>
+
+              <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+                <Sparkles className="size-3.5 text-emerald-500" />
+                <span>Hỗ trợ mọi link video & Shorts</span>
+              </div>
+            </div>
+
+            {/* Prominent Input Bar with Explicit Label */}
+            <div className="space-y-2.5 max-w-4xl">
+              <label className="text-xs font-black uppercase tracking-wider text-foreground/90 flex items-center gap-1.5">
+                <span>Dán đường dẫn video YouTube tại đây:</span>
+              </label>
+
+              <div className="flex flex-col sm:flex-row gap-3 items-stretch">
+                <div className="relative flex-1 min-h-[52px]">
+                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-red-500 flex items-center pointer-events-none">
+                    <YouTubeIcon className="size-5" />
+                  </div>
+
+                  <Input
+                    ref={youtubeInputRef}
+                    value={customUrlInput}
+                    onChange={(e) => setCustomUrlInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleLoadCustomYouTubeUrl()}
+                    placeholder="Dán link: https://www.youtube.com/watch?v=... hoặc youtu.be/..."
+                    className="h-13 pl-11 pr-20 text-sm sm:text-base font-medium bg-background rounded-2xl border-2 border-emerald-500/60 focus-visible:border-emerald-500 focus-visible:ring-4 focus-visible:ring-emerald-500/15 shadow-sm text-foreground placeholder:text-muted-foreground/60"
+                  />
+
+                  <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    {customUrlInput ? (
+                      <button
+                        onClick={() => setCustomUrlInput("")}
+                        className="size-8 rounded-xl hover:bg-muted text-muted-foreground flex items-center justify-center transition-colors"
+                        title="Xóa nội dung"
+                      >
+                        <X className="size-4" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handlePasteClipboard(false)}
+                        className="text-xs font-bold px-3 py-1.5 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30 transition-all flex items-center gap-1"
+                        title="Dán nhanh từ bộ nhớ tạm"
+                      >
+                        <Copy className="size-3" />
+                        <span>Dán</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <Button
+                  onClick={() => handleLoadCustomYouTubeUrl()}
+                  disabled={isLoadingCustomUrl || !customUrlInput.trim()}
+                  className="h-13 px-7 rounded-2xl font-black text-sm bg-emerald-600 hover:bg-emerald-500 text-white shrink-0 gap-2 shadow-lg shadow-emerald-600/25 transition-all"
+                >
+                  {isLoadingCustomUrl ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      <span>Đang trích xuất phụ đề...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="size-4" />
+                      <span>Trích xuất & Học ngay</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* Supported formats & Example chips */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <div className="flex items-center gap-2 flex-wrap text-[11px] text-muted-foreground">
+                  <span className="font-semibold text-foreground/70">Định dạng hỗ trợ:</span>
+                  <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-[10px]">youtube.com/watch?v=...</code>
+                  <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-[10px]">youtu.be/...</code>
+                  <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-[10px]">youtube.com/shorts/...</code>
+                </div>
+
+                <div className="flex items-center gap-1.5 text-xs">
+                  <span className="text-muted-foreground text-[11px]">Hoặc thử nhanh bài mẫu:</span>
+                  <button
+                    onClick={() => handleSelectLesson(CORODOMO_VIDEO_PRESETS[0])}
+                    className="font-bold text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1"
+                  >
+                    <Play className="size-2.5 fill-current" />
+                    <span>BBC Office English (205 câu)</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── SECTION 1: LỊCH SỬ VIDEO ĐÃ HỌC (WATCH & PRACTICE HISTORY) ── */}
+          <div className="shrink-0 space-y-3 pt-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <History className="size-4 text-emerald-500" />
+                <h3 className="text-base font-extrabold text-foreground">Lịch sử video gần đây</h3>
+                <Badge variant="secondary" className="text-xs font-mono h-5">
+                  {watchHistory.length}
+                </Badge>
+              </div>
+
+              {watchHistory.length > 0 && (
+                <button
+                  onClick={handleClearHistory}
+                  className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1 transition-colors"
+                >
+                  <Trash2 className="size-3" />
+                  <span>Xóa lịch sử</span>
+                </button>
+              )}
+            </div>
+
+            {watchHistory.length === 0 ? (
+              <div className="p-8 rounded-3xl border border-dashed border-border/80 text-center flex flex-col items-center justify-center space-y-2 bg-card/40">
+                <Library className="size-10 text-muted-foreground/40" />
+                <p className="font-bold text-sm text-foreground">Chưa có video nào trong lịch sử</p>
+                <p className="text-xs text-muted-foreground max-w-sm leading-relaxed">
+                  Hãy dán link YouTube ở trên hoặc chọn một trong các bài mẫu tuyển chọn bên dưới để bắt đầu luyện tập.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {watchHistory.map((item) => (
                   <div
                     key={item.id}
-                    className="p-3 rounded-2xl bg-muted/30 border border-border/60 hover:border-primary/40 transition-all flex items-center justify-between gap-3"
+                    onClick={() => handleSelectHistoryItem(item)}
+                    className="p-3.5 rounded-2xl border border-border/80 bg-card hover:border-emerald-500/50 hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between space-y-3"
                   >
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                    {/* Thumbnail + Duration */}
+                    <div className="aspect-video rounded-xl overflow-hidden bg-black relative shrink-0">
                       <img
                         src={item.thumbnail}
                         alt={item.title}
-                        className="w-20 aspect-video rounded-xl object-cover bg-black/10 shrink-0"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold text-xs text-foreground truncate">{item.title}</p>
-                        <p className="text-[11px] text-muted-foreground font-mono">
-                          {item.channel} • {item.duration} • {item.segmentsCount} câu
-                        </p>
+                      <Badge className="absolute bottom-1.5 right-1.5 text-[9px] font-mono px-1.5 py-0 bg-black/80 text-white">
+                        {item.duration}
+                      </Badge>
+                      {item.cefrLevel && (
+                        <Badge className="absolute top-1.5 left-1.5 text-[9px] font-mono px-1.5 py-0 bg-emerald-600 text-white">
+                          {item.cefrLevel}
+                        </Badge>
+                      )}
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <div className="size-10 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg">
+                          <Play className="size-4 fill-current ml-0.5" />
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    {/* Metadata */}
+                    <div className="space-y-1.5 flex-1 min-w-0">
+                      <h4 className="font-extrabold text-xs sm:text-sm text-foreground line-clamp-2 leading-snug group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                        {item.title}
+                      </h4>
+                      <p className="text-[11px] text-muted-foreground truncate">{item.channel}</p>
+
+                      {/* Progress bar */}
+                      <div className="space-y-1 pt-1">
+                        <div className="flex items-center justify-between text-[10px] font-bold text-muted-foreground">
+                          <span>
+                            Tiến độ: {item.completedSegments}/{item.totalSegments} câu
+                          </span>
+                          {item.averageScore !== undefined && (
+                            <span className="text-emerald-600 dark:text-emerald-400 font-mono">
+                              ⭐ {item.averageScore}%
+                            </span>
+                          )}
+                        </div>
+                        <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-emerald-500 rounded-full"
+                            style={{
+                              width: `${Math.round(
+                                (item.completedSegments / (item.totalSegments || 1)) * 100
+                              )}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Card Actions */}
+                    <div className="flex items-center justify-between border-t border-border/40 pt-2 shrink-0">
+                      <span className="text-[10px] text-muted-foreground">
+                        {new Date(item.lastPracticedAt).toLocaleDateString("vi-VN")}
+                      </span>
+                      <button
+                        onClick={(e) => handleRemoveHistoryItem(item.youtubeId, e)}
+                        className="size-6 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 flex items-center justify-center transition-colors"
+                        title="Xóa khỏi lịch sử"
+                      >
+                        <Trash2 className="size-3" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── SECTION 2: KHO BÀI HỌC VIDEO (CRUD LIBRARY) ── */}
+          <div className="shrink-0 space-y-4 pt-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Library className="size-4 text-emerald-500" />
+                <h3 className="text-base font-extrabold text-foreground">Kho Video Bài Học</h3>
+                <Badge variant="secondary" className="text-xs font-mono h-5">
+                  {filteredLibrary.length}
+                </Badge>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Add Video Button */}
+                <Button
+                  size="sm"
+                  onClick={() => setShowAddVideoModal(true)}
+                  className="h-8 px-3 text-xs font-bold gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm shrink-0"
+                >
+                  <PlusCircle className="size-3.5" />
+                  <span>Thêm video YouTube</span>
+                </Button>
+
+                {/* Search bar */}
+                <div className="relative w-full sm:w-56">
+                  <Search className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={librarySearch}
+                    onChange={(e) => setLibrarySearch(e.target.value)}
+                    placeholder="Tìm bài học, kênh..."
+                    className="h-8 pl-8 pr-7 text-xs rounded-xl bg-card border-border/80"
+                  />
+                  {librarySearch && (
+                    <button
+                      onClick={() => setLibrarySearch("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Reset to defaults button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleResetDefaults}
+                  className="h-8 px-2.5 text-xs font-bold gap-1 rounded-xl text-muted-foreground hover:text-foreground shrink-0 border-border/80"
+                  title="Khôi phục lại danh sách bài học mẫu mặc định"
+                >
+                  <RotateCcw className="size-3" />
+                  <span className="hidden sm:inline">Khôi phục bài mẫu</span>
+                </Button>
+              </div>
+            </div>
+
+            {/* CEFR Level Filter Pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+              {["all", "A1", "A2", "B1", "B2", "C1", "Custom"].map((lvl) => {
+                const isActive = libraryCefrFilter.toLowerCase() === lvl.toLowerCase();
+                return (
+                  <button
+                    key={lvl}
+                    onClick={() => setLibraryCefrFilter(lvl)}
+                    className={cn(
+                      "px-3 py-1 rounded-full text-xs font-bold transition-all shrink-0",
+                      isActive
+                        ? "bg-emerald-600 text-white shadow-sm"
+                        : "bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/60"
+                    )}
+                  >
+                    {lvl === "all" ? "Tất cả" : lvl}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Grid or Empty state */}
+            {filteredLibrary.length === 0 ? (
+              <div className="p-8 rounded-3xl border border-dashed border-border/80 text-center flex flex-col items-center justify-center space-y-2 bg-card/40">
+                <Library className="size-10 text-muted-foreground/40" />
+                <p className="font-bold text-sm text-foreground">Không tìm thấy bài học nào phù hợp</p>
+                <p className="text-xs text-muted-foreground max-w-sm leading-relaxed">
+                  {librarySearch || libraryCefrFilter !== "all"
+                    ? "Hãy thử xóa bộ lọc tìm kiếm hoặc cấp độ CEFR."
+                    : "Kho video đang trống. Hãy dán liên kết YouTube ở trên để thêm bài học mới hoặc bấm 'Khôi phục bài mẫu'."}
+                </p>
+                {librarySearch || libraryCefrFilter !== "all" ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setLibrarySearch("");
+                      setLibraryCefrFilter("all");
+                    }}
+                    className="h-8 text-xs rounded-xl mt-2"
+                  >
+                    Xóa bộ lọc
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    onClick={handleResetDefaults}
+                    className="h-8 text-xs rounded-xl mt-2 bg-emerald-600 hover:bg-emerald-500 text-white gap-1"
+                  >
+                    <RotateCcw className="size-3" />
+                    <span>Khôi phục bài mẫu</span>
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredLibrary.map((item) => (
+                  <div
+                    key={item.id}
+                    onClick={() => handleSelectLesson(item)}
+                    className="p-3.5 rounded-2xl border border-border/80 bg-card hover:border-emerald-500/50 hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between space-y-3"
+                  >
+                    {/* Thumbnail */}
+                    <div className="aspect-video rounded-xl overflow-hidden bg-black relative shrink-0">
+                      <img
+                        src={item.thumbnail}
+                        alt={item.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                      <Badge className="absolute bottom-1.5 right-1.5 text-[9px] font-mono px-1.5 py-0 bg-black/80 text-white">
+                        {item.duration}
+                      </Badge>
+                      <Badge className="absolute top-1.5 left-1.5 text-[9px] font-mono px-1.5 py-0 bg-emerald-600 text-white">
+                        {item.cefrLevel || "B1"}
+                      </Badge>
+                      {item.isCustom && (
+                        <Badge className="absolute top-1.5 right-1.5 text-[9px] font-mono px-1.5 py-0 bg-indigo-600 text-white">
+                          Tự nạp
+                        </Badge>
+                      )}
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <div className="size-10 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg">
+                          <Play className="size-4 fill-current ml-0.5" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Info */}
+                    <div className="space-y-1 flex-1 min-w-0">
+                      <h4 className="font-extrabold text-xs sm:text-sm text-foreground line-clamp-2 leading-snug group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                        {item.title}
+                      </h4>
+                      <p className="text-[11px] text-muted-foreground truncate">{item.channel}</p>
+                      <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                        {item.segments.length} câu luyện tập
+                      </p>
+                    </div>
+
+                    {/* Action buttons footer (Edit & Delete & Play) */}
+                    <div className="flex items-center justify-between border-t border-border/40 pt-2 shrink-0">
                       <Button
                         size="sm"
-                        onClick={() => handleLoadFromLibrary(item)}
-                        className="rounded-xl text-xs font-bold h-8"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelectLesson(item);
+                        }}
+                        className="h-7 px-2.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white gap-1"
                       >
-                        Luyện tập
+                        <Play className="size-3 fill-current" />
+                        <span>Học</span>
+                      </Button>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={(e) => handleOpenEditModal(item, e)}
+                          className="size-7 rounded-lg text-muted-foreground hover:text-emerald-600 hover:bg-emerald-500/10 flex items-center justify-center transition-colors"
+                          title="Sửa thông tin video"
+                        >
+                          <Pencil className="size-3.5" />
+                        </button>
+                        <button
+                          onClick={(e) => handleDeleteFromLibrary(item.id, e)}
+                          className="size-7 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 flex items-center justify-center transition-colors"
+                          title="Xóa khỏi thư viện"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── EDIT LESSON MODAL (UPDATE) ── */}
+          {editingLesson && (
+            <div
+              className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+              onClick={() => setEditingLesson(null)}
+            >
+              <div
+                className="w-full max-w-md bg-card border border-border rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Pencil className="size-4 text-emerald-500" />
+                    <h3 className="font-extrabold text-sm sm:text-base text-foreground">
+                      Chỉnh sửa thông tin bài học
+                    </h3>
+                  </div>
+                  <button
+                    onClick={() => setEditingLesson(null)}
+                    className="size-7 rounded-lg hover:bg-muted text-muted-foreground flex items-center justify-center"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-muted-foreground">Tiêu đề bài học</label>
+                    <Input
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      placeholder="Nhập tiêu đề bài học..."
+                      className="text-xs sm:text-sm rounded-xl"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-muted-foreground">Kênh / Nguồn</label>
+                    <Input
+                      value={editChannel}
+                      onChange={(e) => setEditChannel(e.target.value)}
+                      placeholder="Tên kênh YouTube..."
+                      className="text-xs sm:text-sm rounded-xl"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-muted-foreground">Cấp độ CEFR</label>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {["A1", "A2", "B1", "B2", "C1", "Custom"].map((lvl) => (
+                        <button
+                          key={lvl}
+                          type="button"
+                          onClick={() => setEditCefr(lvl)}
+                          className={cn(
+                            "px-3 py-1 rounded-lg text-xs font-bold transition-colors",
+                            editCefr === lvl
+                              ? "bg-emerald-600 text-white"
+                              : "bg-muted/60 text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          {lvl}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/60">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setEditingLesson(null)}
+                    className="rounded-xl text-xs"
+                  >
+                    Hủy bỏ
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleSaveEdit}
+                    className="rounded-xl text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+                  >
+                    Lưu thay đổi
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          VIEW 2: STUDIO PLAYER (PHÒNG LUYỆN SHADOWING & PHÁT ÂM)
+      ══════════════════════════════════════════════════════════════════════ */}
+      {currentView === "studio" && (
+        <>
+          {/* ── STUDIO TOP NAV BAR ── */}
+          <header className="h-14 border-b border-border/80 bg-card/90 backdrop-blur-md px-3 sm:px-5 flex items-center justify-between gap-3 shrink-0 z-20">
+            {/* Left: Back to Hub + Video Title */}
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  syncProgressToHistory();
+                  setCurrentView("hub");
+                }}
+                className="h-8 px-2.5 rounded-xl text-xs font-bold gap-1 border-border/80 hover:bg-muted text-foreground"
+                title="Quay về Màn Chính (Hub)"
+              >
+                <ArrowLeft className="size-3.5" />
+                <span className="hidden sm:inline">Màn chính</span>
+              </Button>
+
+              <div className="flex items-center gap-2 min-w-0">
+                <h1 className="font-extrabold text-xs sm:text-sm tracking-tight text-foreground truncate max-w-[160px] sm:max-w-[280px] md:max-w-[400px]">
+                  {activeLesson.title}
+                </h1>
+              </div>
+
+              {/* Add YouTube Video Button in Studio */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAddVideoModal(true)}
+                className="h-8 px-2.5 rounded-xl text-xs font-bold gap-1.5 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 shrink-0 hidden sm:flex"
+                title="Dán link nạp video YouTube mới"
+              >
+                <PlusCircle className="size-3.5" />
+                <span>Nạp video khác</span>
+              </Button>
+            </div>
+
+            {/* Right: Mode Tabs: [Shadowing] [Phát âm] */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={() => setActiveMode("shadowing")}
+                className={cn(
+                  "px-3 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5",
+                  activeMode === "shadowing"
+                    ? "bg-emerald-500 text-white shadow-sm"
+                    : "bg-muted/40 text-muted-foreground hover:text-foreground border border-border/60"
+                )}
+              >
+                <span>Shadowing</span>
+              </button>
+
+              <button
+                onClick={() => setActiveMode("pronounce")}
+                className={cn(
+                  "px-3 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5",
+                  activeMode === "pronounce"
+                    ? "bg-emerald-500 text-white shadow-sm"
+                    : "bg-muted/40 text-muted-foreground hover:text-foreground border border-border/60"
+                )}
+              >
+                <span>Phát âm</span>
+              </button>
+            </div>
+          </header>
+
+          {/* ── MODE 1: SHADOWING (Video + Subtitle Pill Below + Synchronized Sidebar) ── */}
+          {activeMode === "shadowing" && (
+            <main className="flex-1 p-2.5 sm:p-3 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-3 min-h-0">
+              {/* LEFT (8 cols): Video Player + Subtitle Pill Below + Bottom Controls */}
+              <div className="lg:col-span-8 h-full flex flex-col gap-2 min-h-0 overflow-hidden">
+                {/* Video Container */}
+                <div
+                  ref={playerContainerRef}
+                  className="shrink-0 aspect-video w-full rounded-2xl overflow-hidden bg-black border border-border/80 shadow-lg relative"
+                >
+                  <div id="corodomo-yt-player" className="w-full h-full absolute inset-0" />
+                </div>
+
+                {/* Subtitle Pill & Translation Area (Placed Below Video, matching Corodomo) */}
+                <div className="flex-1 min-h-[90px] flex flex-col items-center justify-center px-4 py-2 text-center select-text">
+                  {showSubtitle && (
+                    <div className="inline-flex flex-wrap items-end justify-center gap-x-2 gap-y-1 bg-[#1e2329] dark:bg-[#181d24] text-white px-5 py-2.5 rounded-2xl border border-white/10 shadow-md">
+                      {currentSentenceTokens.map((token, i) => (
+                        <div
+                          key={i}
+                          onClick={(e) => handleWordClick(token.cleanWord, e)}
+                          className="inline-flex flex-col items-center cursor-pointer group px-1 py-0.5 rounded transition-all hover:bg-white/10"
+                          title={`Click để tra từ: "${token.cleanWord}"`}
+                        >
+                          <span className="text-[10px] sm:text-[11px] font-mono text-emerald-400 font-semibold leading-none mb-0.5 select-none tracking-tight">
+                            {token.ipa || "—"}
+                          </span>
+                          <span className="text-sm sm:text-base font-bold text-white group-hover:text-emerald-300 transition-colors leading-tight">
+                            {token.word}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {showTranslation && currentSegment.translationVi && (
+                    <p className="text-xs sm:text-sm text-foreground font-bold leading-normal mt-2 max-w-2xl">
+                      {currentSegment.translationVi}
+                    </p>
+                  )}
+                </div>
+
+                {/* Video Controls Bar below Video */}
+                <div className="shrink-0 px-3.5 py-2 rounded-xl border border-border/60 bg-card flex items-center justify-between gap-2 shadow-2xs">
+                  {/* Left: Toggles for [Phụ đề] & [Bản dịch] */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowSubtitle(!showSubtitle)}
+                      className={cn(
+                        "px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1",
+                        showSubtitle
+                          ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40"
+                          : "bg-muted/40 text-muted-foreground border border-border/60"
+                      )}
+                    >
+                      <Check className={cn("size-3", showSubtitle ? "opacity-100" : "opacity-0")} />
+                      <span>Phụ đề</span>
+                    </button>
+
+                    <button
+                      onClick={() => setShowTranslation(!showTranslation)}
+                      className={cn(
+                        "px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1",
+                        showTranslation
+                          ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40"
+                          : "bg-muted/40 text-muted-foreground border border-border/60"
+                      )}
+                    >
+                      <Check className={cn("size-3", showTranslation ? "opacity-100" : "opacity-0")} />
+                      <span>Bản dịch</span>
+                    </button>
+                  </div>
+
+                  {/* Center: Sentence Navigation & Loop */}
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handlePrevSegment}
+                      disabled={activeSegmentIndex === 0}
+                      className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
+                      title="Câu trước"
+                    >
+                      <ChevronLeft className="size-4" />
+                    </Button>
+
+                    <span className="text-xs font-mono font-bold text-foreground px-1.5">
+                      {activeSegmentIndex + 1} / {activeLesson.segments.length}
+                    </span>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleNextSegment}
+                      disabled={activeSegmentIndex === activeLesson.segments.length - 1}
+                      className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
+                      title="Câu sau"
+                    >
+                      <ChevronRight className="size-4" />
+                    </Button>
+
+                    <Button
+                      variant={isLooping ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setIsLooping(!isLooping)}
+                      className={cn(
+                        "size-7 p-0 rounded-lg transition-all",
+                        isLooping
+                          ? "bg-emerald-500 text-white"
+                          : "text-muted-foreground border-border/60 hover:text-foreground"
+                      )}
+                      title="Lặp lại câu này"
+                    >
+                      <Repeat className="size-3.5" />
+                    </Button>
+                  </div>
+
+                  {/* Right: Speed & Back to Hub */}
+                  <div className="flex items-center gap-2">
+                    <div className="hidden sm:flex items-center gap-0.5 bg-muted/50 p-0.5 rounded-lg border border-border/60">
+                      {[0.75, 0.9, 1.0, 1.25].map((s) => (
+                        <button
+                          key={s}
+                          onClick={() => handleSpeedChange(s)}
+                          className={cn(
+                            "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md transition-all",
+                            playbackSpeed === s
+                              ? "bg-primary text-primary-foreground shadow-2xs"
+                              : "text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          {s}x
+                        </button>
+                      ))}
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        syncProgressToHistory();
+                        setCurrentView("hub");
+                      }}
+                      className="h-7 px-2.5 rounded-lg text-xs font-bold gap-1 text-emerald-600 dark:text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/10"
+                    >
+                      <Film className="size-3" />
+                      <span className="hidden md:inline">Đổi video</span>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* RIGHT (4 cols): Synchronized Subtitle Sidebar (Auto-scrolls as speech moves) */}
+              <div className="lg:col-span-4 h-full flex flex-col rounded-3xl border border-border/80 bg-card overflow-hidden shadow-xs min-h-0">
+                {/* Header: "Phụ đề" + Download + Copy */}
+                <div className="px-4 py-2.5 border-b border-border/60 bg-muted/20 flex items-center justify-between gap-2 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-extrabold text-sm text-foreground">Phụ đề</h3>
+                    <Badge variant="outline" className="text-[10px] font-mono h-5 text-muted-foreground">
+                      {activeLesson.segments.length} câu
+                    </Badge>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleDownloadTranscript}
+                      className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
+                      title="Tải phụ đề về máy"
+                    >
+                      <Download className="size-3.5" />
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleCopyTranscript}
+                      className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
+                      title="Sao chép toàn bộ lời thoại"
+                    >
+                      <Copy className="size-3.5" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Search Bar */}
+                <div className="p-2 border-b border-border/40 shrink-0">
+                  <div className="relative">
+                    <Search className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={transcriptSearch}
+                      onChange={(e) => setTranscriptSearch(e.target.value)}
+                      placeholder="Tìm kiếm câu thoại hoặc nghĩa tiếng Việt..."
+                      className="h-8 pl-8 text-xs bg-muted/20 rounded-xl"
+                    />
+                  </div>
+                </div>
+
+                {/* Scrollable Sentence List with Real-time Auto-Scroll Highlight */}
+                <div
+                  className="flex-1 min-h-0 overflow-y-auto p-2.5 space-y-2"
+                  onMouseEnter={() => (isUserInteractingTimeline.current = true)}
+                  onMouseLeave={() => (isUserInteractingTimeline.current = false)}
+                >
+                  {filteredSegments.map((seg, idx) => {
+                    const originalIndex = activeLesson.segments.findIndex(
+                      (s) => s.segment_id === seg.segment_id
+                    );
+                    const isActive = originalIndex === activeSegmentIndex;
+
+                    return (
+                      <div
+                        key={seg.segment_id}
+                        ref={(el) => {
+                          timelineItemRefs.current[originalIndex] = el;
+                        }}
+                        onClick={() => seekToSegment(originalIndex, true)}
+                        className={cn(
+                          "p-3 rounded-2xl border transition-all cursor-pointer select-text flex items-start gap-2.5",
+                          isActive
+                            ? "bg-emerald-500/10 border-emerald-500/50 shadow-xs ring-1 ring-emerald-500/30"
+                            : "bg-card hover:bg-muted/30 border-border/60"
+                        )}
+                      >
+                        <button
+                          className={cn(
+                            "size-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 transition-colors",
+                            isActive
+                              ? "bg-emerald-500 text-white"
+                              : "bg-muted text-muted-foreground hover:bg-muted/80"
+                          )}
+                        >
+                          {isActive && isPlayingVideo ? (
+                            <Pause className="size-3 fill-current" />
+                          ) : (
+                            <Play className="size-3 fill-current ml-0.5" />
+                          )}
+                        </button>
+
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className={cn(
+                              "text-xs sm:text-sm leading-snug",
+                              isActive ? "font-bold text-foreground" : "text-foreground/90 font-medium"
+                            )}
+                          >
+                            {seg.text}
+                          </p>
+
+                          {seg.translationVi && (
+                            <p className="text-[11px] sm:text-xs text-muted-foreground mt-1 leading-normal">
+                              {seg.translationVi}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </main>
+          )}
+
+          {/* ── MODE 2: PHÁT ÂM (Matches Corodomo Screenshot 2) ── */}
+          {activeMode === "pronounce" && (
+            <main className="flex-1 p-2.5 sm:p-3 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-3 min-h-0">
+              {/* LEFT (6 cols): Video Player + Progress + Subtitle Accordion */}
+              <div className="lg:col-span-6 h-full flex flex-col gap-2.5 min-h-0 overflow-hidden">
+                {!isVideoHidden && (
+                  <div className="shrink-0 aspect-video w-full rounded-2xl overflow-hidden bg-black border border-border/80 shadow-md relative">
+                    <div id="corodomo-yt-player" className="w-full h-full" />
+                  </div>
+                )}
+
+                {/* Toolbar */}
+                <div className="shrink-0 px-3 py-1.5 rounded-xl border border-border/60 bg-card flex items-center justify-between gap-2 shadow-2xs">
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsVideoHidden(!isVideoHidden)}
+                      className="h-7 px-2 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground gap-1"
+                    >
+                      <Video className="size-3" />
+                      <span>{isVideoHidden ? "Hiện video" : "Ẩn video"}</span>
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        toast.info(
+                          "Phím tắt bàn phím",
+                          "Space: Phát lại • Enter: Kiểm tra phát âm • Mũi tên: Chuyển câu"
+                        )
+                      }
+                      className="h-7 px-2 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground gap-1"
+                    >
+                      <Keyboard className="size-3" />
+                      <span>Phím tắt</span>
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center gap-0.5 bg-muted/50 p-0.5 rounded-lg border border-border/60">
+                    {[0.75, 1.0, 1.25].map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => handleSpeedChange(s)}
+                        className={cn(
+                          "text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-md transition-all",
+                          playbackSpeed === s
+                            ? "bg-primary text-primary-foreground shadow-2xs"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {s}x
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Progress Bar */}
+                <div className="shrink-0 px-3.5 py-2.5 rounded-2xl bg-card border border-border/70 space-y-1.5 shadow-2xs">
+                  <div className="flex items-center justify-between text-xs font-bold">
+                    <span className="text-muted-foreground">
+                      Đã hoàn thành {completedCount}/{activeLesson.segments.length}
+                    </span>
+                    <span className="text-emerald-600 dark:text-emerald-400 font-mono">
+                      {progressPercent}%
+                    </span>
+                  </div>
+                  <div className="h-2 w-full bg-muted/50 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Subtitle Accordion */}
+                <div className="flex-1 min-h-0 rounded-2xl border border-border/70 bg-card overflow-hidden flex flex-col shadow-2xs">
+                  <div
+                    onClick={() => setShowSubtitleAccordion(!showSubtitleAccordion)}
+                    className="px-3.5 py-2.5 border-b border-border/60 bg-muted/20 flex items-center justify-between cursor-pointer"
+                  >
+                    <span className="text-xs font-bold text-foreground">
+                      Phụ đề [{activeSegmentIndex + 1}/{activeLesson.segments.length}]
+                    </span>
+                    {showSubtitleAccordion ? (
+                      <ChevronUp className="size-4 text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="size-4 text-muted-foreground" />
+                    )}
+                  </div>
+
+                  {showSubtitleAccordion && (
+                    <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
+                      {activeLesson.segments.map((seg, idx) => {
+                        const isCur = idx === activeSegmentIndex;
+                        return (
+                          <div
+                            key={seg.segment_id}
+                            onClick={() => seekToSegment(idx, true)}
+                            className={cn(
+                              "p-2.5 rounded-xl border transition-all cursor-pointer text-left",
+                              isCur
+                                ? "bg-emerald-500/10 border-emerald-500/40 shadow-2xs"
+                                : "hover:bg-muted/20 border-border/40"
+                            )}
+                          >
+                            <span className="text-[10px] font-mono font-bold text-muted-foreground block mb-0.5">
+                              CÂU {idx + 1}
+                            </span>
+                            <p className="text-xs font-semibold text-foreground leading-snug">
+                              {seg.text}
+                            </p>
+                            {seg.translationVi && (
+                              <p className="text-[11px] text-muted-foreground mt-0.5 italic">
+                                {seg.translationVi}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* RIGHT (6 cols): "Luyện phát âm" Panel */}
+              <div className="lg:col-span-6 h-full flex flex-col rounded-3xl border border-border/80 bg-card overflow-hidden shadow-xs min-h-0">
+                <div className="px-4 py-2.5 border-b border-border/60 bg-muted/20 flex items-center justify-between shrink-0">
+                  <h3 className="font-extrabold text-sm text-foreground">Luyện phát âm</h3>
+                  <Badge variant="outline" className="text-xs font-mono font-bold h-6">
+                    {activeSegmentIndex + 1}/{activeLesson.segments.length}
+                  </Badge>
+                </div>
+
+                {/* Sentence Pagination */}
+                <div className="px-4 py-2.5 border-b border-border/50 shrink-0 flex items-center justify-between gap-2 overflow-x-auto">
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handlePrevSegment}
+                      disabled={activeSegmentIndex === 0}
+                      className="size-7 p-0 rounded-lg"
+                    >
+                      <ChevronLeft className="size-3.5" />
+                    </Button>
+
+                    {Array.from({ length: Math.min(10, activeLesson.segments.length) }, (_, i) => {
+                      const startOffset = Math.max(
+                        0,
+                        Math.min(activeSegmentIndex - 4, activeLesson.segments.length - 10)
+                      );
+                      const sentenceNum = startOffset + i + 1;
+                      const isCur = sentenceNum - 1 === activeSegmentIndex;
+
+                      return (
+                        <button
+                          key={sentenceNum}
+                          onClick={() => seekToSegment(sentenceNum - 1, true)}
+                          className={cn(
+                            "size-7 rounded-full text-xs font-mono font-bold transition-all flex items-center justify-center",
+                            isCur
+                              ? "bg-emerald-500 text-white shadow-xs"
+                              : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                          )}
+                        >
+                          {sentenceNum}
+                        </button>
+                      );
+                    })}
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleNextSegment}
+                      disabled={activeSegmentIndex === activeLesson.segments.length - 1}
+                      className="size-7 p-0 rounded-lg"
+                    >
+                      <ChevronRight className="size-3.5" />
+                    </Button>
+                  </div>
+
+                  <div className="hidden sm:flex items-center gap-1 text-[11px] text-muted-foreground font-medium">
+                    <span>Số câu/lượt:</span>
+                    <span className="font-bold text-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
+                      1
+                    </span>
+                  </div>
+                </div>
+
+                {/* CÂU HIỆN TẠI */}
+                <div className="p-4 border-b border-border/60 bg-muted/10 space-y-3 shrink-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                      CÂU HIỆN TẠI
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => tts.speak(currentSegment.text)}
+                        className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
+                        title="Nghe Audio mẫu"
+                      >
+                        <Volume2 className="size-3.5" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={(e) => handleDeleteFromLibrary(item, e)}
-                        className="size-8 p-0 rounded-xl text-muted-foreground hover:text-red-500 hover:bg-red-500/10"
-                        title="Xóa video khỏi thư viện"
+                        onClick={() => setShowSubtitle(!showSubtitle)}
+                        className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
+                        title="Ẩn/Hiện chữ"
                       >
-                        <Trash2 className="size-4" />
+                        {showSubtitle ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setFontSizeLevel(
+                            fontSizeLevel === "md" ? "lg" : fontSizeLevel === "lg" ? "xl" : "md"
+                          );
+                        }}
+                        className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
+                        title="Cỡ chữ"
+                      >
+                        <Type className="size-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowTranslation(!showTranslation)}
+                        className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
+                        title="Ẩn/Hiện dịch nghĩa"
+                      >
+                        <Languages className="size-3.5" />
                       </Button>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
+
+                  {/* Target Sentence Display with Stacked IPA */}
+                  <div className="min-h-[56px] flex flex-col justify-center">
+                    {showSubtitle ? (
+                      <div className="flex flex-wrap items-end gap-x-2 gap-y-1">
+                        {currentSentenceTokens.map((token, i) => (
+                          <div
+                            key={i}
+                            onClick={(e) => handleWordClick(token.cleanWord, e)}
+                            className="inline-flex flex-col items-center cursor-pointer group px-0.5 rounded transition-all hover:bg-muted/40"
+                          >
+                            <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold leading-none mb-0.5 select-none">
+                              {token.ipa || "—"}
+                            </span>
+                            <span
+                              className={cn(
+                                "font-extrabold text-foreground group-hover:text-primary transition-colors leading-tight",
+                                fontSizeLevel === "md"
+                                  ? "text-base"
+                                  : fontSizeLevel === "lg"
+                                  ? "text-lg"
+                                  : "text-xl"
+                              )}
+                            >
+                              {token.word}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 text-muted-foreground py-2 italic text-xs">
+                        <EyeOff className="size-4" />
+                        <span>Nội dung đã ẩn để bạn tập trung luyện nghe</span>
+                      </div>
+                    )}
+
+                    {showTranslation && currentSegment.translationVi && (
+                      <p className="text-xs text-muted-foreground font-medium italic mt-2">
+                        {currentSegment.translationVi}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Big Action Buttons */}
+                <div className="p-4 border-b border-border/50 shrink-0 flex items-center justify-between gap-3">
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={handlePlayNative}
+                    className="h-11 px-4 rounded-2xl font-bold text-xs sm:text-sm border-border/80 flex-1 flex items-center justify-center gap-1.5 hover:bg-muted/50"
+                  >
+                    <Play className="size-4 fill-current text-muted-foreground" />
+                    <span>Phát lại</span>
+                    <kbd className="text-[9px] font-mono px-1 py-0.5 bg-muted rounded text-muted-foreground ml-1">
+                      space
+                    </kbd>
+                  </Button>
+
+                  <Button
+                    size="lg"
+                    onClick={recordingStatus === "recording" ? handleStopRecord : handleStartRecord}
+                    disabled={recordingStatus === "evaluating"}
+                    className={cn(
+                      "h-11 px-6 rounded-2xl font-black text-xs sm:text-sm flex-2 flex items-center justify-center gap-2 text-white shadow-md transition-all",
+                      recordingStatus === "recording"
+                        ? "bg-rose-500 hover:bg-rose-600 animate-pulse ring-4 ring-rose-500/25"
+                        : "bg-emerald-600 hover:bg-emerald-500"
+                    )}
+                  >
+                    {recordingStatus === "evaluating" ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" />
+                        <span>Đang chấm...</span>
+                      </>
+                    ) : recordingStatus === "recording" ? (
+                      <>
+                        <MicOff className="size-4" />
+                        <span>Dừng & Chấm điểm</span>
+                      </>
+                    ) : (
+                      <>
+                        <Mic className="size-4" />
+                        <span>Kiểm tra phát âm</span>
+                        <kbd className="text-[9px] font-mono px-1 py-0.5 bg-white/20 rounded ml-1">
+                          enter
+                        </kbd>
+                      </>
+                    )}
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={handleNextSegment}
+                    disabled={activeSegmentIndex === activeLesson.segments.length - 1}
+                    className="h-11 px-4 rounded-2xl font-bold text-xs sm:text-sm border-border/80 flex-1 flex items-center justify-center gap-1 hover:bg-muted/50"
+                  >
+                    <span>Tiếp</span>
+                    <ChevronRight className="size-4" />
+                  </Button>
+                </div>
+
+                {/* 4 Score Metric Cards */}
+                <div className="flex-1 min-h-0 p-4 grid grid-cols-2 gap-3 overflow-y-auto">
+                  <div className="p-3.5 rounded-2xl bg-card border border-border/70 flex flex-col justify-between shadow-2xs">
+                    <span className="text-xs font-bold text-muted-foreground">Điểm phát âm</span>
+                    <span
+                      className={cn(
+                        "text-2xl sm:text-3xl font-black font-mono mt-1",
+                        score?.overall
+                          ? score.overall >= 80
+                            ? "text-emerald-500"
+                            : score.overall >= 60
+                            ? "text-amber-500"
+                            : "text-rose-500"
+                          : "text-rose-500/80"
+                      )}
+                    >
+                      {score?.overall ? score.overall.toFixed(1) : "0.0"}
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-card border border-border/70 flex flex-col justify-between shadow-2xs">
+                    <span className="text-xs font-bold text-muted-foreground">Độ chính xác</span>
+                    <span
+                      className={cn(
+                        "text-2xl sm:text-3xl font-black font-mono mt-1",
+                        score?.accuracy ? "text-emerald-500" : "text-rose-500/80"
+                      )}
+                    >
+                      {score?.accuracy ? score.accuracy.toFixed(1) : "0.0"}
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-card border border-border/70 flex flex-col justify-between shadow-2xs">
+                    <span className="text-xs font-bold text-muted-foreground">Độ trôi chảy</span>
+                    <span
+                      className={cn(
+                        "text-2xl sm:text-3xl font-black font-mono mt-1",
+                        score?.fluency ? "text-emerald-500" : "text-rose-500/80"
+                      )}
+                    >
+                      {score?.fluency ? score.fluency.toFixed(1) : "0.0"}
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-card border border-border/70 flex flex-col justify-between shadow-2xs">
+                    <span className="text-xs font-bold text-muted-foreground">Độ hoàn thiện</span>
+                    <span
+                      className={cn(
+                        "text-2xl sm:text-3xl font-black font-mono mt-1",
+                        score?.completeness ? "text-emerald-500" : "text-rose-500/80"
+                      )}
+                    >
+                      {score?.completeness ? score.completeness.toFixed(1) : "0.0"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </main>
+          )}
+
+          {/* Session Completed Modal */}
+          <SessionCompletedModal
+            open={showCompletedModal}
+            onOpenChange={setShowCompletedModal}
+            sessionTitle={activeLesson.title}
+            durationMinutes={Math.max(1, Math.round(elapsedSec / 60))}
+            turnsCount={completedCount}
+            overallScore={
+              completedCount
+                ? Math.round(
+                    Object.values(sentenceScores).reduce((a, b) => a + b.overall, 0) / completedCount
+                  )
+                : 85
+            }
+            onRestart={() => {
+              setActiveSegmentIndex(0);
+              setScore(null);
+              setUserAudioUrl(null);
+              setSentenceScores({});
+              setShowCompletedModal(false);
+            }}
+          />
+        </>
       )}
 
-      {/* ── CUSTOM SCRIPT MODAL DRAWER ── */}
-      {showCustomScriptModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-card border border-border/80 rounded-3xl max-w-xl w-full flex flex-col overflow-hidden shadow-2xl animate-in fade-in-0 zoom-in-95 duration-150">
-            <div className="p-4 border-b border-border/60 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileText className="size-5 text-primary" />
+      {/* ── MODAL: THÊM BÀI HỌC TỪ YOUTUBE (POPUP TOÀN HỆ THỐNG) ── */}
+      {showAddVideoModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setShowAddVideoModal(false)}
+        >
+          <div
+            className="w-full max-w-lg bg-card border-2 border-emerald-500/50 rounded-3xl p-5 sm:p-7 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-border/60 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="size-10 rounded-2xl bg-red-600 text-white flex items-center justify-center shadow-lg shadow-red-600/30 shrink-0">
+                  <YouTubeIcon className="size-5" />
+                </div>
                 <div>
-                  <h3 className="font-bold text-base text-foreground">Dán bài nói thủ công (Custom Script)</h3>
+                  <h3 className="font-extrabold text-sm sm:text-base text-foreground">
+                    Thêm bài học từ YouTube
+                  </h3>
                   <p className="text-[11px] text-muted-foreground">
-                    Dành cho video không có CC trên YouTube hoặc bài nói tiếng Anh bạn tự chuẩn bị
+                    Dán link video YouTube để tự động bóc tách phụ đề & tạo bài học
                   </p>
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowCustomScriptModal(false)}
-                className="rounded-full size-8 p-0"
+              <button
+                onClick={() => setShowAddVideoModal(false)}
+                className="size-8 rounded-xl hover:bg-muted text-muted-foreground flex items-center justify-center"
               >
                 <X className="size-4" />
-              </Button>
+              </button>
             </div>
 
-            <div className="p-4 space-y-3">
-              <textarea
-                value={customScriptText}
-                onChange={(e) => setCustomScriptText(e.target.value)}
-                placeholder="Dán toàn bộ đoạn văn tiếng Anh vào đây. Hệ thống sẽ tự động ngắt câu, đo lường thời gian và phân tích ngữ điệu tức thì..."
-                rows={7}
-                className="w-full p-3 rounded-2xl bg-background border border-border/80 text-xs sm:text-sm font-mono leading-relaxed focus:outline-hidden focus:ring-2 focus:ring-primary resize-none"
-              />
+            {/* Input & Paste */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-muted-foreground flex items-center justify-between">
+                <span>Đường dẫn video YouTube:</span>
+                <button
+                  type="button"
+                  onClick={() => handlePasteClipboard(true)}
+                  className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold hover:underline flex items-center gap-1"
+                >
+                  <Copy className="size-3" />
+                  <span>Dán từ clipboard</span>
+                </button>
+              </label>
 
-              <div className="flex items-center justify-between pt-1">
-                <p className="text-[11px] text-muted-foreground">
-                  {customScriptText.trim().split(/\s+/).filter(Boolean).length} từ •{" "}
-                  {
-                    customScriptText
-                      .split(/(?<=[.?!])\s+|\n+/)
-                      .map((s) => s.trim())
-                      .filter((s) => s.length > 2).length
-                  }{" "}
-                  câu
-                </p>
-
-                <div className="flex gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowCustomScriptModal(false)}
-                    className="rounded-xl text-xs font-semibold"
-                  >
-                    Hủy
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={handleLoadCustomScript}
-                    disabled={!customScriptText.trim() || isLoadingTranscript}
-                    className="rounded-xl text-xs font-bold gap-1.5"
-                  >
-                    {isLoadingTranscript ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                      <Sparkles className="size-3.5" />
-                    )}
-                    <span>Bắt đầu Shadowing</span>
-                  </Button>
+              <div className="relative">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-red-500 flex items-center pointer-events-none">
+                  <YouTubeIcon className="size-4" />
                 </div>
+                <Input
+                  value={modalUrlInput}
+                  onChange={(e) => setModalUrlInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleLoadCustomYouTubeUrl(modalUrlInput)}
+                  placeholder="https://www.youtube.com/watch?v=... hoặc youtu.be/..."
+                  className="h-11 pl-9 pr-8 text-xs sm:text-sm rounded-xl border-emerald-500/50 focus-visible:border-emerald-500"
+                  autoFocus
+                />
+                {modalUrlInput && (
+                  <button
+                    onClick={() => setModalUrlInput("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                )}
               </div>
+
+              <div className="p-3 rounded-2xl bg-muted/40 border border-border/60 space-y-1 text-[11px] text-muted-foreground">
+                <p className="font-semibold text-foreground/80 flex items-center gap-1">
+                  <Sparkles className="size-3 text-emerald-500" />
+                  <span>Tính năng tự động:</span>
+                </p>
+                <p>• Bóc tách 100% transcript và căn chỉnh thời gian chuẩn xác.</p>
+                <p>• Tự động sinh phiên âm chuẩn IPA phía trên từng từ vựng.</p>
+                <p>• Lưu vĩnh viễn bài học vào Kho Video của bạn.</p>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/60">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAddVideoModal(false)}
+                className="rounded-xl text-xs h-9"
+              >
+                Hủy bỏ
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => handleLoadCustomYouTubeUrl(modalUrlInput)}
+                disabled={isLoadingCustomUrl || !modalUrlInput.trim()}
+                className="rounded-xl text-xs h-9 bg-emerald-600 hover:bg-emerald-500 text-white font-bold gap-1.5 shadow-md shadow-emerald-600/25"
+              >
+                {isLoadingCustomUrl ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" />
+                    <span>Đang trích xuất phụ đề...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="size-3.5" />
+                    <span>Trích xuất & Học ngay</span>
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         </div>

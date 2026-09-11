@@ -1,7 +1,29 @@
 export type ConversationRole = "user" | "assistant" | "system";
 
+export type DiscourseStage =
+  | "rapport"
+  | "discovery"
+  | "twist_conflict"
+  | "negotiation"
+  | "resolution";
+
+export interface ConversationalTwist {
+  id: string;
+  titleVi: string;
+  descriptionEn: string;
+  promptAiVi?: string;
+  severity: "mild" | "high";
+  injectedAtTurn: number;
+  isResolved: boolean;
+}
+
 export interface TurnPedagogy {
   latencyMs?: number;
+  speechRateWpm?: number;
+  lexicalDiversityTtr?: number; // 0 - 100%
+  hesitationCount?: number;
+  discourseStage?: DiscourseStage;
+  activeTwistAlert?: string;
   grammarIssue?: string | null;
   grammarFix?: string | null;
   nativeReformulation?: string;
@@ -52,6 +74,15 @@ export interface ConversationSession {
   ttsModel?: string;
   errorCode?: string;
   errorMessage?: string;
+}
+
+export interface LiveCallSummaryMetrics {
+  overallWpm: number;
+  averageLatencyMs: number;
+  lexicalDiversityTtr: number;
+  totalErrorsCount: number;
+  twistResolved: boolean;
+  cefrBandEstimate: "B1" | "B2" | "C1" | "C2";
 }
 
 // Persisted session row (§26)

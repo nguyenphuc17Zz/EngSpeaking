@@ -1,6 +1,3 @@
-// Survival Evaluator Service — Function 7
-// Evaluates Circumlocution & Real-Life Survival Scenarios
-
 import { generateTextWithRouting } from "@/lib/ai";
 import { survivalEvaluationSchema } from "@/lib/validation/survival-schemas";
 import { SURVIVAL_EVALUATOR_SYSTEM } from "@/lib/ai/prompts/survival-prompts";
@@ -9,6 +6,7 @@ import type {
   SurvivalScenarioTask,
   SurvivalEvaluationResult,
 } from "@/types/survival-speaking";
+import { analyzeAristotelianCircumlocution } from "./aristotelian-evaluator.engine";
 
 function cleanJson(text: string): unknown {
   let cleaned = text.trim()
@@ -45,41 +43,57 @@ export async function evaluateCircumlocutionAttempt(params: {
   const provider = params.provider || "gemini";
   const model = params.model && params.model !== "auto" ? params.model : "gemini-3.5-flash-lite";
 
-  const lowerUser = params.userTranscript.toLowerCase();
-
-  // Check forbidden words
-  const forbiddenTriggered = params.task.forbiddenWords.some((fw) =>
-    lowerUser.includes(fw.toLowerCase())
-  );
-  const targetWordAvoided = !forbiddenTriggered;
+  // 1. Deterministic Aristotelian Structural & Taboo Analysis
+  const analysis = analyzeAristotelianCircumlocution(params.task, params.userTranscript);
+  const targetWordAvoided = !analysis.tabooViolated;
 
   if (provider === "mock") {
-    const isSuccessful = targetWordAvoided && params.userTranscript.length >= 15;
+    const isSuccessful = targetWordAvoided && analysis.semanticPrecisionScore >= 60;
     return {
       isSuccessful,
       communicationRecovered: isSuccessful,
       strategyUsed: "circumlocution",
       targetWordAvoided,
-      conceptClarityScore: isSuccessful ? 92 : 40,
+      genusDetected: analysis.genusDetected,
+      differentiaDetected: analysis.differentiaDetected,
+      semanticPrecisionScore: analysis.semanticPrecisionScore,
+      listenerGuess: analysis.listenerGuess,
+      clarityBreakdown: {
+        genusScore: analysis.genusScore,
+        functionScore: analysis.functionScore,
+        ambiguityPenalty: analysis.tabooViolated ? 70 : 0,
+      },
+      conceptClarityScore: isSuccessful ? analysis.semanticPrecisionScore : Math.min(50, analysis.semanticPrecisionScore),
       repairInitiationLatencyMs: params.responseLatencyMs,
       naturalnessScore: isSuccessful ? 88 : 50,
-      overallScore: isSuccessful ? 90 : 45,
+      overallScore: isSuccessful ? Math.max(75, analysis.semanticPrecisionScore) : 45,
       userTranscript: params.userTranscript,
-      coachFeedbackVi: targetWordAvoided
-        ? "Tuyệt vời! Bạn đã giải thích rõ đặc tính và công dụng của khái niệm mà không hề bị lỡ miệng nói từ bị cấm."
-        : `Bạn đã lỡ miệng nói từ bị cấm ("${params.task.targetWord}"). Hãy thử lại bằng cách miêu tả công dụng hoặc chủng loại.`,
-      idealRepairVersion: params.task.sampleExplanations[0] || "It's an item that you use to...",
-      alternativeStrategies: ["Mô tả chức năng chính", "Kể tên bối cảnh thường thấy", "So sánh với vật dụng tương tự"],
+      coachFeedbackVi: analysis.pedagogicalFeedbackVi,
+      idealRepairVersion: params.task.sampleExplanations[0] || `It's a kind of ${params.task.category} used for ${params.task.vietnameseMeaning}.`,
+      alternativeStrategies: [
+        "Khung Aristotelian: It's a kind of...",
+        "Mô tả công dụng: You use it when...",
+        "Bối cảnh xuất hiện: You can usually find it in...",
+      ],
     };
   }
 
-  const userPrompt = `Evaluate this Circumlocution Attempt:
+  const userPrompt = `Evaluate this Circumlocution Attempt according to Aristotelian Definition Paradigm:
 TARGET WORD (FORBIDDEN): "${params.task.targetWord}"
-FORBIDDEN LIST: ${JSON.stringify(params.task.forbiddenWords)}
+FORBIDDEN TABOO LIST: ${JSON.stringify(params.task.forbiddenWords)}
+EXPECTED GENUS (CATEGORY): "${params.task.genus || params.task.category}"
+EXPECTED DIFFERENTIA (FUNCTION): "${params.task.differentia || params.task.hints.functionHint || ""}"
+SEMANTIC ANCHORS: ${JSON.stringify(params.task.semanticKeyAnchors || [])}
 USER SPOKEN TRANSCRIPT: "${params.userTranscript}"
 MEASURED LATENCY: ${params.responseLatencyMs} ms
 
-Return strict JSON.`;
+DETERMINISTIC PRE-ANALYSIS:
+- Taboo Violated: ${analysis.tabooViolated ? `YES ("${analysis.violatedWord}")` : "NO"}
+- Genus Detected: ${analysis.genusDetected ? "YES" : "NO"}
+- Differentia Detected: ${analysis.differentiaDetected ? "YES" : "NO"}
+
+Evaluate the LISTENER GUESS TEST: Based strictly on the user's transcript, what would an English native speaker guess?
+Return strict JSON only.`;
 
   const attemptEvaluate = async (): Promise<SurvivalEvaluationResult | null> => {
     try {
@@ -94,8 +108,31 @@ Return strict JSON.`;
         },
       });
 
-      const parsed = cleanJson(res.text);
-      if (!parsed) return null;
+      const parsed = cleanJson(res.text) as Record<string, unknown>;
+      if (!parsed || typeof parsed !== "object") return null;
+
+      // Integrate Aristotelian fields safely
+      if (typeof parsed.targetWordAvoided !== "boolean") {
+        parsed.targetWordAvoided = targetWordAvoided;
+      }
+      if (typeof parsed.genusDetected !== "boolean") {
+        parsed.genusDetected = analysis.genusDetected;
+      }
+      if (typeof parsed.differentiaDetected !== "boolean") {
+        parsed.differentiaDetected = analysis.differentiaDetected;
+      }
+      if (typeof parsed.semanticPrecisionScore !== "number") {
+        parsed.semanticPrecisionScore = analysis.semanticPrecisionScore;
+      }
+      if (typeof parsed.listenerGuess !== "string" || !parsed.listenerGuess.trim()) {
+        parsed.listenerGuess = analysis.listenerGuess;
+      }
+
+      parsed.clarityBreakdown = {
+        genusScore: analysis.genusScore,
+        functionScore: analysis.functionScore,
+        ambiguityPenalty: analysis.tabooViolated ? 70 : 0,
+      };
 
       const validated = survivalEvaluationSchema.safeParse(parsed);
       if (!validated.success) return null;

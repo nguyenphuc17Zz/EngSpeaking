@@ -9,8 +9,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const {
       step = 1, // 1: word pronunciation, 2: sentence context
+      mode = "guided", // "guided" | "spontaneous"
       wordItem,
       sentenceItem,
+      spontaneousChallenge,
       userTranscript = "",
       provider,
       model,
@@ -29,13 +31,16 @@ export async function POST(req: NextRequest) {
       });
       return NextResponse.json({ success: true, step: 1, evaluation });
     } else {
-      if (!sentenceItem) {
-        return NextResponse.json({ success: false, error: "Missing sentenceItem" }, { status: 400 });
+      if (mode === "guided" && !sentenceItem) {
+        return NextResponse.json({ success: false, error: "Missing sentenceItem in guided mode" }, { status: 400 });
       }
+
       const evaluation = await evaluateSentenceContext({
         wordItem,
         sentenceItem,
+        spontaneousChallenge: spontaneousChallenge || wordItem.spontaneousChallenge,
         userTranscript,
+        mode,
         provider,
         model,
       });

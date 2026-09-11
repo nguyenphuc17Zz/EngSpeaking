@@ -91,4 +91,21 @@ describe("Function 6 — Chunk Automaticity & Chain Building Engine", () => {
     expect(res.blocksUsedCount).toBeGreaterThanOrEqual(2);
     expect(res.overallScore).toBeGreaterThanOrEqual(80);
   });
+
+  it("supports Pragmatic Flow DAG strategies with rhetorical roles and transition connectors", async () => {
+    const chainTask = await generateChunkChainTask({
+      provider: "mock",
+      strategy: "concession_counter",
+    });
+
+    expect(chainTask.pragmaticStrategy).toBe("concession_counter");
+    expect(chainTask.strategyTitleVi).toContain("Nhượng bộ & Phản biện");
+    expect(chainTask.persona).toBeDefined();
+    expect(chainTask.blocks.length).toBe(4);
+    expect(chainTask.blocks[0].rhetoricalRole).toBeDefined();
+    expect(chainTask.blocks[0].transitionConnector).toBeDefined();
+    expect(chainTask.blocks[1].rhetoricalRole).toBeDefined();
+    expect(chainTask.blocks[2].rhetoricalRole).toBeDefined();
+    expect(chainTask.blocks[3].rhetoricalRole).toBeDefined();
+  });
 });

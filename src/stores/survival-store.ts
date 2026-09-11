@@ -11,7 +11,7 @@ import type {
 import {
   SEED_CIRCUMLOCUTION_TASKS,
   SEED_SURVIVAL_SCENARIOS,
-} from "@/lib/foundation/survival/survival-generator.service";
+} from "@/lib/foundation/survival/seed-survival";
 
 interface SurvivalStoreState {
   mode: "circumlocution" | "scenarios";

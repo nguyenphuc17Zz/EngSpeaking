@@ -46,9 +46,9 @@ export async function GET(req: Request) {
     }
   }
 
-  // Include browser and mock models if asking for all/auto/browser/mock
-  if (!provider || provider === "all" || provider === "auto" || provider === "browser" || provider === "mock") {
-    const staticAux = CATALOG.filter((m) => m.providerId === "browser" || m.providerId === "mock");
+  // Include edge-tts, kokoro-tts, whisper-local, browser and mock models if asking for all/auto/etc.
+  if (!provider || provider === "all" || provider === "auto" || provider === "edge-tts" || provider === "kokoro-tts" || provider === "whisper-local" || provider === "browser" || provider === "mock") {
+    const staticAux = CATALOG.filter((m) => m.providerId === "edge-tts" || m.providerId === "kokoro-tts" || m.providerId === "whisper-local" || m.providerId === "browser" || m.providerId === "mock");
     liveModels.push(...staticAux);
   }
 

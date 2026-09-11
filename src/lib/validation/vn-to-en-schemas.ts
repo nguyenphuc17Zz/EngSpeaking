@@ -20,6 +20,12 @@ export const suggestedVocabularyItemSchema = z.object({
   phonetic: z.string().optional(),
 });
 
+export const sayItBetterSchema = z.object({
+  professional: z.string().default(""),
+  casual: z.string().default(""),
+  idiomatic: z.string().default(""),
+});
+
 export const vnToENTaskSchema = z.object({
   id: z.string(),
   category: z.string().default("daily_life"),
@@ -37,6 +43,7 @@ export const vnToENTaskSchema = z.object({
   }).default({ overall: 3, grammarComplexity: 2, retrievalDemand: 0.5, semanticDensity: 2 }),
   hints: z.array(vnToENHintSchema).default([]),
   suggestedVocabulary: z.array(suggestedVocabularyItemSchema).default([]),
+  sayItBetter: sayItBetterSchema.optional(),
   prepTimeSec: z.coerce.number().default(2.5),
   isRapidFire: z.boolean().default(false),
   topic: z.string().default("general"),
@@ -72,6 +79,8 @@ export const vnToENEvaluationSchema = z.object({
   errors: z.array(vnEvaluatedErrorSchema).default([]),
   betterVersion: z.string(),
   naturalAlternatives: z.array(semanticAlternativeSchema).default([]),
+  sayItBetter: sayItBetterSchema.optional(),
+  isFastPass: z.boolean().optional(),
   praisePoints: z.array(z.string()).default([]),
   actionableFeedback: z.string(),
   hintTierUsed: z.number().default(0),

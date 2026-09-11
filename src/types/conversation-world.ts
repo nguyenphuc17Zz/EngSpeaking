@@ -21,10 +21,20 @@ export type ConflictIntensity = "none" | "low" | "medium" | "high";
 export type ConversationPressure = "relaxed" | "normal" | "challenging" | "pressure";
 export type CharacterStyle = "friendly" | "neutral" | "professional" | "serious" | "difficult" | "random" | "auto";
 
+export type PragmaticSpeechAct =
+  | "empathy_rapport"
+  | "concession_compromise"
+  | "assertive_evidence"
+  | "clarification_inquiry"
+  | "counter_challenge"
+  | "hedging_hesitant";
+
 export interface SpeakingObjective {
   type: string;
   description: string;
   hidden?: boolean; // §39
+  isUnlocked?: boolean;
+  unlockedAtTurn?: number;
 }
 
 export interface DynamicEvent {
@@ -66,6 +76,9 @@ export interface CharacterState {
   engagement: number;
   name?: string;
   role?: string;
+  defensiveness?: number; // 0-100 (Bargaining resistance / emotional barrier)
+  emotionalValence?: number; // -1.0 (hostile) to +1.0 (enthusiastic)
+  dominantAct?: PragmaticSpeechAct;
 }
 
 export interface ConversationFact {
@@ -120,17 +133,25 @@ export interface ConversationAIResponse {
     trustChange?: number;
     patienceChange?: number;
     engagementChange?: number;
+    defensivenessChange?: number;
+    emotionalValenceChange?: number;
     newFacts?: ConversationFact[];
     newThreads?: string[];
     resolvedThreads?: string[];
+    unlockedObjective?: SpeakingObjective;
   };
   event?: DynamicEvent;
+  pragmaticAct?: PragmaticSpeechAct;
+  pragmaticFeedbackVi?: string;
+  unlockedObjective?: SpeakingObjective;
   pedagogy?: {
     grammarIssue?: string | null;
     grammarFix?: string | null;
     nativeReformulation?: string;
     turnScore?: number;
     coachTipVi?: string;
+    speechRateWpm?: number;
+    lexicalDiversityTtr?: number;
   };
   hints?: {
     tier1Keywords?: Array<{ term: string; meaning: string }>;

@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Ban,
   RotateCcw,
+  Target,
 } from "lucide-react";
 import type { SurvivalEvaluationResult } from "@/types/survival-speaking";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
@@ -87,6 +88,50 @@ export function SurvivalFeedbackCard({
             <span>Phản xạ: {(evaluation.repairInitiationLatencyMs / 1000).toFixed(1)}s</span>
           </div>
         </div>
+
+        {/* Native Listener Guessing Banner (Circumlocution Mode) */}
+        {evaluation.listenerGuess && (
+          <div className="p-3 rounded-2xl bg-gradient-to-r from-primary/10 via-primary/5 to-card border border-primary/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs">
+            <div className="space-y-0.5">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-primary flex items-center gap-1.5">
+                <Target className="size-3.5" />
+                <span>Thử nghiệm Người nghe Bản xứ (Listener Guess):</span>
+              </span>
+              <p className="font-mono text-sm md:text-base font-extrabold text-foreground">
+                "{evaluation.listenerGuess}"
+              </p>
+            </div>
+
+            {/* Aristotelian Checklist Pills */}
+            <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
+              <span
+                className={`px-2 py-0.5 rounded-md border flex items-center gap-1 ${
+                  evaluation.genusDetected
+                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-semibold"
+                    : "bg-muted border-border text-muted-foreground"
+                }`}
+              >
+                {evaluation.genusDetected ? "✓" : "✗"} Chủng loại (Genus)
+              </span>
+
+              <span
+                className={`px-2 py-0.5 rounded-md border flex items-center gap-1 ${
+                  evaluation.differentiaDetected
+                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-semibold"
+                    : "bg-muted border-border text-muted-foreground"
+                }`}
+              >
+                {evaluation.differentiaDetected ? "✓" : "✗"} Công dụng (Differentia)
+              </span>
+
+              {evaluation.semanticPrecisionScore !== undefined && (
+                <span className="px-2 py-0.5 rounded-md bg-primary/10 border border-primary/30 text-primary font-bold">
+                  Độ chính xác: {evaluation.semanticPrecisionScore}%
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Scrollable Evaluation Body */}
         <div className="flex-1 space-y-3 overflow-y-auto pr-0.5">

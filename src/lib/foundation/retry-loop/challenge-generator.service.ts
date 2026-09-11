@@ -47,6 +47,11 @@ export function getDeterministicChallenge(): RepairChallenge {
     betterSentence: "Yesterday, I went to work late because of a traffic jam.",
     skeletonHint: "Yesterday, I ______ to work late because of a traffic jam.",
     simplifiedSentence: "Yesterday, I went to work late.",
+    conversationalTrap: {
+      partnerUtterance: "Wait, did you say you go yesterday or you went to work?",
+      reactionPromptVi: "Đồng nghiệp đang hỏi lại xem bạn đi làm hôm qua hay hôm nay. Hãy đính chính lại bằng tiếng Anh!",
+      suggestedStarter: "Oh sorry, I meant I went...",
+    },
     hints: [
       { tier: 0, title: "Không gợi ý", content: "Tự phát hiện và sửa lại ngay." },
       { tier: 1, title: "Chỉ điểm lỗi", content: "Từ 'go' chưa chia quá khứ cho 'Yesterday', và thiếu 'of' sau 'because'." },
@@ -112,6 +117,22 @@ export async function generateRepairChallenge(
   // Sanitize suggestedVocabulary
   if (!Array.isArray(obj.suggestedVocabulary)) {
     obj.suggestedVocabulary = [];
+  }
+
+  // Sanitize conversationalTrap
+  if (obj.conversationalTrap && typeof obj.conversationalTrap === "object") {
+    const ct = obj.conversationalTrap as Record<string, unknown>;
+    obj.conversationalTrap = {
+      partnerUtterance: String(ct.partnerUtterance || `Wait, did you mean "${obj.betterSentence}"?`),
+      reactionPromptVi: String(ct.reactionPromptVi || "Người đối thoại đang thắc mắc ý của bạn. Hãy nói lại cho chuẩn xác!"),
+      suggestedStarter: ct.suggestedStarter ? String(ct.suggestedStarter) : undefined,
+    };
+  } else {
+    obj.conversationalTrap = {
+      partnerUtterance: `Wait, did you say "${obj.erroneousSentence}"? Could you say that again?`,
+      reactionPromptVi: "Người đối thoại đang hỏi lại để làm rõ ý. Hãy nói lại câu chuẩn xác!",
+      suggestedStarter: "Sorry, I meant...",
+    };
   }
 
   const validated = repairChallengeSchema.safeParse(obj);

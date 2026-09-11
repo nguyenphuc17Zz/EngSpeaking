@@ -18,6 +18,12 @@ export interface AIProfileState {
   showModelInfo: boolean;
 }
 
+export interface AudioEnhancementState {
+  autoNormalize: boolean;
+  micGain: number; // 1.0 -> 3.0 (x multiplier)
+  noiseFloorGate: boolean;
+}
+
 export interface SettingsState {
   // Active Primary Engine Indicator
   activeProvider: "gemini" | "groq";
@@ -35,11 +41,13 @@ export interface SettingsState {
   stt: ProviderSelectionState;
   tts: ProviderSelectionState;
   aiProfile: AIProfileState;
+  audioEnhancement: AudioEnhancementState;
 
   // Setters
   setActiveProvider: (p: "gemini" | "groq") => void;
   setPreferredGeminiModel: (m: string) => void;
   setPreferredGroqModel: (m: string) => void;
+  setAudioEnhancement: (opts: Partial<AudioEnhancementState>) => void;
   setSentenceBuilderGen: (s: ProviderSelectionState) => void;
   setSentenceBuilderEval: (s: ProviderSelectionState) => void;
   setShadowing: (s: ProviderSelectionState) => void;
@@ -67,7 +75,7 @@ const DEFAULTS = {
   evaluation: { provider: "gemini", model: "gemini-3.5-flash-lite" },
   generation: { provider: "gemini", model: "gemini-3.5-flash-lite" },
   stt: { provider: "browser", model: "browser-stt" },
-  tts: { provider: "browser", model: "browser-tts" },
+  tts: { provider: "edge-tts", model: "en-US-JennyNeural" },
   aiProfile: {
     mode: "auto" as const,
     qualityPreference: "balanced" as const,
@@ -76,12 +84,24 @@ const DEFAULTS = {
     contextOptimizationEnabled: true,
     showModelInfo: false,
   },
+  audioEnhancement: {
+    autoNormalize: true,
+    micGain: 1.5,
+    noiseFloorGate: true,
+  },
 };
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set, get) => ({
       ...DEFAULTS,
+      setAudioEnhancement: (opts) =>
+        set((state) => ({
+          audioEnhancement: {
+            ...state.audioEnhancement,
+            ...opts,
+          },
+        })),
       setActiveProvider: (p) => {
         const state = get();
         const model = p === "gemini" ? state.preferredGeminiModel : state.preferredGroqModel;

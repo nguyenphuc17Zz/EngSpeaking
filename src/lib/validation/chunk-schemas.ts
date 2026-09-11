@@ -31,6 +31,8 @@ export const chunkChainBlockSchema = z.object({
   labelVi: z.string(),
   suggestedChunk: z.string(),
   alternativeChunks: z.array(z.string()).default([]),
+  rhetoricalRole: z.string().optional(),
+  transitionConnector: z.string().optional(),
 });
 
 export const chunkChainTaskSchema = z.object({
@@ -41,6 +43,21 @@ export const chunkChainTaskSchema = z.object({
   blocks: z.array(chunkChainBlockSchema),
   expectedAssemblyExample: z.string(),
   targetLatencyMs: z.number().default(3500),
+  pragmaticStrategy: z
+    .enum([
+      "opinion_defense",
+      "concession_counter",
+      "problem_solution",
+      "hypothetical_projection",
+      "cause_effect_chain",
+    ])
+    .optional(),
+  strategyTitleVi: z.string().optional(),
+  strategyDescriptionVi: z.string().optional(),
+  persona: z.string().optional(),
+  domain: z
+    .enum(["workplace", "daily_life", "travel", "tech_ai", "opinions", "career"])
+    .optional(),
   hints: z
     .array(
       z.object({

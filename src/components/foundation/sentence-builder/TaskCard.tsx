@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Layers, Zap, Target, HelpCircle, Clock, Volume2, Lightbulb } from "lucide-react";
+import { Sparkles, Layers, Zap, Target, HelpCircle, Clock, Volume2, Lightbulb, ChevronDown } from "lucide-react";
 import type { SentenceBuilderTask } from "@/types/sentence-builder";
 import { sanitizeTextForTTS } from "@/lib/tts/browser";
+import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 
 interface TaskCardProps {
   task: SentenceBuilderTask;
@@ -36,15 +38,62 @@ export function TaskCard({
   isSpeakingBaseSentence = false,
   onPlayTerm,
 }: TaskCardProps) {
+  const tts = useBrowserTTS();
+  const [isPlayingFullSentence, setIsPlayingFullSentence] = useState(false);
+  const [isHintsExpanded, setIsHintsExpanded] = useState(true);
+
+  // Resolve the true full complete model sentence, avoiding picking an isolated vocabulary term
+  const vocabTerms = new Set([
+    ...(task.suggestedVocabulary || []).map((v) => v.term.trim().toLowerCase()),
+    ...(task.scaffold?.keywords || []).map((k) => k.trim().toLowerCase()),
+  ]);
+
+  const isFullSentence = (text?: string | null): boolean => {
+    if (!text) return false;
+    const clean = text.trim();
+    if (!clean) return false;
+    if (vocabTerms.has(clean.toLowerCase())) return false;
+    return clean.split(/\s+/).length >= 4;
+  };
+
+  const targetIntent = task.targetIntent?.trim();
+  const tier4Content = task.hints?.find((h) => h.tier === 4)?.content?.trim();
+  const fullExpected = task.expectedResponses?.find((r) => isFullSentence(r));
+
+  let filledTemplate = "";
+  if (task.scaffold?.template && task.scaffold.template.includes("___")) {
+    const fillTerms = (task.suggestedVocabulary || []).map((v) => v.term);
+    let idx = 0;
+    filledTemplate = task.scaffold.template.replace(/_{2,}/g, () => fillTerms[idx++] || "").trim();
+  }
+
+  const fullModelSentence =
+    (isFullSentence(targetIntent) && targetIntent) ||
+    (isFullSentence(tier4Content) && tier4Content) ||
+    fullExpected ||
+    (isFullSentence(filledTemplate) && filledTemplate) ||
+    targetIntent ||
+    tier4Content ||
+    task.expectedResponses?.[0] ||
+    "";
+
   const handlePlayVocab = (term: string) => {
     if (onPlayTerm) {
       onPlayTerm(term);
-    } else if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(sanitizeTextForTTS(term));
-      u.lang = "en-US";
-      u.rate = 0.9;
-      window.speechSynthesis.speak(u);
+    } else {
+      tts.speak(sanitizeTextForTTS(term));
+    }
+  };
+
+  const handlePlayFullSentence = () => {
+    if (!fullModelSentence) return;
+    setIsPlayingFullSentence(true);
+    if (onPlayTerm) {
+      onPlayTerm(fullModelSentence);
+      setTimeout(() => setIsPlayingFullSentence(false), 2500);
+    } else {
+      tts.speak(sanitizeTextForTTS(fullModelSentence));
+      setTimeout(() => setIsPlayingFullSentence(false), 2500);
     }
   };
 
@@ -173,11 +222,26 @@ export function TaskCard({
 
           {/* Scaffold Layer Display */}
           {task.controlLevel === "controlled" && task.scaffold.template && (
-            <div className="p-3 rounded-2xl bg-primary/5 border border-primary/20 space-y-1 mt-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1">
-                <Sparkles className="size-3" />
-                Khung mẫu câu:
-              </span>
+            <div className="p-3 rounded-2xl bg-primary/5 border border-primary/20 space-y-1.5 mt-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1">
+                  <Sparkles className="size-3" />
+                  Khung mẫu câu:
+                </span>
+                {fullModelSentence && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handlePlayFullSentence}
+                    className="h-6 px-2 text-[11px] font-semibold gap-1 rounded-lg border border-primary/30 text-primary hover:bg-primary/10 transition-all btn-spring shrink-0"
+                    title="Nghe phát âm câu mẫu hoàn chỉnh (Full sentence)"
+                  >
+                    <Volume2 className={`size-3.5 ${isPlayingFullSentence ? "animate-pulse scale-110 text-primary" : ""}`} />
+                    <span>{isPlayingFullSentence ? "Đang đọc..." : "Nghe câu hoàn chỉnh"}</span>
+                  </Button>
+                )}
+              </div>
               <p className="font-mono text-sm md:text-base font-semibold text-foreground tracking-wide">
                 {task.scaffold.template}
               </p>
@@ -186,10 +250,25 @@ export function TaskCard({
 
           {task.controlLevel === "semi_controlled" && task.scaffold.keywords && task.scaffold.keywords.length > 0 && (
             <div className="p-3 rounded-2xl bg-amber-500/5 border border-amber-500/20 space-y-1.5 mt-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                <Zap className="size-3" />
-                Từ khoá bắt buộc:
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                  <Zap className="size-3" />
+                  Từ khoá bắt buộc:
+                </span>
+                {fullModelSentence && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handlePlayFullSentence}
+                    className="h-6 px-2 text-[10px] font-semibold gap-1 rounded-lg border border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 transition-all btn-spring shrink-0"
+                    title="Nghe phát âm câu mẫu hoàn chỉnh"
+                  >
+                    <Volume2 className="size-3" />
+                    <span>Nghe câu hoàn chỉnh</span>
+                  </Button>
+                )}
+              </div>
               <div className="flex flex-wrap gap-1.5">
                 {task.scaffold.keywords.map((kw, idx) => (
                   <span
@@ -204,51 +283,114 @@ export function TaskCard({
           )}
 
           {task.controlLevel === "free" && (
-            <div className="p-2.5 rounded-2xl bg-indigo-500/5 border border-indigo-500/20 flex items-center gap-2 text-xs text-indigo-600 dark:text-indigo-400 mt-1">
-              <Sparkles className="size-3.5 shrink-0" />
-              <span>Thử thách tự thân: Cấu trúc ý và phản xạ nói 1-2 câu trôi chảy!</span>
+            <div className="p-2.5 rounded-2xl bg-indigo-500/5 border border-indigo-500/20 flex items-center justify-between gap-2 text-xs text-indigo-600 dark:text-indigo-400 mt-1">
+              <div className="flex items-center gap-2">
+                <Sparkles className="size-3.5 shrink-0" />
+                <span>Thử thách tự thân: Cấu trúc ý và phản xạ nói 1-2 câu trôi chảy!</span>
+              </div>
+              {fullModelSentence && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handlePlayFullSentence}
+                  className="h-6 px-2 text-[10px] font-semibold gap-1 rounded-lg border border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 transition-all btn-spring shrink-0"
+                  title="Nghe phát âm câu mẫu gợi ý"
+                >
+                  <Volume2 className="size-3" />
+                  <span>Nghe câu mẫu</span>
+                </Button>
+              )}
             </div>
           )}
 
-          {/* Active Hint Card (if unlocked) */}
-          {activeHint && (
-            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-1.5 mt-1 animate-in fade-in-0 duration-150">
-              <div className="flex items-center justify-between text-[11px] font-bold text-amber-700 dark:text-amber-300">
-                <span className="flex items-center gap-1.5">
-                  <HelpCircle className="size-3.5" />
-                  <span>Gợi ý Tầng {activeHint.tier}: {activeHint.title}</span>
-                </span>
+          {/* 4-Tier Progressive Scaffolding Hints (Stack List - Open by Default) */}
+          {task.hints && task.hints.length > 0 && (
+            <div className="rounded-2xl border border-amber-500/25 bg-amber-500/5 p-3 space-y-2.5 mt-1 transition-all">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                  <Sparkles className="size-3.5 text-amber-500" />
+                  <span>Gợi ý nấc thang (T1 - T4):</span>
+                </div>
                 <button
                   type="button"
-                  onClick={() => onSelectHintTier?.(0)}
-                  className="text-[10px] text-muted-foreground hover:text-foreground underline cursor-pointer"
+                  onClick={() => setIsHintsExpanded(!isHintsExpanded)}
+                  className="text-[11px] font-semibold text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer transition-colors"
                 >
-                  Thu gọn [Esc]
+                  <span>{isHintsExpanded ? "Thu gọn gợi ý" : "Hiện tất cả (T1 - T4)"}</span>
+                  <ChevronDown className={`size-3.5 transition-transform duration-200 ${isHintsExpanded ? "rotate-180" : ""}`} />
                 </button>
               </div>
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-mono text-xs md:text-sm font-semibold text-foreground">
-                  {activeHint.content}
-                </p>
-                {activeHint.tier === 4 && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handlePlayVocab(activeHint.content)}
-                    className="h-6 px-2 text-[10px] gap-1 rounded-lg border border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 shrink-0"
-                    title="Nghe phát âm câu mẫu"
-                  >
-                    <Volume2 className="size-3" />
-                    <span>Nghe</span>
-                  </Button>
-                )}
-              </div>
+
+              {isHintsExpanded && (
+                <div className="space-y-1.5 pt-0.5 animate-in fade-in-0 duration-150">
+                  {task.hints
+                    .filter((h) => h.tier >= 1 && h.tier <= 4)
+                    .map((h) => {
+                      const tierStyles = [
+                        {
+                          badge: "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30",
+                          border: "border-sky-500/20 bg-card/90",
+                        },
+                        {
+                          badge: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30",
+                          border: "border-indigo-500/20 bg-card/90",
+                        },
+                        {
+                          badge: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
+                          border: "border-amber-500/20 bg-card/90",
+                        },
+                        {
+                          badge: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+                          border: "border-emerald-500/20 bg-card/90",
+                        },
+                      ];
+                      const style = tierStyles[h.tier - 1] || tierStyles[0];
+                      const isFullSentenceTier = h.tier === 3 || h.tier === 4;
+
+                      return (
+                        <div
+                          key={h.tier}
+                          className={`p-2.5 rounded-xl border ${style.border} shadow-2xs space-y-1`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold border ${style.badge}`}>
+                                T{h.tier}
+                              </span>
+                              <span className="text-xs font-bold text-foreground">
+                                {h.title}
+                              </span>
+                            </div>
+
+                            {isFullSentenceTier && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handlePlayFullSentence()}
+                                className="h-6 px-2 text-[10px] gap-1 rounded-lg border border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 shrink-0 font-semibold btn-spring"
+                                title={h.tier === 3 ? "Nghe câu hoàn chỉnh" : "Nghe câu mẫu"}
+                              >
+                                <Volume2 className="size-3" />
+                                <span>{h.tier === 3 ? "Nghe câu hoàn chỉnh" : "Nghe câu mẫu"}</span>
+                              </Button>
+                            )}
+                          </div>
+
+                          <p className="font-mono text-xs md:text-sm font-medium text-foreground/90 pl-0.5 leading-relaxed">
+                            {h.content}
+                          </p>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
             </div>
           )}
         </div>
 
-        {/* Bottom Bar: Prep Timer & Inline 4-Tier Hint Stepper */}
+        {/* Bottom Bar: Prep Timer & Inline 4-Tier Hint Status */}
         <div className="pt-2 border-t border-border/40 flex flex-wrap items-center justify-between gap-2">
           {isCountingDown && prepCountdown !== null ? (
             <div className="flex items-center gap-1.5 text-primary text-xs font-semibold font-mono animate-pulse">
@@ -262,33 +404,17 @@ export function TaskCard({
             </div>
           )}
 
-          {/* 4-Tier Progressive Hint Buttons Directly on Card */}
+          {/* 4-Tier Quick Pill Status Bar */}
           <div className="flex items-center gap-1 shrink-0">
-            {[
-              { tier: 1, label: "T1: Từ khoá" },
-              { tier: 2, label: "T2: Khung câu" },
-              { tier: 3, label: "T3: Mở đầu" },
-              { tier: 4, label: "T4: Câu mẫu" },
-            ].map(({ tier, label }) => {
-              const isActive = currentHintTier === tier;
-              return (
-                <Button
-                  key={tier}
-                  type="button"
-                  variant={isActive ? "secondary" : "outline"}
-                  size="sm"
-                  onClick={() => onSelectHintTier?.((isActive ? 0 : tier) as 0 | 1 | 2 | 3 | 4)}
-                  className={`h-7 px-2 text-[10px] sm:text-[11px] font-mono rounded-lg transition-all btn-spring ${
-                    isActive
-                      ? "bg-amber-500/25 border-amber-500/70 text-amber-700 dark:text-amber-300 font-bold shadow-xs scale-102"
-                      : "border-border/70 text-muted-foreground hover:text-foreground hover:border-amber-500/40"
-                  }`}
-                  title={`Bấm để mở/ẩn gợi ý ${label}`}
-                >
-                  <span>{label}</span>
-                </Button>
-              );
-            })}
+            <button
+              type="button"
+              onClick={() => setIsHintsExpanded(!isHintsExpanded)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 hover:bg-amber-500/20 transition-all cursor-pointer"
+              title="Bấm để ẩn hoặc hiện toàn bộ gợi ý T1-T4"
+            >
+              <Sparkles className="size-3 text-amber-500" />
+              <span>{isHintsExpanded ? "Gợi ý T1-T4: Đang hiện" : "Gợi ý T1-T4: Đã ẩn (Bấm mở)"}</span>
+            </button>
           </div>
         </div>
       </CardContent>

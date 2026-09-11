@@ -9,6 +9,7 @@ import type {
   SpokenRepairMetric,
 } from "@/types/retry-loop";
 import { createRetrySession, recordRetryAttemptInSession } from "@/lib/foundation/retry-loop/retry-engine";
+import { computeFastPassRepair } from "@/lib/foundation/retry-loop/fast-pass-repair.service";
 
 interface RetryLoopStoreState {
   activeSession: RetrySession | null;
@@ -217,6 +218,53 @@ export const useRetryLoopStore = create<RetryLoopStoreState>()(
         const { activeSession, metrics } = get();
         if (!activeSession) return null;
 
+        // 1. Fast-Pass Client Evaluation (<50ms)
+        const fastPass = computeFastPassRepair(activeSession, spokenTranscript, {
+          responseLatencyMs,
+          speechDurationMs,
+          attemptNumber: activeSession.currentAttemptNumber,
+        });
+
+        if (fastPass.canFastPass && fastPass.result) {
+          const evalResult = fastPass.result;
+          const updatedSession = recordRetryAttemptInSession(activeSession, {
+            spokenTranscript,
+            responseLatencyMs,
+            speechDurationMs,
+            evalResult,
+            supportLevel: activeSession.isSimplified ? 3 : activeSession.currentAttemptNumber > 1 ? 2 : 1,
+            modelPlaybackCount: activeSession.modelExposureCount,
+          });
+
+          // Update Metrics
+          const isFirstAttemptSuccess = evalResult.isSuccessful && activeSession.currentAttemptNumber === 1;
+          const totalResolved = metrics.totalResolvedCount + (evalResult.isSuccessful ? 1 : 0);
+          const resolvedFirst = metrics.resolvedOnFirstRetryCount + (isFirstAttemptSuccess ? 1 : 0);
+          const totalReq = Math.max(1, metrics.totalErrorsRequiringRetry);
+
+          const updatedMetrics: SpokenRepairMetric = {
+            ...metrics,
+            totalResolvedCount: totalResolved,
+            resolvedOnFirstRetryCount: resolvedFirst,
+            selfCorrectionCount: metrics.selfCorrectionCount + (evalResult.selfCorrectionDetected ? 1 : 0),
+            errorRecoveryRate: Math.min(100, Math.round((totalResolved / totalReq) * 100)),
+            firstRetrySuccessRate: Math.min(100, Math.round((resolvedFirst / totalReq) * 100)),
+            recentRepairedPatterns: evalResult.isSuccessful
+              ? Array.from(new Set([...metrics.recentRepairedPatterns.slice(-5), activeSession.targetCorrection.patternKey]))
+              : metrics.recentRepairedPatterns,
+          };
+
+          set({
+            activeSession: updatedSession,
+            lastRepairResult: evalResult,
+            isEvaluatingRepair: false,
+            metrics: updatedMetrics,
+          });
+
+          return evalResult;
+        }
+
+        // 2. Full Server AI Evaluation Fallback
         set({ isEvaluatingRepair: true });
 
         let provider = "gemini";

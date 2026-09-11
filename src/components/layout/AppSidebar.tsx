@@ -59,8 +59,6 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/curriculum",
         label: "Lộ trình AI",
         icon: GraduationCap,
-        badge: "10' Daily",
-        badgeVariant: "default",
         description: "Bài học cá nhân hoá hôm nay",
       },
     ],
@@ -73,80 +71,60 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/foundation/sentence-builder",
         label: "Sentence Builder",
         icon: Sparkles,
-        badge: "Func 1",
-        badgeVariant: "default",
         description: "Khôi phục phản xạ tạo câu Level A → B → C",
       },
       {
         href: "/foundation/vn-to-en",
         label: "VN → EN Speaking",
         icon: Target,
-        badge: "Func 2",
-        badgeVariant: "default",
         description: "Truy xuất trực tiếp từ ý niệm tiếng Việt sang tiếng Anh",
       },
       {
         href: "/foundation/retry-lab",
         label: "Spoken Repair Lab",
         icon: RotateCcw,
-        badge: "Func 3",
-        badgeVariant: "secondary",
         description: "Chu trình Correct → Say Again sửa lỗi từ Error Bank",
       },
       {
         href: "/foundation/latency",
         label: "Response Latency",
         icon: Zap,
-        badge: "Func 4",
-        badgeVariant: "default",
         description: "Rèn luyện tốc độ phản xạ & truy xuất khẩu ngữ",
       },
       {
         href: "/foundation/error-bank",
         label: "Personal Error Bank",
         icon: Brain,
-        badge: "Func 5",
-        badgeVariant: "default",
         description: "Bộ nhớ học tập dài hạn & phân tích mẫu lỗi",
       },
       {
         href: "/foundation/chunks",
         label: "Chunk Automaticity",
         icon: Layers,
-        badge: "Func 6",
-        badgeVariant: "default",
         description: "Lắp ráp câu khẩu ngữ từ các khối có sẵn",
       },
       {
         href: "/foundation/survival",
         label: "Survival Speaking",
         icon: ShieldAlert,
-        badge: "Func 7",
-        badgeVariant: "default",
         description: "Phản xạ sinh tồn & diễn giải khi quên từ",
       },
       {
         href: "/foundation/vocabulary",
         label: "Spoken Vocabulary",
         icon: BookOpen,
-        badge: "Func 8",
-        badgeVariant: "default",
         description: "Quy trình 2 bước: Phát âm từ & Nói câu ngữ cảnh",
       },
       {
         href: "/foundation/shadowing",
         label: "Shadowing Studio",
         icon: Video,
-        badge: "AI Deck",
-        badgeVariant: "default",
         description: "Phân tích CEFR, nối âm & nhịp thở qua video",
       },
       {
         href: "/foundation",
         label: "Foundation Hub",
         icon: Layers,
-        badge: "22 Drills",
-        badgeVariant: "outline",
         description: "Phản xạ từ vựng, chunk & cấu trúc",
       },
     ],
@@ -159,24 +137,18 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/session",
         label: "Phòng luyện nói Live",
         icon: Mic,
-        badge: "Live",
-        badgeVariant: "secondary",
         description: "Vòng lặp nói giọng nói trực tiếp với AI",
       },
       {
         href: "/conversation",
         label: "Hội thoại AI",
         icon: MessageSquareText,
-        badge: "14 Worlds",
-        badgeVariant: "outline",
         description: "14 kịch bản & nhân vật tương tác thực tế",
       },
       {
         href: "/advanced",
         label: "Thử thách nâng cao",
         icon: Zap,
-        badge: "25 Modes",
-        badgeVariant: "outline",
         description: "Áp lực, phản biện & ứng biến",
       },
     ],
@@ -330,21 +302,7 @@ export function AppSidebar({ collapsed, onToggleCollapse, onNavigateMobile }: Ap
                     )}
                   />
                   {!collapsed && (
-                    <div className="flex items-center justify-between flex-1 truncate">
-                      <span className="truncate">{item.label}</span>
-                      {item.badge && (
-                        <span
-                          className={cn(
-                            "ml-auto text-[9px] font-semibold px-1.5 py-0.2 rounded-full uppercase tracking-wider",
-                            active
-                              ? "bg-primary-foreground/20 text-primary-foreground"
-                              : "bg-muted text-muted-foreground"
-                          )}
-                        >
-                          {item.badge}
-                        </span>
-                      )}
-                    </div>
+                    <span className="truncate flex-1 text-xs font-medium">{item.label}</span>
                   )}
                 </Link>
               );
