@@ -27,9 +27,11 @@ import {
 
 import { useVNToENStore } from "@/stores/vn-to-en-store";
 import { useUnifiedSTT } from "@/hooks/useUnifiedSTT";
+import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 import { soundEffects } from "@/lib/audio/audio-chimes";
 
 import { VNPromptCard } from "@/components/foundation/vn-to-en/VNPromptCard";
+import { VNContextCard } from "@/components/foundation/vn-to-en/VNContextCard";
 import { SpeakingController } from "@/components/foundation/sentence-builder/SpeakingController";
 import { VNFeedbackCard } from "@/components/foundation/vn-to-en/VNFeedbackCard";
 import { VNSummaryModal } from "@/components/foundation/vn-to-en/VNSummaryModal";
@@ -39,6 +41,7 @@ import { computeFastPassVNMatch } from "@/lib/foundation/vn-to-en/fast-pass.serv
 import type { VNToENRetrievalMode } from "@/types/vn-to-en";
 
 export default function VNToENPage() {
+  const tts = useBrowserTTS();
   const {
     currentTask,
     isGenerating,
@@ -324,6 +327,13 @@ export default function VNToENPage() {
     advanceToNextTask();
   }, [advanceToNextTask]);
 
+  // Skip / Next Task
+  const handleSkipOrNextTask = useCallback(() => {
+    setPendingSpokenText(null);
+    unifiedSTTRef.current.resetTranscript();
+    advanceToNextTask();
+  }, [advanceToNextTask]);
+
   // Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -346,6 +356,9 @@ export default function VNToENPage() {
       } else if (e.code === "KeyH" && !isEvaluating) {
         e.preventDefault();
         setHintTier(((hintTier + 1) % 5) as 0 | 1 | 2 | 3 | 4);
+      } else if (e.code === "KeyR" && unifiedSTT.status !== "recording" && !isEvaluating) {
+        e.preventDefault();
+        handleSkipOrNextTask();
       } else if (e.code === "Enter") {
         if (pendingSpokenText && !isEvaluating) {
           e.preventDefault();
@@ -543,9 +556,9 @@ export default function VNToENPage() {
     );
   }
 
-  // 4. Immersive Zero-Scroll 2-Column Split Studio
+  // 4. Immersive Studio View (Professional 3-Column Split Studio)
   return (
-    <div className="w-full min-h-[calc(100vh-8rem)] flex flex-col justify-between overflow-hidden rounded-3xl border border-border/80 bg-card p-3 md:p-5 shadow-xs">
+    <div className="w-full h-full max-h-[calc(100vh-5.5rem)] flex flex-col justify-between overflow-hidden rounded-3xl border border-border/80 bg-card p-2.5 sm:p-3.5 shadow-xs animate-in fade-in-0 duration-200">
       {/* Studio Header Bar */}
       <header className="flex items-center justify-between border-b border-border/40 pb-2.5 shrink-0 gap-3">
         <div className="flex items-center gap-3">
@@ -568,7 +581,7 @@ export default function VNToENPage() {
           </Badge>
 
           {/* Global AI Engine Badge / Selector */}
-          <GlobalAiSelector />
+          <GlobalAiSelector size="sm" />
         </div>
 
         {/* Center Progress Indicator */}
@@ -576,7 +589,7 @@ export default function VNToENPage() {
           <span className="text-xs font-mono font-bold text-foreground">
             Câu {currentTaskIndex + 1}/{sessionConfig.targetCount}
           </span>
-          <div className="w-24 sm:w-36">
+          <div className="w-16 sm:w-28">
             <Progress
               value={((currentTaskIndex + 1) / sessionConfig.targetCount) * 100}
               className="h-1.5 rounded-full"
@@ -584,8 +597,22 @@ export default function VNToENPage() {
           </div>
         </div>
 
-        {/* Right Status Indicator */}
+        {/* Right Status Indicator & Next Task Button */}
         <div className="flex items-center gap-2">
+          {/* Next Task Action Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSkipOrNextTask}
+            disabled={isGenerating || isEvaluating}
+            className="h-8 px-2.5 rounded-xl font-bold text-xs gap-1.5 border-primary/40 bg-primary/5 hover:bg-primary hover:text-primary-foreground text-primary transition-all shadow-2xs btn-spring"
+            title="Đổi sang câu hỏi tiếp theo (Phím R)"
+          >
+            <Sparkles className={`size-3.5 ${isGenerating ? "animate-spin" : ""}`} />
+            <span>Câu tiếp theo</span>
+            <span className="text-[9px] font-mono opacity-60 hidden sm:inline">[R]</span>
+          </Button>
+
           {isCountingDown && prepCountdown !== null ? (
             <Badge className="bg-primary/15 text-primary border border-primary/30 text-xs font-mono animate-pulse">
               Chuẩn bị: {prepCountdown}s
@@ -594,18 +621,14 @@ export default function VNToENPage() {
             <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-xs font-mono">
               🔥 Streak: {adaptiveState.rapidStreak}
             </Badge>
-          ) : (
-            <span className="text-[11px] font-mono text-muted-foreground hidden sm:inline">
-              Khẩu ngữ phản xạ
-            </span>
-          )}
+          ) : null}
         </div>
       </header>
 
-      {/* Main 2-Column Split Studio Grid (Zero-Scroll Stage) */}
-      <main className="grid grid-cols-1 md:grid-cols-12 gap-3.5 flex-1 my-3 overflow-hidden min-h-0">
-        {/* Left Column (5 cols): Vietnamese Prompt Card, Vocab Chips & Inline Hints */}
-        <div className="md:col-span-5 flex flex-col h-full overflow-hidden min-h-0">
+      {/* Main Studio Body: Professional 3-Column Split */}
+      <main className="flex-1 min-h-0 p-2 sm:p-2.5 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-2.5 lg:gap-3">
+        {/* Column 1 (4 cols): Vietnamese Prompt Card, Vocab Chips */}
+        <div className="lg:col-span-4 h-full min-h-0 overflow-hidden flex flex-col">
           {currentTask && (
             <VNPromptCard
               task={currentTask}
@@ -614,14 +637,26 @@ export default function VNToENPage() {
               prepCountdown={prepCountdown}
               isCountingDown={isCountingDown}
               rapidStreak={adaptiveState.rapidStreak}
+              onPlayTerm={(term) => tts.speak(term)}
+              onNextTask={handleSkipOrNextTask}
+              isGeneratingNext={isGenerating}
+            />
+          )}
+        </div>
+
+        {/* Column 2 (5 cols): English Model Structure & 4-Tier Hints */}
+        <div className="lg:col-span-5 h-full min-h-0 overflow-hidden flex flex-col">
+          {currentTask && (
+            <VNContextCard
+              task={currentTask}
               currentHintTier={hintTier}
               onSelectHintTier={setHintTier}
             />
           )}
         </div>
 
-        {/* Right Column (7 cols): Speaking Controller OR Evaluation Feedback */}
-        <div className="md:col-span-7 flex flex-col h-full overflow-hidden min-h-0">
+        {/* Column 3 (3 cols): Compact Speaking Controller OR Evaluation Feedback */}
+        <div className="lg:col-span-3 h-full min-h-0 overflow-hidden flex flex-col">
           {lastEvaluation ? (
             <VNFeedbackCard
               evaluation={lastEvaluation}
@@ -632,6 +667,7 @@ export default function VNToENPage() {
             />
           ) : (
             <SpeakingController
+              compact
               status={
                 isEvaluating || unifiedSTT.isTranscribing
                   ? "processing"
@@ -659,13 +695,15 @@ export default function VNToENPage() {
       </main>
 
       {/* Bottom Footer Dock */}
-      <footer className="flex items-center justify-between border-t border-border/40 pt-2 shrink-0 text-[11px] font-mono text-muted-foreground">
+      <footer className="flex items-center justify-between border-t border-border/40 pt-1.5 shrink-0 text-[11px] font-mono text-muted-foreground">
         <div className="flex items-center gap-3">
           <span>[Space]: {lastEvaluation ? "Nói lại" : pendingSpokenText ? "Thu âm lại" : "Thu âm/Dừng"}</span>
           <span>•</span>
           <span>[Backspace]: Xoá nói lại</span>
           <span>•</span>
-          <span>[H]: Gợi ý</span>
+          <span>[H]: Gợi ý ({hintTier}/4)</span>
+          <span>•</span>
+          <span>[R]: Câu tiếp theo</span>
           {pendingSpokenText && !isEvaluating && (
             <>
               <span>•</span>
@@ -675,11 +713,10 @@ export default function VNToENPage() {
           {lastEvaluation && (
             <>
               <span>•</span>
-              <span className="text-primary font-bold">[Enter]: Câu tiếp</span>
+              <span className="text-primary font-bold">[Enter]: Tiếp tục câu mới</span>
             </>
           )}
         </div>
-
         <div className="flex items-center gap-2">
           <span>Tự lập: {lastEvaluation?.independenceScore ?? 100}%</span>
         </div>

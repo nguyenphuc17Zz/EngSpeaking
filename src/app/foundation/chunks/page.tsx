@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/lib/toast";
+import { cn } from "@/lib/utils";
 import {
   Layers,
   Sparkles,
@@ -37,6 +38,7 @@ import { transcribeViaServer } from "@/lib/stt/service";
 import { Waveform } from "@/components/voice/Waveform";
 
 import { ChunkPromptCard } from "@/components/foundation/chunks/ChunkPromptCard";
+import { ChunkContextCard } from "@/components/foundation/chunks/ChunkContextCard";
 import { ChunkFeedbackCard } from "@/components/foundation/chunks/ChunkFeedbackCard";
 import { MyChunksDrawer } from "@/components/foundation/chunks/MyChunksDrawer";
 import { GlobalAiSelector } from "@/components/common/GlobalAiSelector";
@@ -290,6 +292,9 @@ export default function ChunkAutomaticityPage() {
       } else if (e.code === "KeyH" && !lastChainEvaluation && !lastSingleEvaluation && !isEvaluating) {
         e.preventDefault();
         setCurrentHintTier((prev) => (prev >= 4 ? 0 : prev + 1));
+      } else if (e.code === "KeyR" && recorder.status !== "recording" && !isEvaluating) {
+        e.preventDefault();
+        handleContinue();
       } else if (e.code === "Enter") {
         if (pendingSpokenText && !isEvaluating) {
           e.preventDefault();
@@ -322,7 +327,7 @@ export default function ChunkAutomaticityPage() {
   ]);
 
   return (
-    <div className="w-full min-h-[calc(100vh-8rem)] bg-card text-foreground flex flex-col justify-between overflow-hidden rounded-3xl border border-border/80 shadow-xs select-none">
+    <div className="w-full h-full max-h-[calc(100vh-5.5rem)] flex flex-col bg-background overflow-hidden select-none">
       {/* Studio Header */}
       <header className="h-14 border-b border-border/60 px-4 sm:px-6 flex items-center justify-between bg-card/60 backdrop-blur-md shrink-0">
         <div className="flex items-center gap-3">
@@ -355,55 +360,56 @@ export default function ChunkAutomaticityPage() {
           {/* Mode Switcher */}
           <div className="flex items-center bg-muted/60 p-0.5 rounded-xl border border-border/60">
             <button
-              onClick={() => setMode("chain_builder")}
-              className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-all ${
+              onClick={() => {
+                setMode("chain_builder");
+                setPendingSpokenText(null);
+                fetchNextChainTask();
+              }}
+              className={cn(
+                "text-xs px-2.5 py-1 rounded-lg font-semibold transition-all",
                 mode === "chain_builder"
-                  ? "bg-primary text-primary-foreground shadow-2xs"
+                  ? "bg-primary text-primary-foreground shadow-xs"
                   : "text-muted-foreground hover:text-foreground"
-              }`}
+              )}
             >
-              Chain Builder
+              Speech Chain (4 Khối)
             </button>
             <button
-              onClick={() => setMode("single_chunk")}
-              className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-all ${
+              onClick={() => {
+                setMode("single_chunk");
+                setPendingSpokenText(null);
+                fetchNextSingleTask();
+              }}
+              className={cn(
+                "text-xs px-2.5 py-1 rounded-lg font-semibold transition-all",
                 mode === "single_chunk"
-                  ? "bg-primary text-primary-foreground shadow-2xs"
+                  ? "bg-primary text-primary-foreground shadow-xs"
                   : "text-muted-foreground hover:text-foreground"
-              }`}
+              )}
             >
-              Single Chunk
+              Single Recall (T1-T4)
             </button>
           </div>
 
-          {/* Pragmatic Strategy Selector (Chain Builder) */}
           {mode === "chain_builder" && (
-            <div className="hidden lg:flex items-center gap-1.5 bg-muted/60 px-2 py-1 rounded-xl border border-border/60 text-xs">
-              <GitFork className="size-3.5 text-primary shrink-0" />
+            <div className="hidden lg:flex items-center gap-1.5 bg-muted/40 px-2 py-1 rounded-xl border border-border/60">
+              <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
+                Mô hình:
+              </span>
               <select
                 value={selectedStrategy}
-                onChange={(e) => setSelectedStrategy(e.target.value as any)}
-                className="bg-transparent border-0 text-xs font-semibold text-foreground focus:outline-none cursor-pointer pr-1"
-                title="Chọn chiến lược lập luận ngữ dụng"
+                onChange={(e) => {
+                  setSelectedStrategy(e.target.value as any);
+                  fetchNextChainTask(e.target.value as any);
+                }}
+                className="bg-transparent text-xs font-semibold text-foreground focus:outline-hidden cursor-pointer"
               >
-                <option value="all">Ngẫu nhiên mọi chiến lược</option>
                 <option value="opinion_defense">Lập trường & Biện minh</option>
                 <option value="concession_counter">Nhượng bộ & Phản biện (7.5+)</option>
                 <option value="problem_solution">Chẩn đoán & Giải pháp</option>
                 <option value="hypothetical_projection">Giả định & Hệ quả</option>
                 <option value="cause_effect_chain">Chuỗi nhân quả động</option>
               </select>
-
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => fetchNextChainTask()}
-                disabled={isGenerating || isEvaluating}
-                className="h-6 w-6 p-0 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted shrink-0"
-                title="Đổi tình huống AI ngẫu nhiên mới"
-              >
-                <Dices className="size-3.5" />
-              </Button>
             </div>
           )}
 
@@ -417,107 +423,133 @@ export default function ChunkAutomaticityPage() {
             <span>My Chunks ({library.length})</span>
           </Button>
 
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleContinue}
+            disabled={isGenerating || isEvaluating}
+            className="rounded-xl text-xs font-semibold h-8 gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
+            title="Chuỗi tiếp theo (phím R)"
+          >
+            <RotateCcw className="size-3.5" />
+            <span className="hidden sm:inline">Chuỗi tiếp [R]</span>
+          </Button>
+
           <GlobalAiSelector size="sm" />
         </div>
       </header>
 
-      {/* Main Studio Body: 2-Column Split Studio */}
-      <main className="flex-1 p-3 sm:p-5 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Left Column (5 Cols): Prompt Card OR Skeleton OR Error */}
-        <div className="lg:col-span-5 h-full overflow-hidden flex flex-col justify-between">
-          {isGenerating ? (
-            <Card className="h-full rounded-3xl border border-border/80 bg-card p-6 flex flex-col items-center justify-center space-y-4 text-center">
-              <div className="size-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center animate-pulse">
-                <Sparkles className="size-7 animate-spin" />
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-bold text-foreground">
-                  AI đang thiết kế chuỗi khối Speech Chain...
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Chuẩn bị 4 khối kết nối tự nhiên theo chủ đề đời sống
-                </p>
-              </div>
-              <Skeleton className="h-32 w-full rounded-2xl mt-4" />
-            </Card>
-          ) : generationError ? (
-            <Card className="h-full rounded-3xl border border-red-500/30 bg-red-500/5 p-6 flex flex-col items-center justify-center space-y-4 text-center">
-              <div className="size-12 rounded-2xl bg-red-500/15 text-red-600 flex items-center justify-center">
-                <AlertTriangle className="size-6" />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-sm font-bold text-foreground">Không thể tạo bài tập từ AI</h3>
-                <p className="text-xs text-muted-foreground max-w-sm">{generationError}</p>
-              </div>
-              <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    clearGenerationError();
-                    if (mode === "chain_builder") fetchNextChainTask();
-                    else fetchNextSingleTask();
-                  }}
-                  className="rounded-xl font-bold text-xs gap-1.5 h-9 px-4 btn-spring"
-                >
-                  <RotateCcw className="size-3.5" />
-                  <span>Thử lại ngay</span>
-                </Button>
-                <Link href="/settings">
-                  <Button variant="outline" size="sm" className="rounded-xl text-xs h-9 px-3 gap-1.5">
-                    <Settings2 className="size-3.5" />
-                    <span>Cài đặt AI Model</span>
+      {/* Main Studio Body: 3-Column Zero-Scroll Studio */}
+      <main className="flex-1 p-3 sm:p-4 overflow-hidden min-h-0">
+        <div className="h-full w-full grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 overflow-hidden">
+          {/* Column 1 (4 cols): Prompt Card */}
+          <div className="lg:col-span-4 h-full min-h-0 overflow-hidden flex flex-col">
+            {isGenerating ? (
+              <Card className="h-full rounded-3xl border border-border/80 bg-card p-6 flex flex-col items-center justify-center space-y-4 text-center">
+                <div className="size-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center animate-pulse">
+                  <Sparkles className="size-7 animate-spin" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-bold text-foreground">
+                    AI đang thiết kế chuỗi khối Speech Chain...
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Chuẩn bị 4 khối kết nối tự nhiên theo chủ đề đời sống
+                  </p>
+                </div>
+                <Skeleton className="h-32 w-full rounded-2xl mt-4" />
+              </Card>
+            ) : generationError ? (
+              <Card className="h-full rounded-3xl border border-red-500/30 bg-red-500/5 p-6 flex flex-col items-center justify-center space-y-4 text-center">
+                <div className="size-12 rounded-2xl bg-red-500/15 text-red-600 flex items-center justify-center">
+                  <AlertTriangle className="size-6" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-sm font-bold text-foreground">Không thể tạo bài tập từ AI</h3>
+                  <p className="text-xs text-muted-foreground max-w-sm">{generationError}</p>
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      clearGenerationError();
+                      if (mode === "chain_builder") fetchNextChainTask();
+                      else fetchNextSingleTask();
+                    }}
+                    className="rounded-xl font-bold text-xs gap-1.5 h-9 px-4 btn-spring"
+                  >
+                    <RotateCcw className="size-3.5" />
+                    <span>Thử lại ngay</span>
                   </Button>
-                </Link>
-              </div>
-            </Card>
-          ) : (
-            <ChunkPromptCard
+                  <Link href="/settings">
+                    <Button variant="outline" size="sm" className="rounded-xl text-xs h-9 px-3 gap-1.5">
+                      <Settings2 className="size-3.5" />
+                      <span>Cài đặt AI Model</span>
+                    </Button>
+                  </Link>
+                </div>
+              </Card>
+            ) : (
+              <ChunkPromptCard
+                mode={mode}
+                chainTask={currentChainTask}
+                singleTask={currentSingleTask}
+                currentHintTier={currentHintTier}
+                onSelectHintTier={setCurrentHintTier}
+              />
+            )}
+          </div>
+
+          {/* Column 2 (5 cols): Context / Structure / 4-Tier Ladder Card */}
+          <div className="lg:col-span-5 h-full min-h-0 overflow-hidden flex flex-col">
+            <ChunkContextCard
               mode={mode}
               chainTask={currentChainTask}
               singleTask={currentSingleTask}
               currentHintTier={currentHintTier}
               onSelectHintTier={setCurrentHintTier}
             />
-          )}
-        </div>
+          </div>
 
-        {/* Right Column (7 Cols): Speaking Controller OR Evaluation Feedback */}
-        <div className="lg:col-span-7 h-full overflow-hidden flex flex-col justify-between">
-          {lastChainEvaluation || lastSingleEvaluation ? (
-            <ChunkFeedbackCard
-              chainEvaluation={lastChainEvaluation}
-              singleEvaluation={lastSingleEvaluation}
-              onRetry={handleRetryCurrent}
-              onContinue={handleContinue}
-            />
-          ) : (
-            <SpeakingController
-              status={
-                isEvaluating
-                  ? "processing"
-                  : recorder.status === "recording"
-                  ? "recording"
-                  : "idle"
-              }
-              isListening={speechRec.isListening}
-              liveTranscript={speechRec.fullTranscript || speechRec.transcript}
-              durationMs={recordingDurationMs}
-              autoStartMic={autoStartMic}
-              onToggleAutoStartMic={setAutoStartMic}
-              onStartRecord={handleStartRecord}
-              onStopRecord={handleStopRecord}
-              onSubmitTextFallback={(text) => executeEvaluation(text, 1500)}
-              onOpenHints={() => setCurrentHintTier((prev) => (prev >= 4 ? 0 : prev + 1))}
-              isEvaluating={isEvaluating}
-              onResetLiveTranscript={() => {
-                speechRec.resetTranscript();
-                setPendingSpokenText(null);
-              }}
-              pendingText={pendingSpokenText}
-              onConfirmSubmit={handleConfirmSubmit}
-              onReRecord={handleReRecord}
-            />
-          )}
+          {/* Column 3 (3 cols): Compact Speaking Controller OR Feedback */}
+          <div className="lg:col-span-3 h-full min-h-0 overflow-hidden flex flex-col">
+            {lastChainEvaluation || lastSingleEvaluation ? (
+              <ChunkFeedbackCard
+                chainEvaluation={lastChainEvaluation}
+                singleEvaluation={lastSingleEvaluation}
+                onRetry={handleRetryCurrent}
+                onContinue={handleContinue}
+              />
+            ) : (
+              <SpeakingController
+                compact={true}
+                status={
+                  isEvaluating
+                    ? "processing"
+                    : recorder.status === "recording"
+                    ? "recording"
+                    : "idle"
+                }
+                isListening={speechRec.isListening}
+                liveTranscript={speechRec.fullTranscript || speechRec.transcript}
+                durationMs={recordingDurationMs}
+                autoStartMic={autoStartMic}
+                onToggleAutoStartMic={setAutoStartMic}
+                onStartRecord={handleStartRecord}
+                onStopRecord={handleStopRecord}
+                onSubmitTextFallback={(text) => executeEvaluation(text, 1500)}
+                onOpenHints={() => setCurrentHintTier((prev) => (prev >= 4 ? 0 : prev + 1))}
+                isEvaluating={isEvaluating}
+                onResetLiveTranscript={() => {
+                  speechRec.resetTranscript();
+                  setPendingSpokenText(null);
+                }}
+                pendingText={pendingSpokenText}
+                onConfirmSubmit={handleConfirmSubmit}
+                onReRecord={handleReRecord}
+              />
+            )}
+          </div>
         </div>
       </main>
 

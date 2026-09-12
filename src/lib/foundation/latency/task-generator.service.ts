@@ -202,7 +202,16 @@ export async function generateLatencyTask(
   };
 
   let task = await attemptGenerate();
-  if (!task) task = await attemptGenerate();
+  if (!task) {
+    // If rate limit 429 indicates waiting time (e.g. "Please try again in 2.1s"), auto-wait and retry with the selected model:
+    const waitMatch = lastErrorMsg.match(/try again in ([\d\.]+)s/i);
+    const waitSec = waitMatch ? parseFloat(waitMatch[1]) : 0;
+    if (waitSec > 0 && waitSec <= 6) {
+      const waitMs = Math.ceil(waitSec * 1000) + 350;
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    }
+    task = await attemptGenerate();
+  }
 
   // Emergency Fallback to Content Bank on AI rate limits/outages
   if (!task) {

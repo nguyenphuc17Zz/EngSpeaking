@@ -29,10 +29,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { word, isRandom, cefrLevel, forceAI, provider, model } = body;
+    const { word, isRandom, cefrLevel, forceAI, provider, model, currentWordId } = body;
 
     if (isRandom) {
-      const wordItem = await generateDynamicRandomWord({ cefrLevel, forceAI, provider, model });
+      const wordItem = await generateDynamicRandomWord({ cefrLevel, forceAI, provider, model, currentWordId });
       return NextResponse.json({ success: true, wordItem });
     }
 

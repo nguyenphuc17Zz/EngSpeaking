@@ -228,7 +228,13 @@ export async function generateVNToENTask(
 
   let task = await attemptGenerate();
   if (!task) {
-    task = await attemptGenerate(); // retry once for transient errors
+    const waitMatch = lastErrorMsg.match(/try again in ([\d\.]+)s/i);
+    const waitSec = waitMatch ? parseFloat(waitMatch[1]) : 0;
+    if (waitSec > 0 && waitSec <= 6) {
+      const waitMs = Math.ceil(waitSec * 1000) + 350;
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    }
+    task = await attemptGenerate();
   }
 
   // Emergency Fallback to Content Bank on AI rate limits/outages

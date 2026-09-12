@@ -27,6 +27,7 @@ import {
 import { useRetryLoopStore } from "@/stores/retry-loop-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { RepairPromptCard } from "@/components/foundation/retry-loop/RepairPromptCard";
+import { RepairContextCard } from "@/components/foundation/retry-loop/RepairContextCard";
 import { RepairFeedbackCard } from "@/components/foundation/retry-loop/RepairFeedbackCard";
 import { SpeakingController } from "@/components/foundation/sentence-builder/SpeakingController";
 import { GlobalAiSelector } from "@/components/common/GlobalAiSelector";
@@ -273,6 +274,12 @@ export default function SpokenRepairLabPage() {
         setCurrentHintTier((prev) => (prev >= 4 ? 0 : prev + 1));
       }
 
+      // Key R: Next Challenge
+      if (e.code === "KeyR" && !isEvaluatingRepair && !isGeneratingChallenge) {
+        e.preventDefault();
+        handleStartAiChallenge();
+      }
+
       // Enter: Confirm pending submit or Advance to next challenge
       if (e.code === "Enter") {
         if (pendingSpokenText && !isEvaluatingRepair) {
@@ -317,7 +324,7 @@ export default function SpokenRepairLabPage() {
   // ==================== 1. STUDIO MODE (Active Session) ====================
   if (activeSession) {
     return (
-      <div className="w-full min-h-[calc(100vh-8rem)] flex flex-col overflow-hidden text-foreground rounded-3xl border border-border/80 bg-card shadow-xs">
+      <div className="w-full h-full max-h-[calc(100vh-5.5rem)] flex flex-col bg-background overflow-hidden select-none">
         {/* Studio Top Header Bar */}
         <header className="h-14 border-b border-border/80 bg-card/95 backdrop-blur-md px-3 sm:px-5 flex items-center justify-between gap-2 shrink-0 z-10">
           <div className="flex items-center gap-2.5">
@@ -359,26 +366,26 @@ export default function SpokenRepairLabPage() {
             </div>
           )}
 
-          {/* Right Header Actions */}
+          {/* Right Header Actions: Next Challenge, GlobalAiSelector */}
           <div className="flex items-center gap-2">
-            <GlobalAiSelector size="sm" />
-
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={() => handleStartAiChallenge()}
-              disabled={isGeneratingChallenge}
-              className="h-8 px-2.5 rounded-xl text-xs font-semibold gap-1.5 border-border/80 hover:border-primary/40 btn-spring shadow-2xs hidden sm:flex"
-              title="AI Tạo câu sửa sai tiếp theo"
+              disabled={isGeneratingChallenge || isEvaluatingRepair}
+              className="h-8 px-2.5 rounded-xl text-xs font-semibold gap-1.5 border-primary/30 text-primary hover:bg-primary/10 btn-spring shadow-2xs"
+              title="Câu sửa sai tiếp theo (phím R)"
             >
               {isGeneratingChallenge ? (
                 <Loader2 className="size-3.5 animate-spin" />
               ) : (
                 <Sparkles className="size-3.5 text-primary" />
               )}
-              <span>Câu khác</span>
+              <span className="hidden sm:inline">Câu tiếp [R]</span>
             </Button>
+
+            <GlobalAiSelector size="sm" />
           </div>
         </header>
 
@@ -419,59 +426,71 @@ export default function SpokenRepairLabPage() {
           </div>
         )}
 
-        {/* Studio Main Body: 2 Columns Zero-Scroll */}
-        <main className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-4 p-3 md:p-5 overflow-hidden">
-          {/* Column 1: Repair Prompt & Hints Stepper (5 Cols) */}
-          <section className="md:col-span-5 h-full overflow-hidden flex flex-col min-h-0">
-            <RepairPromptCard
-              session={activeSession}
-              currentHintTier={currentHintTier}
-              onSelectHintTier={setCurrentHintTier}
-            />
-          </section>
-
-          {/* Column 2: Recording Controller or Detailed Evaluation Feedback (7 Cols) */}
-          <section className="md:col-span-7 h-full overflow-hidden flex flex-col min-h-0">
-            {!lastRepairResult ? (
-              <SpeakingController
-                status={
-                  isEvaluatingRepair || unifiedSTT.isTranscribing
-                    ? "processing"
-                    : unifiedSTT.isListening
-                    ? "recording"
-                    : "idle"
-                }
-                isListening={unifiedSTT.isListening}
-                liveTranscript={liveText}
-                durationMs={elapsedDurationMs || unifiedSTT.audioRecorder.durationMs}
-                autoStartMic={autoStartMic}
-                onToggleAutoStartMic={setAutoStartMic}
-                onStartRecord={handleStartRecord}
-                onStopRecord={handleStopRecord}
-                onSubmitTextFallback={(text) => evaluateSpokenAttempt(text, 1500)}
-                onOpenHints={() => setCurrentHintTier((prev) => (prev >= 4 ? 1 : prev + 1))}
-                isEvaluating={isEvaluatingRepair || unifiedSTT.isTranscribing}
-                onResetLiveTranscript={() => {
-                  unifiedSTTRef.current.resetTranscript();
-                  setPendingSpokenText(null);
-                }}
-                pendingText={pendingSpokenText}
-                onConfirmSubmit={handleConfirmSubmit}
-                onReRecord={handleReRecord}
-              />
-            ) : (
-              <RepairFeedbackCard
+        {/* Studio Main Body: 3-Column Zero-Scroll Studio */}
+        <main className="flex-1 min-h-0 p-2.5 sm:p-4 overflow-hidden">
+          <div className="h-full w-full grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 overflow-hidden">
+            {/* Column 1 (4 cols): Repair Prompt & Focus Card */}
+            <div className="lg:col-span-4 h-full min-h-0 overflow-hidden flex flex-col">
+              <RepairPromptCard
                 session={activeSession}
-                result={lastRepairResult}
-                onRetry={() => {
-                  useRetryLoopStore.setState({ lastRepairResult: null });
-                  setPendingSpokenText(null);
-                  setCurrentHintTier(0);
-                }}
-                onContinue={() => handleStartAiChallenge()}
+                currentHintTier={currentHintTier}
+                onSelectHintTier={setCurrentHintTier}
               />
-            )}
-          </section>
+            </div>
+
+            {/* Column 2 (5 cols): Context, Structure & 4-Tier Ladder */}
+            <div className="lg:col-span-5 h-full min-h-0 overflow-hidden flex flex-col">
+              <RepairContextCard
+                session={activeSession}
+                currentHintTier={currentHintTier}
+                onSelectHintTier={setCurrentHintTier}
+              />
+            </div>
+
+            {/* Column 3 (3 cols): Compact Speaking Controller or Feedback Card */}
+            <div className="lg:col-span-3 h-full min-h-0 overflow-hidden flex flex-col">
+              {!lastRepairResult ? (
+                <SpeakingController
+                  compact={true}
+                  status={
+                    isEvaluatingRepair || unifiedSTT.isTranscribing
+                      ? "processing"
+                      : unifiedSTT.isListening
+                      ? "recording"
+                      : "idle"
+                  }
+                  isListening={unifiedSTT.isListening}
+                  liveTranscript={liveText}
+                  durationMs={elapsedDurationMs || unifiedSTT.audioRecorder.durationMs}
+                  autoStartMic={autoStartMic}
+                  onToggleAutoStartMic={setAutoStartMic}
+                  onStartRecord={handleStartRecord}
+                  onStopRecord={handleStopRecord}
+                  onSubmitTextFallback={(text) => evaluateSpokenAttempt(text, 1500)}
+                  onOpenHints={() => setCurrentHintTier((prev) => (prev >= 4 ? 0 : prev + 1))}
+                  isEvaluating={isEvaluatingRepair || unifiedSTT.isTranscribing}
+                  onResetLiveTranscript={() => {
+                    unifiedSTTRef.current.resetTranscript();
+                    setPendingSpokenText(null);
+                  }}
+                  pendingText={pendingSpokenText}
+                  onConfirmSubmit={handleConfirmSubmit}
+                  onReRecord={handleReRecord}
+                />
+              ) : (
+                <RepairFeedbackCard
+                  session={activeSession}
+                  result={lastRepairResult}
+                  onRetry={() => {
+                    useRetryLoopStore.setState({ lastRepairResult: null });
+                    setPendingSpokenText(null);
+                    setCurrentHintTier(0);
+                  }}
+                  onContinue={() => handleStartAiChallenge()}
+                />
+              )}
+            </div>
+          </div>
         </main>
 
         {/* Studio Footer Keybindings Dock */}
@@ -494,6 +513,12 @@ export default function SpokenRepairLabPage() {
                 H
               </kbd>
               <span>Đổi tầng gợi ý</span>
+            </span>
+            <span className="flex items-center gap-1 font-mono">
+              <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
+                R
+              </kbd>
+              <span>Câu tiếp</span>
             </span>
             {pendingSpokenText && !isEvaluatingRepair ? (
               <span className="flex items-center gap-1 font-mono text-primary font-bold">

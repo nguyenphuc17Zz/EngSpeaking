@@ -33,6 +33,7 @@ import { soundEffects } from "@/lib/audio/audio-chimes";
 import { computeFastPassLatencyMatch } from "@/lib/foundation/latency/fast-pass.service";
 import { GlobalAiSelector } from "@/components/common/GlobalAiSelector";
 import { LatencyPromptCard } from "@/components/foundation/latency/LatencyPromptCard";
+import { LatencyContextCard } from "@/components/foundation/latency/LatencyContextCard";
 import { LatencyFeedbackCard } from "@/components/foundation/latency/LatencyFeedbackCard";
 import { LatencySummaryModal } from "@/components/foundation/latency/LatencySummaryModal";
 import { SpeakingController } from "@/components/foundation/sentence-builder/SpeakingController";
@@ -274,6 +275,14 @@ export default function LatencyTrainingPage() {
     advanceToNextTask();
   }, [advanceToNextTask]);
 
+  // Skip / Next Task
+  const handleSkipOrNextTask = useCallback(() => {
+    setPendingSpokenText(null);
+    unifiedSTTRef.current.resetTranscript();
+    setCurrentHintTier(0);
+    advanceToNextTask();
+  }, [advanceToNextTask]);
+
   // Exit Studio
   const handleExitStudio = () => {
     resetSession();
@@ -321,6 +330,12 @@ export default function LatencyTrainingPage() {
       if (e.code === "KeyH" && !isEvaluating) {
         e.preventDefault();
         setCurrentHintTier((prev) => (prev >= 4 ? 0 : prev + 1));
+      }
+
+      // Key R: Skip to next task
+      if (e.code === "KeyR" && !unifiedSTTRef.current.isListening && !isEvaluating) {
+        e.preventDefault();
+        handleSkipOrNextTask();
       }
 
       // Enter: Confirm pending submit or Advance to next question
@@ -408,12 +423,12 @@ export default function LatencyTrainingPage() {
     );
   }
 
-  // ==================== 1. STUDIO MODE (Zero-Scroll 2-Column Split) ====================
+  // ==================== 1. STUDIO MODE (Professional 3-Column Split) ====================
   if (hasStartedSession && (currentTask || isGenerating)) {
     return (
-      <div className="w-full min-h-[calc(100vh-8rem)] flex flex-col overflow-hidden text-foreground rounded-3xl border border-border/80 bg-card shadow-xs">
+      <div className="w-full h-full max-h-[calc(100vh-5.5rem)] flex flex-col overflow-hidden text-foreground rounded-3xl border border-border/80 bg-card shadow-xs">
         {/* Studio Top Header Bar */}
-        <header className="h-14 border-b border-border/80 bg-card/95 backdrop-blur-md px-3 sm:px-5 flex items-center justify-between gap-2 shrink-0 z-10">
+        <header className="h-13 border-b border-border/80 bg-card/95 backdrop-blur-md px-3 sm:px-5 flex items-center justify-between gap-2 shrink-0 z-10">
           <div className="flex items-center gap-2.5">
             <Button
               type="button"
@@ -443,24 +458,35 @@ export default function LatencyTrainingPage() {
             </div>
           </div>
 
-          {/* Center: Progress Bar */}
-          <div className="flex items-center gap-2.5">
+          {/* Right Header: Next Task Button + Progress Bar + AI Engine Selector */}
+          <div className="flex items-center gap-2">
+            {/* Next Task Action Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSkipOrNextTask}
+              disabled={isGenerating || isEvaluating}
+              className="h-8 px-2.5 rounded-xl font-bold text-xs gap-1.5 border-amber-500/40 bg-amber-500/5 hover:bg-amber-500 hover:text-white text-amber-600 dark:text-amber-400 transition-all shadow-2xs btn-spring"
+              title="Đổi sang câu hỏi tiếp theo (Phím R)"
+            >
+              <Sparkles className={`size-3.5 ${isGenerating ? "animate-spin" : ""}`} />
+              <span>Câu tiếp theo</span>
+              <span className="text-[9px] font-mono opacity-60 hidden sm:inline">[R]</span>
+            </Button>
+
             <div className="text-right hidden sm:block font-mono text-xs">
               <span className="text-muted-foreground">Tiến độ: </span>
               <span className="font-bold text-foreground">
                 {currentTaskIndex + 1}/{targetCount}
               </span>
             </div>
-            <div className="w-24 sm:w-32">
+            <div className="w-16 sm:w-24">
               <Progress
                 value={((currentTaskIndex + 1) / targetCount) * 100}
-                className="h-2 rounded-full"
+                className="h-1.5 rounded-full"
               />
             </div>
-          </div>
 
-          {/* Right Header: AI Engine Selector */}
-          <div className="flex items-center gap-2">
             <GlobalAiSelector size="sm" />
           </div>
         </header>
@@ -502,10 +528,10 @@ export default function LatencyTrainingPage() {
           </div>
         )}
 
-        {/* Studio Main Body: 2 Columns Zero-Scroll */}
-        <main className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-4 p-3 md:p-5 overflow-hidden">
-          {/* Column 1: Prompt & Millisecond Stopwatch & Hints Stepper (5 Cols) */}
-          <section className="md:col-span-5 h-full overflow-hidden flex flex-col min-h-0">
+        {/* Studio Main Body: Professional 3-Column Split */}
+        <main className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-2.5 lg:gap-3 p-2.5 sm:p-3.5 overflow-hidden">
+          {/* Column 1 (4 cols): Prompt & Millisecond Stopwatch Gauge */}
+          <section className="lg:col-span-4 h-full overflow-hidden flex flex-col min-h-0">
             {currentTask ? (
               <LatencyPromptCard
                 task={currentTask}
@@ -514,9 +540,9 @@ export default function LatencyTrainingPage() {
                 isRecording={unifiedSTT.isListening}
                 elapsedMs={elapsedMs}
                 rapidStreak={adaptiveState.rapidStreak}
-                currentHintTier={currentHintTier}
-                onSelectHintTier={setCurrentHintTier}
                 staircaseTargetMs={adaptiveState.currentTargetLatencyMs}
+                onNextTask={handleSkipOrNextTask}
+                isGeneratingNext={isGenerating}
               />
             ) : (
               <Card className="rounded-3xl border border-border/80 bg-card p-6 h-full flex flex-col items-center justify-center text-center space-y-4">
@@ -529,10 +555,22 @@ export default function LatencyTrainingPage() {
             )}
           </section>
 
-          {/* Column 2: Recording Controller or 4-Quadrant Feedback (7 Cols) */}
-          <section className="md:col-span-7 h-full overflow-hidden flex flex-col min-h-0">
+          {/* Column 2 (5 cols): Buffer Phrases, Model Answer & Progressive Hints */}
+          <section className="lg:col-span-5 h-full overflow-hidden flex flex-col min-h-0">
+            {currentTask && (
+              <LatencyContextCard
+                task={currentTask}
+                currentHintTier={currentHintTier}
+                onSelectHintTier={setCurrentHintTier}
+              />
+            )}
+          </section>
+
+          {/* Column 3 (3 cols): Compact Speaking Controller or Feedback */}
+          <section className="lg:col-span-3 h-full overflow-hidden flex flex-col min-h-0">
             {!lastEvaluation ? (
               <SpeakingController
+                compact
                 status={unifiedSTT.isListening ? "recording" : "idle"}
                 isListening={unifiedSTT.isListening}
                 liveTranscript={liveText}
@@ -569,7 +607,7 @@ export default function LatencyTrainingPage() {
         </main>
 
         {/* Studio Footer Keybindings Dock */}
-        <footer className="h-10 border-t border-border/40 bg-card/80 px-4 flex items-center justify-between text-[11px] text-muted-foreground shrink-0 select-none">
+        <footer className="h-9 border-t border-border/40 bg-card/80 px-4 flex items-center justify-between text-[11px] text-muted-foreground shrink-0 select-none">
           <div className="flex items-center gap-3 overflow-x-auto py-1">
             <span className="flex items-center gap-1 font-mono">
               <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">

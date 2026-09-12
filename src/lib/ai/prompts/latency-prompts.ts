@@ -1,63 +1,32 @@
 // Function 4 — Response Latency Training AI Prompts
 // Spoken speed gym & 4-Quadrant Latency Evaluation
 
-export const LATENCY_GENERATOR_SYSTEM = `You are the Speed Gym Task Generator for an AI English Speaking Coach.
-The learner has HIGH passive English knowledge (TOEIC 900+) but HIGH response latency (takes 5-7 seconds to start speaking).
-Your goal is to generate communicative prompts that train rapid spoken retrieval under controlled pressure.
+export const LATENCY_GENERATOR_SYSTEM = `Generate 1 Spoken Response Latency training task.
+Goal: Train adult learners to start speaking in English rapidly (<2.5s).
 
-DRILL MODES:
-1. "open_response": Realistic communicative questions (e.g. "What do you usually do to relax after work?").
-2. "rapid_retrieval": High-frequency short expressions / situational prompts for <2.0s immediate spoken chunks (e.g. "Tôi không chắc.", "Để tôi kiểm tra lại.").
-3. "timed_countdown": Medium-complexity questions with a strict target latency (e.g. 2.5s).
-4. "baseline_test": Standardized prompt across common communicative domains.
-
-5. 4-TIER HINTS HIERARCHY:
-   - Tier 0: Không gợi ý (Tự phản xạ và bật câu ngay)
-   - Tier 1: Từ khoá cốt lõi (Core keywords)
-   - Tier 2: Cụm từ đệm mở đầu (Buffer starter e.g. "To be honest...", "As far as I know...")
-   - Tier 3: Khung câu điền khuyết (Skeleton with '______')
-   - Tier 4: Câu mẫu chuẩn hoàn chỉnh (Sample native model sentence)
-
-6. SUGGESTED VOCABULARY & BUFFER CHUNKS:
-   - Always generate 2-3 high-frequency spoken chunks or buffer phrases with Vietnamese meanings in "suggestedVocabulary".
-   - Always include 3 "bufferChunks" representing 3 strategic categories ("buying_time", "framing_opinion", "immediate_reaction") to train conversational priming.
-
-7. CRITICAL REQUIREMENTS FOR FULL AUDIO & TTS:
-   - "sampleResponses" MUST be full, complete, grammatical English conversational sentences (minimum 4-6 words). NEVER return isolated words, single keywords, or short fragments.
-   - In "hints", Tier 4 content MUST be a complete natural spoken sentence with NO prefixes (do NOT write "Câu mẫu hoàn chỉnh:" or "Sample:").
-   - Tier 3 content must be the sentence frame with '______'. Tier 4 must be the fully completed sentence.
-
-OUTPUT STRICT JSON ONLY. NO MARKDOWN:
+RULES:
+1. sampleResponses: 1-2 FULL, natural conversational English sentences (>=5 words).
+2. bufferChunks: 3 short conversational buffer phrases for: "buying_time", "framing_opinion", "immediate_reaction" (with Vietnamese meaning).
+3. hints: 5 items (T0: none, T1: keywords, T2: buffer starter, T3: skeleton with '______', T4: full sample sentence without prefix).
+4. suggestedVocabulary: 2 high-frequency phrases with Vietnamese meaning.
+5. STRICT JSON ONLY, NO MARKDOWN:
 {
-  "id": string,
+  "id": "lat_1",
   "drillMode": "open_response" | "rapid_retrieval" | "timed_countdown" | "baseline_test",
   "promptText": string,
   "promptLanguage": "en" | "vi",
   "targetIntent": string,
   "expectedKeywords": string[],
   "sampleResponses": string[],
-  "targetLatencyMs": number (e.g. 2500),
-  "staircaseTargetMs": number (e.g. 2500),
-  "difficulty": number (1-10),
+  "targetLatencyMs": number,
+  "staircaseTargetMs": number,
+  "difficulty": number,
   "category": "daily_conversation" | "workplace" | "opinions" | "past_events" | "reactions" | "buffer_phrases",
-  "bufferPhraseSuggestion": string (e.g. "Well, to be honest..."),
-  "bufferChunks": [
-    { "phrase": "Well, to be honest...", "meaningVi": "Thành thật mà nói...", "category": "buying_time" },
-    { "phrase": "From my perspective...", "meaningVi": "Theo góc nhìn của tôi...", "category": "framing_opinion" },
-    { "phrase": "Off the top of my head...", "meaningVi": "Nghĩ ngay lúc này thì...", "category": "immediate_reaction" }
-  ],
+  "bufferPhraseSuggestion": string,
+  "bufferChunks": [{ "phrase": string, "meaningVi": string, "category": "buying_time" | "framing_opinion" | "immediate_reaction" }],
   "isBaseline": boolean,
-  "hints": [
-    { "tier": 0, "title": "Không gợi ý", "content": "Tự bật câu ngay lập tức." },
-    { "tier": 1, "title": "Từ khoá", "content": "keyword1 / keyword2" },
-    { "tier": 2, "title": "Cụm từ đệm", "content": "Well, to be honest..." },
-    { "tier": 3, "title": "Khung câu", "content": "Well, I usually ______ when I get home." },
-    { "tier": 4, "title": "Câu mẫu", "content": "Well, I usually listen to music when I get home." }
-  ],
-  "suggestedVocabulary": [
-    { "term": "to be honest", "meaningVi": "thành thật mà nói", "partOfSpeech": "phrase" },
-    { "term": "unwind after work", "meaningVi": "thư giãn sau giờ làm", "partOfSpeech": "phrase" }
-  ]
+  "hints": [{ "tier": 0 | 1 | 2 | 3 | 4, "title": string, "content": string }],
+  "suggestedVocabulary": [{ "term": string, "meaningVi": string }]
 }`;
 
 export function buildLatencyTaskUserPrompt(params: {
@@ -67,14 +36,8 @@ export function buildLatencyTaskUserPrompt(params: {
   targetLatencyMs: number;
   recentPrompts?: string[];
 }): string {
-  return `Generate a single Response Latency speed task:
-- Mode: ${params.drillMode}
-- Category: ${params.category || "auto_select"}
-- Target Difficulty: ${params.targetDifficulty}
-- Target Latency: ${params.targetLatencyMs} ms
-- Anti-Repetition Filter: DO NOT duplicate any of: ${JSON.stringify(params.recentPrompts?.slice(-8) || [])}
-
-Return strict JSON.`;
+  const filter = params.recentPrompts?.length ? ` Avoid repeating: ${params.recentPrompts.slice(-5).join(" | ")}.` : "";
+  return `Generate task for mode="${params.drillMode}", category="${params.category || "daily_conversation"}", diff=${params.targetDifficulty}/10, targetMs=${params.targetLatencyMs}.${filter} Output JSON only.`;
 }
 
 export const LATENCY_EVALUATOR_SYSTEM = `You are the Expert Response Latency Evaluator for Spoken Retrieval.

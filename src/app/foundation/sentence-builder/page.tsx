@@ -37,6 +37,7 @@ import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 import { soundEffects } from "@/lib/audio/audio-chimes";
 
 import { TaskCard } from "@/components/foundation/sentence-builder/TaskCard";
+import { SentenceBuilderContextCard } from "@/components/foundation/sentence-builder/SentenceBuilderContextCard";
 import { SpeakingController } from "@/components/foundation/sentence-builder/SpeakingController";
 import { FeedbackCard } from "@/components/foundation/sentence-builder/FeedbackCard";
 import { SessionSummaryModal } from "@/components/foundation/sentence-builder/SessionSummaryModal";
@@ -301,7 +302,16 @@ export default function SentenceBuilderPage() {
     advanceToNextTask();
   }, [advanceToNextTask]);
 
+  // Skip or Next Task shortcut
+  const handleSkipOrNextTask = useCallback(() => {
+    setPendingSpokenText(null);
+    unifiedSTTRef.current.resetTranscript();
+    advanceToNextTask();
+  }, [advanceToNextTask]);
+
   // Stable refs for callbacks inside timers and listeners
+  const handleSkipOrNextTaskRef = useRef(handleSkipOrNextTask);
+  handleSkipOrNextTaskRef.current = handleSkipOrNextTask;
   const handleStartRecordRef = useRef(handleStartRecord);
   handleStartRecordRef.current = handleStartRecord;
   const handleStopRecordRef = useRef(handleStopRecord);
@@ -398,6 +408,9 @@ export default function SentenceBuilderPage() {
           e.preventDefault();
           handleContinueTaskRef.current();
         }
+      } else if (e.code === "KeyR" && unifiedSTTRef.current.status !== "recording" && !isEvaluating) {
+        e.preventDefault();
+        handleSkipOrNextTaskRef.current();
       } else if (e.code === "Escape") {
         setHintTier(0);
       }
@@ -636,11 +649,11 @@ export default function SentenceBuilderPage() {
     );
   }
 
-  // 3. Immersive Studio View (Zero-Scroll 2-Column Split Studio)
+  // 3. Immersive Studio View (Professional 3-Column Split Studio)
   return (
-    <div className="w-full min-h-[calc(100vh-8rem)] flex flex-col justify-between overflow-hidden rounded-3xl border border-border/80 bg-card p-3 md:p-5 shadow-xs animate-in fade-in-0 duration-200">
+    <div className="w-full h-full max-h-[calc(100vh-5.5rem)] flex flex-col justify-between overflow-hidden rounded-3xl border border-border/80 bg-card p-2.5 sm:p-3.5 shadow-xs animate-in fade-in-0 duration-200">
       {/* Top Header Bar */}
-      <header className="flex items-center justify-between gap-3 border-b border-border/40 pb-3 shrink-0">
+      <header className="flex items-center justify-between gap-3 border-b border-border/40 pb-2.5 shrink-0">
         {/* Left: Exit Studio & Mode Info */}
         <div className="flex items-center gap-2.5">
           <Button
@@ -674,8 +687,22 @@ export default function SentenceBuilderPage() {
           </div>
         ) : null}
 
-        {/* Right: Progress Indicator & Streak */}
-        <div className="flex items-center gap-3">
+        {/* Right: Next Task Button + Progress Indicator & Streak */}
+        <div className="flex items-center gap-2.5">
+          {/* Next Task Action Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSkipOrNextTask}
+            disabled={isGenerating || isEvaluating}
+            className="h-8 px-2.5 rounded-xl font-bold text-xs gap-1.5 border-primary/40 bg-primary/5 hover:bg-primary hover:text-primary-foreground text-primary transition-all shadow-2xs btn-spring"
+            title="Đổi sang bài tập tiếp theo (Phím R)"
+          >
+            <Sparkles className={`size-3.5 ${isGenerating ? "animate-spin" : ""}`} />
+            <span>Bài tiếp theo</span>
+            <span className="text-[9px] font-mono opacity-60 hidden sm:inline">[R]</span>
+          </Button>
+
           {skillMastery.streakCount > 1 && (
             <div className="hidden sm:flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[11px] font-mono font-bold">
               <Flame className="size-3" />
@@ -687,7 +714,7 @@ export default function SentenceBuilderPage() {
             <span className="text-xs font-mono font-bold text-foreground">
               {currentTaskIndex + 1}/{sessionConfig.targetCount}
             </span>
-            <div className="w-20 sm:w-28">
+            <div className="w-16 sm:w-24">
               <Progress
                 value={((currentTaskIndex + 1) / sessionConfig.targetCount) * 100}
                 className="h-1.5 rounded-full"
@@ -697,10 +724,10 @@ export default function SentenceBuilderPage() {
         </div>
       </header>
 
-      {/* Main 2-Column Split Studio Grid (Zero-Scroll Stage) */}
-      <main className="grid grid-cols-1 md:grid-cols-12 gap-3.5 flex-1 my-3 overflow-hidden min-h-0">
-        {/* Left Column (5 cols): Task Card, Vietnamese Prompt & Scaffold */}
-        <div className="md:col-span-5 flex flex-col h-full overflow-hidden min-h-0">
+      {/* Main Studio Body: Professional 3-Column Split */}
+      <main className="flex-1 min-h-0 p-2 sm:p-2.5 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-2.5 lg:gap-3">
+        {/* Column 1 (4 cols): Task Card, Vietnamese Prompt & Vocabulary */}
+        <div className="lg:col-span-4 h-full min-h-0 overflow-hidden flex flex-col">
           {currentTask && (
             <TaskCard
               task={currentTask}
@@ -708,18 +735,29 @@ export default function SentenceBuilderPage() {
               totalTasks={sessionConfig.targetCount}
               prepCountdown={prepCountdown}
               isCountingDown={isCountingDown}
-              currentHintTier={hintTier}
-              onSelectHintTier={setHintTier}
               hasListenedBaseSentence={hasListenedBaseSentence}
               onPlayBaseSentence={handlePlayBaseSentence}
               isSpeakingBaseSentence={tts.isSpeaking}
               onPlayTerm={(term) => tts.speak(term)}
+              onNextTask={handleSkipOrNextTask}
+              isGeneratingNext={isGenerating}
             />
           )}
         </div>
 
-        {/* Right Column (7 cols): Speaking Controller OR Evaluation Feedback */}
-        <div className="md:col-span-7 flex flex-col h-full overflow-hidden min-h-0">
+        {/* Column 2 (5 cols): Scaffold Context & Progressive Hints */}
+        <div className="lg:col-span-5 h-full min-h-0 overflow-hidden flex flex-col">
+          {currentTask && (
+            <SentenceBuilderContextCard
+              task={currentTask}
+              currentHintTier={hintTier}
+              onSelectHintTier={setHintTier}
+            />
+          )}
+        </div>
+
+        {/* Column 3 (3 cols): Compact Speaking Controller OR Evaluation Feedback */}
+        <div className="lg:col-span-3 h-full min-h-0 overflow-hidden flex flex-col">
           {lastEvaluation ? (
             <FeedbackCard
               evaluation={lastEvaluation}
@@ -728,6 +766,7 @@ export default function SentenceBuilderPage() {
             />
           ) : (
             <SpeakingController
+              compact
               status={
                 isEvaluating || unifiedSTT.isTranscribing
                   ? "processing"
@@ -743,7 +782,7 @@ export default function SentenceBuilderPage() {
               onStartRecord={handleStartRecord}
               onStopRecord={handleStopRecord}
               onSubmitTextFallback={handleTextFallbackSubmit}
-              onOpenHints={() => setIsHintDrawerOpen(true)}
+              onOpenHints={() => setHintTier(((hintTier + 1) % 5) as 0 | 1 | 2 | 3 | 4)}
               isEvaluating={isEvaluating || unifiedSTT.isTranscribing}
               onResetLiveTranscript={handleResetLiveTranscript}
               pendingText={pendingSpokenText}
@@ -755,13 +794,15 @@ export default function SentenceBuilderPage() {
       </main>
 
       {/* Bottom Footer Dock */}
-      <footer className="flex items-center justify-between border-t border-border/40 pt-2 shrink-0 text-[11px] font-mono text-muted-foreground">
+      <footer className="flex items-center justify-between border-t border-border/40 pt-1.5 shrink-0 text-[11px] font-mono text-muted-foreground">
         <div className="flex items-center gap-3">
           <span>[Space]: {lastEvaluation ? "Nói lại" : pendingSpokenText ? "Thu âm lại" : "Thu âm/Dừng"}</span>
           <span>•</span>
           <span>[Backspace]: Xoá nói lại</span>
           <span>•</span>
-          <span>[H]: Gợi ý</span>
+          <span>[H]: Gợi ý ({hintTier}/4)</span>
+          <span>•</span>
+          <span>[R]: Bài tiếp theo</span>
           {pendingSpokenText && !isEvaluating && (
             <>
               <span>•</span>
@@ -771,11 +812,10 @@ export default function SentenceBuilderPage() {
           {lastEvaluation && (
             <>
               <span>•</span>
-              <span className="text-primary font-bold">[Enter]: Câu tiếp</span>
+              <span className="text-primary font-bold">[Enter]: Tiếp tục bài mới</span>
             </>
           )}
         </div>
-
         <div className="flex items-center gap-2">
           <span>Mastery: {skillMastery.overallMastery}%</span>
         </div>

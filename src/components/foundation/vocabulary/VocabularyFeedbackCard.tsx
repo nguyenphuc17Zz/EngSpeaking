@@ -74,16 +74,16 @@ export function VocabularyFeedbackCard({
 
   return (
     <Card className="rounded-3xl border border-border/80 bg-card shadow-xs overflow-hidden flex flex-col h-full animate-in fade-in-0 duration-200">
-      <CardContent className="p-4 md:p-5 flex flex-col justify-between h-full space-y-3">
+      <CardContent className="p-3.5 sm:p-4 flex flex-col justify-between h-full space-y-2.5 overflow-hidden">
         {/* Header */}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-2.5">
-          <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-border/40 pb-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <Badge
-              className={`font-mono text-xs font-bold px-2.5 py-0.5 rounded-full gap-1 ${
+              className={`font-mono text-[11px] font-bold px-2 py-0.5 rounded-full gap-1 ${
                 isSuccessful ? "bg-emerald-600 text-white" : "bg-amber-600 text-white"
               }`}
             >
-              {isSuccessful ? <CheckCircle2 className="size-3.5" /> : <AlertCircle className="size-3.5" />}
+              {isSuccessful ? <CheckCircle2 className="size-3" /> : <AlertCircle className="size-3" />}
               <span>
                 {step === 1
                   ? isSuccessful
@@ -91,8 +91,8 @@ export function VocabularyFeedbackCard({
                     : "Cần chú ý âm vị"
                   : sentenceEval?.mode === "spontaneous"
                   ? isSuccessful
-                    ? "Phản xạ chủ động xuất sắc!"
-                    : "Cần cải thiện phản xạ"
+                    ? "Phản xạ xuất sắc!"
+                    : "Cần cải thiện"
                   : isSuccessful
                   ? "Ngữ cảnh tự nhiên!"
                   : "Cần cải thiện"}
@@ -102,47 +102,47 @@ export function VocabularyFeedbackCard({
             {step === 1 && wordPronuncEval?.endingSoundStatus && (
               <Badge
                 variant="outline"
-                className={`text-[10px] font-mono capitalize ${
+                className={`text-[9px] font-mono capitalize px-1.5 py-0 ${
                   wordPronuncEval.endingSoundStatus === "clear"
                     ? "text-emerald-600 border-emerald-500/40"
                     : "text-amber-600 border-amber-500/40"
                 }`}
               >
-                Âm đuôi: {wordPronuncEval.endingSoundStatus === "clear" ? "Rõ ràng ✓" : "Chưa dứt khoát ⚠️"}
+                Âm đuôi: {wordPronuncEval.endingSoundStatus === "clear" ? "Rõ ✓" : "⚠️"}
               </Badge>
             )}
 
             {step === 2 && sentenceEval?.mode === "spontaneous" && (
-              <Badge variant="secondary" className="text-[10px] bg-amber-500/10 text-amber-600 border border-amber-500/20">
-                Spontaneous Mode
+              <Badge variant="secondary" className="text-[9px] bg-amber-500/10 text-amber-600 border border-amber-500/20 px-1.5 py-0">
+                Spontaneous
               </Badge>
             )}
           </div>
 
           {/* Score Ring */}
-          <div className={`flex items-center gap-1.5 px-3 py-0.5 rounded-full border ${scoreBg}`}>
-            <span className={`font-mono font-extrabold text-sm ${scoreColor}`}>{overallScore}</span>
-            <span className="text-[10px] text-muted-foreground">/100</span>
+          <div className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full border ${scoreBg}`}>
+            <span className={`font-mono font-extrabold text-xs ${scoreColor}`}>{overallScore}</span>
+            <span className="text-[9px] text-muted-foreground">/100</span>
           </div>
         </div>
 
         {/* Scrollable Body */}
-        <div className="flex-1 space-y-3 overflow-y-auto pr-0.5">
+        <div className="flex-1 space-y-2 overflow-y-auto pr-0.5 min-h-0">
           {/* Step 1 Sub-scores */}
           {step === 1 && wordPronuncEval && (
-            <div className="space-y-2">
-              <div className="grid grid-cols-3 gap-2">
+            <div className="space-y-1.5">
+              <div className="grid grid-cols-3 gap-1.5">
                 {[
                   { label: "Phát âm", score: wordPronuncEval.pronunciationScore },
                   { label: "Trọng âm", score: wordPronuncEval.stressAccuracyScore },
                   { label: "Âm đuôi", score: wordPronuncEval.endingSoundScore },
                 ].map((item) => (
-                  <div key={item.label} className="p-2.5 rounded-2xl bg-muted/40 border border-border/60 text-center space-y-0.5">
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  <div key={item.label} className="p-2 rounded-xl bg-muted/40 border border-border/60 text-center space-y-0.5">
+                    <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">
                       {item.label}
                     </span>
                     <p
-                      className={`text-lg font-extrabold font-mono ${
+                      className={`text-base font-extrabold font-mono ${
                         item.score >= 85 ? "text-emerald-500" : item.score >= 65 ? "text-amber-500" : "text-red-500"
                       }`}
                     >

@@ -11,6 +11,7 @@ import { Menu, Mic, Moon, Sun, Volume2, Sparkles, Keyboard } from "lucide-react"
 import Link from "next/link";
 import { KeybindingsModal } from "@/components/common/KeybindingsModal";
 import { GlobalAiSelector } from "@/components/common/GlobalAiSelector";
+import { GlobalSelectionAudio } from "@/components/common/GlobalSelectionAudio";
 import { cn } from "@/lib/utils";
 
 interface AppShellProps {
@@ -195,6 +196,9 @@ export function AppShell({ children }: AppShellProps) {
           </div>
         </main>
       </div>
+
+      {/* Global Selection Pronounce Audio Floating Button */}
+      <GlobalSelectionAudio />
 
       {/* Global Keybindings Cheat Sheet Modal */}
       <KeybindingsModal open={isKeybindingsOpen} onOpenChange={setIsKeybindingsOpen} />

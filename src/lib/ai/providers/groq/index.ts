@@ -60,8 +60,15 @@ export class GroqProvider implements AIProvider {
     if (input.systemInstruction) messages.push({ role: "system", content: input.systemInstruction });
     for (const m of input.messages) messages.push({ role: m.role, content: m.content });
     if (!messages.length) messages.push({ role: "user", content: "Hello" });
-    const payload: Record<string, unknown> = { model, messages, temperature: input.temperature ?? 0.7, stream: false };
-    if (input.maxOutputTokens) payload.max_tokens = input.maxOutputTokens;
+    const maxTokens = input.maxOutputTokens || 600;
+    const payload: Record<string, unknown> = {
+      model,
+      messages,
+      temperature: input.temperature ?? 0.7,
+      stream: false,
+      max_tokens: maxTokens,
+      max_completion_tokens: maxTokens,
+    };
     const start = Date.now();
     let res: Response;
     try {

@@ -19,7 +19,8 @@ import { GlobalAiSelector } from "@/components/common/GlobalAiSelector";
 import { SpeakingController } from "@/components/foundation/sentence-builder/SpeakingController";
 
 import { VocabularyCommandSearch } from "@/components/foundation/vocabulary/VocabularyCommandSearch";
-import { VocabularyPromptCard } from "@/components/foundation/vocabulary/VocabularyPromptCard";
+import { VocabularyPhoneticsCard } from "@/components/foundation/vocabulary/VocabularyPhoneticsCard";
+import { VocabularyContextCard } from "@/components/foundation/vocabulary/VocabularyContextCard";
 import { VocabularyFeedbackCard } from "@/components/foundation/vocabulary/VocabularyFeedbackCard";
 
 export default function VocabularyContextPage() {
@@ -322,9 +323,9 @@ export default function VocabularyContextPage() {
   ]);
 
   return (
-    <div className="w-full min-h-[calc(100vh-8rem)] bg-card text-foreground flex flex-col overflow-hidden rounded-3xl border border-border/80 shadow-xs select-none">
+    <div className="w-full h-full max-h-[calc(100vh-5.5rem)] bg-card text-foreground flex flex-col overflow-hidden rounded-3xl border border-border/80 shadow-xs">
       {/* ── Studio Header ── */}
-      <header className="h-14 border-b border-border/60 px-4 sm:px-6 flex items-center justify-between bg-card/60 backdrop-blur-md shrink-0 gap-3">
+      <header className="h-13 border-b border-border/60 px-4 sm:px-6 flex items-center justify-between bg-card/60 backdrop-blur-md shrink-0 gap-3">
         {/* Left: Back + Title */}
         <div className="flex items-center gap-3 min-w-0">
           <Link href="/foundation">
@@ -350,7 +351,7 @@ export default function VocabularyContextPage() {
           </div>
         </div>
 
-        {/* Right: Step Toggle + Search + Random + GlobalAiSelector */}
+        {/* Right: Step Toggle + Next Word + Search + GlobalAiSelector */}
         <div className="flex items-center gap-2 shrink-0">
           {/* Step Switcher */}
           <div className="flex items-center bg-muted/60 p-0.5 rounded-xl border border-border/60">
@@ -376,6 +377,20 @@ export default function VocabularyContextPage() {
             </button>
           </div>
 
+          {/* Next Word Action Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => shuffleRandomWord()}
+            disabled={isSearching}
+            className="h-8 px-2.5 rounded-xl font-bold text-xs gap-1.5 border-primary/40 bg-primary/5 hover:bg-primary hover:text-primary-foreground text-primary transition-all shadow-2xs btn-spring"
+            title="Đổi sang từ tiếp theo trong kho từ điển (Phím R)"
+          >
+            <Sparkles className={`size-3.5 ${isSearching ? "animate-spin" : ""}`} />
+            <span>Từ tiếp theo</span>
+            <span className="text-[9px] font-mono opacity-60 hidden sm:inline">[R]</span>
+          </Button>
+
           {/* Command Search */}
           <VocabularyCommandSearch
             currentWordId={currentWord.id}
@@ -390,23 +405,48 @@ export default function VocabularyContextPage() {
         </div>
       </header>
 
-      {/* ── Main Studio Body: 2-Column Split ── */}
-      <main className="flex-1 p-3 sm:p-4 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-3 lg:gap-4">
-        {/* Left Column (5 cols): Prompt Card OR Skeleton */}
-        <div className="lg:col-span-5 h-full overflow-hidden">
+      {/* ── Main Studio Body: Professional 3-Column Split ── */}
+      <main className="flex-1 min-h-0 p-2.5 sm:p-3.5 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-2.5 lg:gap-3">
+        {/* Column 1 (4 cols): Word & Phonetics Anatomy */}
+        <div className="lg:col-span-4 h-full min-h-0 overflow-hidden flex flex-col">
           {isSearching ? (
-            <Card className="h-full rounded-3xl border border-border/80 bg-card p-6 flex flex-col items-center justify-center space-y-4 text-center">
-              <div className="size-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center animate-pulse">
-                <Sparkles className="size-7 animate-spin" />
+            <Card className="h-full rounded-3xl border border-border/80 bg-card p-5 flex flex-col items-center justify-center space-y-3 text-center">
+              <div className="size-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center animate-pulse">
+                <Sparkles className="size-6 animate-spin" />
               </div>
               <div className="space-y-1">
-                <p className="text-sm font-bold text-foreground">AI đang phân tích từ vựng...</p>
-                <p className="text-xs text-muted-foreground">Xây dựng IPA, Collocations, Câu ngữ cảnh</p>
+                <p className="text-xs font-bold text-foreground">AI đang phân tích âm vị...</p>
+                <p className="text-[11px] text-muted-foreground">Phân rã âm tiết & trọng âm IPA</p>
               </div>
-              <Skeleton className="h-28 w-full rounded-2xl mt-3" />
+              <Skeleton className="h-24 w-full rounded-2xl mt-2" />
             </Card>
           ) : (
-            <VocabularyPromptCard
+            <VocabularyPhoneticsCard
+              step={activeStep}
+              wordItem={currentWord}
+              isEnriching={isSearching}
+              onDeepEnrichWithAI={deepEnrichWithAI}
+              onNextWord={() => shuffleRandomWord()}
+              isSearchingNext={isSearching}
+            />
+          )}
+        </div>
+
+        {/* Column 2 (5 cols): Context, Collocations & Progressive Hints */}
+        <div className="lg:col-span-5 h-full min-h-0 overflow-hidden flex flex-col">
+          {isSearching ? (
+            <Card className="h-full rounded-3xl border border-border/80 bg-card p-5 flex flex-col items-center justify-center space-y-3 text-center">
+              <div className="size-12 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center animate-pulse">
+                <BookOpen className="size-6 animate-pulse" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-foreground">Đang thiết lập ngữ cảnh...</p>
+                <p className="text-[11px] text-muted-foreground">Collocations & Nấc thang phản xạ</p>
+              </div>
+              <Skeleton className="h-24 w-full rounded-2xl mt-2" />
+            </Card>
+          ) : (
+            <VocabularyContextCard
               step={activeStep}
               wordItem={currentWord}
               sentenceItem={activeSentence}
@@ -414,16 +454,14 @@ export default function VocabularyContextPage() {
               onSelectSentenceIndex={setSelectedSentenceIndex}
               currentHintTier={currentHintTier}
               onSelectHintTier={setCurrentHintTier}
-              isEnriching={isSearching}
-              onDeepEnrichWithAI={deepEnrichWithAI}
               speakingMode={speakingMode}
               onSelectSpeakingMode={setSpeakingMode}
             />
           )}
         </div>
 
-        {/* Right Column (7 cols): Speaking Controller OR Feedback Card */}
-        <div className="lg:col-span-7 h-full overflow-hidden">
+        {/* Column 3 (3 cols): Compact Interactive Voice Studio OR Feedback Card */}
+        <div className="lg:col-span-3 h-full min-h-0 overflow-hidden flex flex-col">
           {hasEvaluation ? (
             <VocabularyFeedbackCard
               step={activeStep}
@@ -433,11 +471,11 @@ export default function VocabularyContextPage() {
               onContinue={handleContinue}
               continueLabel={
                 activeStep === 1 && lastWordEvaluation?.isSuccessful
-                  ? "Sang Bước 2: Câu ngữ cảnh →"
+                  ? "Sang Bước 2 →"
                   : activeStep === 1
                   ? "Thử lại phát âm"
                   : activeStep === 2 && speakingMode === "guided" && lastSentenceEvaluation?.isSuccessful
-                  ? "Thử thách phản xạ tự do →"
+                  ? "Phản xạ tự do →"
                   : activeStep === 2 && !lastSentenceEvaluation?.isSuccessful
                   ? "Nói lại câu này"
                   : "Từ tiếp theo →"
@@ -445,6 +483,7 @@ export default function VocabularyContextPage() {
             />
           ) : (
             <SpeakingController
+              compact
               status={
                 isEvaluating
                   ? "processing"

@@ -30,6 +30,7 @@ import { GlobalAiSelector } from "@/components/common/GlobalAiSelector";
 import { SpeakingController } from "@/components/foundation/sentence-builder/SpeakingController";
 
 import { SurvivalPromptCard } from "@/components/foundation/survival/SurvivalPromptCard";
+import { SurvivalContextCard } from "@/components/foundation/survival/SurvivalContextCard";
 import { SurvivalFeedbackCard } from "@/components/foundation/survival/SurvivalFeedbackCard";
 import { SurvivalSessionSummaryModal } from "@/components/foundation/survival/SurvivalSessionSummaryModal";
 
@@ -296,6 +297,9 @@ export default function SurvivalSpeakingPage() {
       } else if (e.code === "KeyH" && !lastEvaluation && !isEvaluating) {
         e.preventDefault();
         setCurrentHintTier((prev) => (prev >= 4 ? 0 : prev + 1));
+      } else if (e.code === "KeyR" && !isEvaluating && !isGenerating) {
+        e.preventDefault();
+        handleContinue();
       } else if (e.code === "Enter") {
         if (pendingSpokenText && !isEvaluating) {
           e.preventDefault();
@@ -329,7 +333,7 @@ export default function SurvivalSpeakingPage() {
   ]);
 
   return (
-    <div className="w-full min-h-[calc(100vh-8rem)] bg-card text-foreground flex flex-col justify-between overflow-hidden rounded-3xl border border-border/80 shadow-xs select-none">
+    <div className="w-full h-full max-h-[calc(100vh-5.5rem)] flex flex-col bg-background overflow-hidden select-none">
       {/* Studio Header */}
       <header className="h-14 border-b border-border/60 px-4 sm:px-6 flex items-center justify-between bg-card/60 backdrop-blur-md shrink-0">
         <div className="flex items-center gap-3">
@@ -357,12 +361,17 @@ export default function SurvivalSpeakingPage() {
           </div>
         </div>
 
-        {/* Right Controls: Mode Toggle, Summary, GlobalAiSelector */}
+        {/* Right Controls: Mode Toggle, Next Challenge, Summary, GlobalAiSelector */}
         <div className="flex items-center gap-2">
           {/* Mode Switcher */}
           <div className="flex items-center bg-muted/60 p-0.5 rounded-xl border border-border/60">
             <button
-              onClick={() => setMode("circumlocution")}
+              onClick={() => {
+                setMode("circumlocution");
+                setCurrentHintTier(0);
+                setPendingSpokenText(null);
+                fetchNextCircumTask();
+              }}
               className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-all ${
                 mode === "circumlocution"
                   ? "bg-primary text-primary-foreground shadow-2xs"
@@ -372,7 +381,12 @@ export default function SurvivalSpeakingPage() {
               Circumlocution
             </button>
             <button
-              onClick={() => setMode("scenarios")}
+              onClick={() => {
+                setMode("scenarios");
+                setCurrentHintTier(0);
+                setPendingSpokenText(null);
+                fetchNextScenarioTask();
+              }}
               className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-all ${
                 mode === "scenarios"
                   ? "bg-primary text-primary-foreground shadow-2xs"
@@ -382,6 +396,18 @@ export default function SurvivalSpeakingPage() {
               Scenarios
             </button>
           </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleContinue}
+            disabled={isGenerating || isEvaluating}
+            className="rounded-xl text-xs font-semibold h-8 gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
+            title="Thử thách tiếp theo (phím R)"
+          >
+            <RotateCcw className="size-3.5" />
+            <span className="hidden sm:inline">Tiếp [R]</span>
+          </Button>
 
           {sessionAttempts > 0 && (
             <Button
@@ -399,103 +425,117 @@ export default function SurvivalSpeakingPage() {
         </div>
       </header>
 
-      {/* Main Studio Body: 2-Column Split Studio */}
-      <main className="flex-1 p-3 sm:p-5 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Left Column (5 Cols): Prompt Card OR Skeleton OR Error */}
-        <div className="lg:col-span-5 h-full overflow-hidden flex flex-col justify-between">
-          {isGenerating ? (
-            <Card className="h-full rounded-3xl border border-border/80 bg-card p-6 flex flex-col items-center justify-center space-y-4 text-center">
-              <div className="size-14 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center animate-pulse">
-                <Sparkles className="size-7 animate-spin" />
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-bold text-foreground">
-                  AI đang tạo tình huống sinh tồn giao tiếp...
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Chuẩn bị bối cảnh đời thực và các nấc thang gợi ý
-                </p>
-              </div>
-              <Skeleton className="h-32 w-full rounded-2xl mt-4" />
-            </Card>
-          ) : generationError ? (
-            <Card className="h-full rounded-3xl border border-red-500/30 bg-red-500/5 p-6 flex flex-col items-center justify-center space-y-4 text-center">
-              <div className="size-12 rounded-2xl bg-red-500/15 text-red-600 flex items-center justify-center">
-                <AlertTriangle className="size-6" />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-sm font-bold text-foreground">Không thể tạo thử thách từ AI</h3>
-                <p className="text-xs text-muted-foreground max-w-sm">{generationError}</p>
-              </div>
-              <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    clearGenerationError();
-                    if (mode === "circumlocution") fetchNextCircumTask();
-                    else fetchNextScenarioTask();
-                  }}
-                  className="rounded-xl font-bold text-xs gap-1.5 h-9 px-4 btn-spring"
-                >
-                  <RotateCcw className="size-3.5" />
-                  <span>Thử lại ngay</span>
-                </Button>
-                <Link href="/settings">
-                  <Button variant="outline" size="sm" className="rounded-xl text-xs h-9 px-3 gap-1.5">
-                    <Settings2 className="size-3.5" />
-                    <span>Cài đặt AI Model</span>
+      {/* Main Studio Body: 3-Column Zero-Scroll Studio */}
+      <main className="flex-1 p-3 sm:p-4 overflow-hidden min-h-0">
+        <div className="h-full w-full grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 overflow-hidden">
+          {/* Column 1 (4 Cols): Prompt Card OR Skeleton OR Error */}
+          <div className="lg:col-span-4 h-full min-h-0 overflow-hidden flex flex-col">
+            {isGenerating ? (
+              <Card className="h-full rounded-3xl border border-border/80 bg-card p-6 flex flex-col items-center justify-center space-y-4 text-center">
+                <div className="size-14 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center animate-pulse">
+                  <Sparkles className="size-7 animate-spin" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-bold text-foreground">
+                    AI đang tạo tình huống sinh tồn giao tiếp...
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Chuẩn bị bối cảnh đời thực và các nấc thang gợi ý
+                  </p>
+                </div>
+                <Skeleton className="h-32 w-full rounded-2xl mt-4" />
+              </Card>
+            ) : generationError ? (
+              <Card className="h-full rounded-3xl border border-red-500/30 bg-red-500/5 p-6 flex flex-col items-center justify-center space-y-4 text-center">
+                <div className="size-12 rounded-2xl bg-red-500/15 text-red-600 flex items-center justify-center">
+                  <AlertTriangle className="size-6" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-sm font-bold text-foreground">Không thể tạo thử thách từ AI</h3>
+                  <p className="text-xs text-muted-foreground max-w-sm">{generationError}</p>
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      clearGenerationError();
+                      if (mode === "circumlocution") fetchNextCircumTask();
+                      else fetchNextScenarioTask();
+                    }}
+                    className="rounded-xl font-bold text-xs gap-1.5 h-9 px-4 btn-spring"
+                  >
+                    <RotateCcw className="size-3.5" />
+                    <span>Thử lại ngay</span>
                   </Button>
-                </Link>
-              </div>
-            </Card>
-          ) : (
-            <SurvivalPromptCard
+                  <Link href="/settings">
+                    <Button variant="outline" size="sm" className="rounded-xl text-xs h-9 px-3 gap-1.5">
+                      <Settings2 className="size-3.5" />
+                      <span>Cài đặt AI Model</span>
+                    </Button>
+                  </Link>
+                </div>
+              </Card>
+            ) : (
+              <SurvivalPromptCard
+                mode={mode}
+                circumTask={currentCircumTask}
+                scenarioTask={currentScenarioTask}
+                countdownSeconds={countdownSeconds}
+                currentHintTier={currentHintTier}
+                onSelectHintTier={setCurrentHintTier}
+              />
+            )}
+          </div>
+
+          {/* Column 2 (5 Cols): Scaffolding, Aristotelian Definition & 4-Tier Ladder */}
+          <div className="lg:col-span-5 h-full min-h-0 overflow-hidden flex flex-col">
+            <SurvivalContextCard
               mode={mode}
               circumTask={currentCircumTask}
               scenarioTask={currentScenarioTask}
-              countdownSeconds={countdownSeconds}
               currentHintTier={currentHintTier}
               onSelectHintTier={setCurrentHintTier}
             />
-          )}
-        </div>
+          </div>
 
-        {/* Right Column (7 Cols): Speaking Controller OR Evaluation Feedback */}
-        <div className="lg:col-span-7 h-full overflow-hidden flex flex-col justify-between">
-          {lastEvaluation ? (
-            <SurvivalFeedbackCard
-              evaluation={lastEvaluation}
-              onRetry={handleRetryCurrent}
-              onContinue={handleContinue}
-            />
-          ) : (
-            <SpeakingController
-              status={
-                isEvaluating
-                  ? "processing"
-                  : recorder.status === "recording"
-                  ? "recording"
-                  : "idle"
-              }
-              isListening={speechRec.isListening}
-              liveTranscript={speechRec.fullTranscript || speechRec.transcript}
-              durationMs={recordingDurationMs}
-              autoStartMic={autoStartMic}
-              onToggleAutoStartMic={setAutoStartMic}
-              onStartRecord={handleStartRecord}
-              onStopRecord={handleStopRecord}
-              onSubmitTextFallback={handleSubmitTextFallback}
-              onOpenHints={() => setCurrentHintTier((prev) => (prev >= 4 ? 0 : prev + 1))}
-              isEvaluating={isEvaluating}
-              onResetLiveTranscript={() => {
-                speechRec.resetTranscript();
-                setPendingSpokenText(null);
-              }}
-              pendingText={pendingSpokenText}
-              onConfirmSubmit={handleConfirmSubmit}
-              onReRecord={handleReRecord}
-            />
-          )}
+          {/* Column 3 (3 Cols): Compact Speaking Controller OR Evaluation Feedback */}
+          <div className="lg:col-span-3 h-full min-h-0 overflow-hidden flex flex-col">
+            {lastEvaluation ? (
+              <SurvivalFeedbackCard
+                evaluation={lastEvaluation}
+                onRetry={handleRetryCurrent}
+                onContinue={handleContinue}
+              />
+            ) : (
+              <SpeakingController
+                compact={true}
+                status={
+                  isEvaluating
+                    ? "processing"
+                    : recorder.status === "recording"
+                    ? "recording"
+                    : "idle"
+                }
+                isListening={speechRec.isListening}
+                liveTranscript={speechRec.fullTranscript || speechRec.transcript}
+                durationMs={recordingDurationMs}
+                autoStartMic={autoStartMic}
+                onToggleAutoStartMic={setAutoStartMic}
+                onStartRecord={handleStartRecord}
+                onStopRecord={handleStopRecord}
+                onSubmitTextFallback={handleSubmitTextFallback}
+                onOpenHints={() => setCurrentHintTier((prev) => (prev >= 4 ? 0 : prev + 1))}
+                isEvaluating={isEvaluating}
+                onResetLiveTranscript={() => {
+                  speechRec.resetTranscript();
+                  setPendingSpokenText(null);
+                }}
+                pendingText={pendingSpokenText}
+                onConfirmSubmit={handleConfirmSubmit}
+                onReRecord={handleReRecord}
+              />
+            )}
+          </div>
         </div>
       </main>
 
@@ -515,6 +555,10 @@ export default function SurvivalSpeakingPage() {
           <span className="flex items-center gap-1">
             <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono font-bold">H</kbd>
             <span>Nấc gợi ý ({currentHintTier}/4)</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono font-bold">R</kbd>
+            <span>Tiếp theo</span>
           </span>
           {pendingSpokenText && !isEvaluating && (
             <span className="flex items-center gap-1 text-primary font-bold">

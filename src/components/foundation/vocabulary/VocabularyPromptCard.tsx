@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +15,10 @@ import {
   Zap,
   Target,
   BookOpen,
+  Copy,
+  Check,
 } from "lucide-react";
+import { toast } from "@/lib/toast";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 import { sanitizeTextForTTS } from "@/lib/tts/browser";
 import { decomposeIpa, getMinimalPairContrast } from "@/lib/foundation/vocabulary/phoneme-stress.engine";
@@ -141,9 +144,23 @@ export function VocabularyPromptCard({
 }: VocabularyPromptCardProps) {
   const [isHintsExpanded, setIsHintsExpanded] = useState(true);
   const [showL1Details, setShowL1Details] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const tts = useBrowserTTS();
 
   const handlePlay = (text: string) => tts.speak(sanitizeTextForTTS(text));
+
+  const handleCopy = useCallback(async (text: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      toast.success("Đã sao chép vào clipboard", text);
+      setTimeout(() => {
+        setCopiedId((prev) => (prev === id ? null : prev));
+      }, 1500);
+    } catch {
+      toast.error("Không thể sao chép", "Vui lòng bôi đen chuột và nhấn phím Ctrl+C.");
+    }
+  }, []);
 
   const targetWord = wordItem.word || "";
   const primaryCollocation = wordItem.collocations?.[0]?.phrase || "";
@@ -427,34 +444,50 @@ export function VocabularyPromptCard({
                     <div className="p-3.5 rounded-2xl bg-muted/40 border border-border/70 space-y-2">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 space-y-1">
-                          <p className="text-sm font-bold text-foreground leading-relaxed">
+                          <p className="text-sm font-bold text-foreground leading-relaxed select-text cursor-text">
                             {sentenceItem.sentenceEn.split(new RegExp(`(\\b${wordItem.word}\\b)`, "i")).map((part, i) =>
                               part.toLowerCase() === wordItem.word.toLowerCase()
                                 ? <mark key={i} className="bg-primary/20 text-primary font-extrabold rounded px-0.5">{part}</mark>
                                 : <span key={i}>{part}</span>
                             )}
                           </p>
-                          <p className="text-xs text-muted-foreground italic">{sentenceItem.sentenceVi}</p>
+                          <p className="text-xs text-muted-foreground italic select-text">{sentenceItem.sentenceVi}</p>
                           {sentenceItem.linkingSoundHints && (
-                            <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                            <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium select-text">
                               💡 Nối âm: {sentenceItem.linkingSoundHints}
                             </p>
                           )}
                           {sentenceItem.rhythmNoteVi && (
-                            <p className="text-[11px] text-primary/80 font-medium">
+                            <p className="text-[11px] text-primary/80 font-medium select-text">
                               🎵 Nhịp điệu: {sentenceItem.rhythmNoteVi}
                             </p>
                           )}
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handlePlay(sentenceItem.sentenceEn)}
-                          className="size-8 p-0 rounded-xl text-primary hover:bg-primary/10 shrink-0"
-                          title="Nghe câu mẫu"
-                        >
-                          <Volume2 className="size-4" />
-                        </Button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleCopy(sentenceItem.sentenceEn, "main-sentence")}
+                            className="size-8 p-0 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted shrink-0"
+                            title="Sao chép câu này (Ctrl+C)"
+                          >
+                            {copiedId === "main-sentence" ? (
+                              <Check className="size-4 text-emerald-500" />
+                            ) : (
+                              <Copy className="size-4" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handlePlay(sentenceItem.sentenceEn)}
+                            className="size-8 p-0 rounded-xl text-primary hover:bg-primary/10 shrink-0"
+                            title="Nghe câu mẫu"
+                          >
+                            <Volume2 className="size-4" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -492,16 +525,31 @@ export function VocabularyPromptCard({
 
                   {wordItem.spontaneousChallenge?.suggestedOpeningEn && (
                     <div className="flex items-center justify-between p-2 rounded-xl bg-card/80 border border-border/70 text-xs">
-                      <span className="text-muted-foreground truncate">
+                      <span className="text-muted-foreground truncate select-text cursor-text">
                         Gợi ý mở đầu: <span className="italic font-medium text-foreground">"{wordItem.spontaneousChallenge.suggestedOpeningEn}"</span>
                       </span>
-                      <button
-                        onClick={() => handlePlay(wordItem.spontaneousChallenge!.suggestedOpeningEn!)}
-                        className="text-primary hover:text-primary/80 shrink-0 ml-1"
-                        title="Nghe câu mở đầu"
-                      >
-                        <Volume2 className="size-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1 shrink-0 ml-1">
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(wordItem.spontaneousChallenge!.suggestedOpeningEn!, "spontaneous-opening")}
+                          className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted cursor-pointer transition-colors"
+                          title="Sao chép câu mở đầu"
+                        >
+                          {copiedId === "spontaneous-opening" ? (
+                            <Check className="size-3.5 text-emerald-500" />
+                          ) : (
+                            <Copy className="size-3.5" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePlay(wordItem.spontaneousChallenge!.suggestedOpeningEn!)}
+                          className="text-primary hover:text-primary/80 shrink-0 p-1 rounded-lg hover:bg-primary/10 cursor-pointer transition-colors"
+                          title="Nghe câu mở đầu"
+                        >
+                          <Volume2 className="size-3.5" />
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

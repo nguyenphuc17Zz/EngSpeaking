@@ -215,9 +215,10 @@ export async function generateDynamicRandomWord(options: {
   forceAI?: boolean;
   provider?: string;
   model?: string;
+  currentWordId?: string;
 } = {}): Promise<SpokenWordItem> {
   if (!options.forceAI) {
-    return getRandomLexiconWord({ cefrLevel: options.cefrLevel });
+    return getRandomLexiconWord({ cefrLevel: options.cefrLevel, currentWordId: options.currentWordId });
   }
 
   const provider = options.provider || "gemini";
@@ -225,7 +226,7 @@ export async function generateDynamicRandomWord(options: {
   const level = options.cefrLevel || "B1";
 
   if (provider === "mock") {
-    return getRandomLexiconWord({ cefrLevel: level });
+    return getRandomLexiconWord({ cefrLevel: level, currentWordId: options.currentWordId });
   }
 
   const prompt = `Pick a high-value, practical spoken English vocabulary word suitable for CEFR ${level}.

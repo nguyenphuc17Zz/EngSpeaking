@@ -68,10 +68,11 @@ export const useVocabularyStore = create<VocabularyStoreState>()(
       shuffleRandomWord: async (cefrLevel) => {
         set({ isSearching: true });
         try {
+          const currentWordId = get().currentWord?.id;
           const res = await fetch("/api/foundation/vocabulary/search", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ isRandom: true, cefrLevel }),
+            body: JSON.stringify({ isRandom: true, cefrLevel, currentWordId }),
           });
           const data = await res.json();
           if (data.wordItem) {
@@ -195,7 +196,11 @@ export const useVocabularyStore = create<VocabularyStoreState>()(
     }),
     {
       name: "vocabulary_context_store_v2",
-      partialize: (s) => ({ recentWords: s.recentWords }),
+      partialize: (s) => ({
+        recentWords: s.recentWords,
+        currentWord: s.currentWord,
+        activeStep: s.activeStep,
+      }),
     }
   )
 );
