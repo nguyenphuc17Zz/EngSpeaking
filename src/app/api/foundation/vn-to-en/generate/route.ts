@@ -14,6 +14,7 @@ export async function POST(req: NextRequest) {
       topic,
       provider,
       model,
+      forceSource,
     } = body;
 
     const task = await generateVNToENTask({
@@ -26,6 +27,7 @@ export async function POST(req: NextRequest) {
       topic,
       provider,
       model,
+      forceSource,
     });
 
     return NextResponse.json({ success: true, task });

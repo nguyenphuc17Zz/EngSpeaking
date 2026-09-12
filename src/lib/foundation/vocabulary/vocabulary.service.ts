@@ -4,6 +4,7 @@
 import { generateTextWithRouting } from "@/lib/ai";
 import { spokenWordItemSchema } from "@/lib/validation/vocabulary-context-schemas";
 import { DICTIONARY_ENRICHMENT_SYSTEM } from "@/lib/ai/prompts/vocabulary-context-prompts";
+import { sampleBankTask, saveBankTask } from "@/lib/foundation/services/content-bank.service";
 import {
   lookupLexiconWord,
   getRandomLexiconWord,
@@ -77,6 +78,14 @@ export async function searchSpokenDictionary(
   if (!options.forceAI) {
     const localHit = lookupLexiconWord(cleanWord);
     if (localHit) return localHit;
+
+    // Check Content Bank for previously enriched word
+    const bankSample = await sampleBankTask<SpokenWordItem>({
+      module: "vocabulary_word",
+      topic: cleanWord,
+      forceSource: "bank",
+    });
+    if (bankSample) return bankSample.task;
   }
 
   // Mock provider handling for unit tests
@@ -163,9 +172,30 @@ Return strict JSON matching the schema.`;
 
     const validated = spokenWordItemSchema.safeParse(parsed);
     if (!validated.success) throw new Error(`Schema validation error: ${validated.error.message.slice(0, 100)}`);
-    return validated.data as SpokenWordItem;
+
+    const item = validated.data as SpokenWordItem;
+
+    // Save enriched word into Content Bank for instant future lookups
+    saveBankTask({
+      module: "vocabulary_word",
+      category: item.partOfSpeech || "word",
+      level: item.cefrLevel || "all",
+      difficulty: item.cefrLevel === "C1" || item.cefrLevel === "C2" ? 8 : item.cefrLevel === "B2" ? 5 : 3,
+      topic: cleanWord,
+      payload: item,
+      hashSourceText: cleanWord,
+    }).catch(() => {});
+
+    return item;
   } catch (err: any) {
     lastErrorMsg = err?.message || String(err);
+    const emergencyBank = await sampleBankTask<SpokenWordItem>({
+      module: "vocabulary_word",
+      topic: cleanWord,
+      forceSource: "bank",
+    });
+    if (emergencyBank) return emergencyBank.task;
+
     const fallbackLocal = lookupLexiconWord(cleanWord);
     if (fallbackLocal) return fallbackLocal;
 

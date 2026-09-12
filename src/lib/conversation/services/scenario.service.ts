@@ -2,6 +2,7 @@ import { generateTextWithRouting } from "@/lib/ai";
 import { VoiceEngineError, VoiceErrorCode } from "@/lib/errors/codes";
 import { scenarioBlueprintSchema } from "@/lib/validation/conversation-schemas";
 import { SCENARIO_SYSTEM, buildScenarioUserPrompt } from "@/lib/conversation/prompts/scenario-generator";
+import { sampleBankTask, saveBankTask, recordUserExposure } from "@/lib/foundation/services/content-bank.service";
 import type { ScenarioBlueprint, ConversationSettings } from "@/types/conversation-world";
 import { getFoundationProfile } from "@/lib/foundation/services/progress.service";
 
@@ -90,11 +91,29 @@ function validateBlueprint(raw: unknown): ScenarioBlueprint | null {
 
 export async function generateScenario(
   settings: ConversationSettings,
-  opts?: { provider?: string; model?: string }
+  opts?: { provider?: string; model?: string; forceSource?: "bank" | "ai" | "auto" }
 ): Promise<ScenarioBlueprint> {
   const provider = opts?.provider || "gemini";
   const model = opts?.model || "auto";
   if (provider === "mock") return mockScenario(settings);
+
+  const isCustomPrompt = Boolean(settings.aiPrompt && settings.aiPrompt.trim()) || settings.mode === "ai_generated";
+  const numDifficulty = typeof settings.difficulty === "string" ? difficultyStringToNumber(settings.difficulty) : ((settings.difficulty as unknown as number) || 5);
+
+  // 1. If not custom prompt, check Content Bank (Hybrid 70/30 Policy)
+  if (!isCustomPrompt) {
+    const bankSample = await sampleBankTask<ScenarioBlueprint>({
+      module: "conversation_scenario",
+      level: settings.mode,
+      difficulty: numDifficulty,
+      forceSource: opts?.forceSource,
+    });
+
+    if (bankSample) {
+      recordUserExposure(bankSample.contentId, "conversation_scenario").catch(() => {});
+      return bankSample.task;
+    }
+  }
 
   const prompt = buildScenarioUserPrompt({
     mode: settings.mode,
@@ -133,9 +152,37 @@ export async function generateScenario(
   let blueprint = await attemptOnce();
   if (!blueprint) blueprint = await attemptOnce();
   if (!blueprint) {
+    // Try Bank fallback before static mock
+    const fallbackBank = await sampleBankTask<ScenarioBlueprint>({
+      module: "conversation_scenario",
+      level: settings.mode,
+      difficulty: numDifficulty,
+      forceSource: "bank",
+    });
+    if (fallbackBank) {
+      recordUserExposure(fallbackBank.contentId, "conversation_scenario").catch(() => {});
+      return fallbackBank.task;
+    }
+
     if (process.env.NODE_ENV !== "production") console.warn("[scenario] fallback mock");
     return mockScenario(settings);
   }
+
+  // 2. Save newly generated blueprint into Content Bank
+  saveBankTask({
+    module: "conversation_scenario",
+    category: blueprint.mode,
+    level: blueprint.mode,
+    difficulty: blueprint.difficulty,
+    topic: blueprint.topic,
+    payload: blueprint,
+    hashSourceText: scenarioFingerprint(blueprint),
+  })
+    .then((record) => {
+      recordUserExposure(record.id, "conversation_scenario").catch(() => {});
+    })
+    .catch(() => {});
+
   return blueprint;
 }
 

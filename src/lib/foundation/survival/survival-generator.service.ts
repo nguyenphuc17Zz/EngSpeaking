@@ -10,6 +10,7 @@ import {
   CIRCUMLOCUTION_TASK_SYSTEM,
   SURVIVAL_SCENARIO_SYSTEM,
 } from "@/lib/ai/prompts/survival-prompts";
+import { sampleBankTask, saveBankTask, recordUserExposure } from "@/lib/foundation/services/content-bank.service";
 import type {
   CircumlocutionTask,
   SurvivalScenarioTask,
@@ -56,6 +57,7 @@ export async function generateCircumlocutionTask(options: {
   difficulty?: "easy" | "medium" | "hard";
   provider?: string;
   model?: string;
+  forceSource?: "bank" | "ai" | "auto";
 } = {}): Promise<CircumlocutionTask> {
   const provider = options.provider || "gemini";
   const model = options.model && options.model !== "auto" ? options.model : "gemini-3.5-flash-lite";
@@ -63,6 +65,21 @@ export async function generateCircumlocutionTask(options: {
   if (provider === "mock") {
     const selected = SEED_CIRCUMLOCUTION_TASKS[Math.floor(Math.random() * SEED_CIRCUMLOCUTION_TASKS.length)];
     return { ...selected, id: `circ_${Date.now()}_${Math.random().toString(36).slice(2, 6)}` };
+  }
+
+  // 1. Check Content Bank (Hybrid 70/30 Policy)
+  const diff = options.difficulty || "medium";
+  const numDiff = diff === "easy" ? 3 : diff === "medium" ? 5 : 8;
+  const bankSample = await sampleBankTask<CircumlocutionTask>({
+    module: "survival_circumlocution",
+    level: diff,
+    difficulty: numDiff,
+    forceSource: options.forceSource,
+  });
+
+  if (bankSample) {
+    recordUserExposure(bankSample.contentId, "survival_circumlocution").catch(() => {});
+    return bankSample.task;
   }
 
   const domains = [
@@ -148,32 +165,39 @@ The learner must describe this concept without using the forbidden target word. 
         parsed.semanticKeyAnchors = combined.length > 0 ? combined : ["use", "item", "function"];
       }
 
-      // Sanitize 4-tier stepper hints
+      // Sanitize 5-tier hints
       if (!Array.isArray(parsed.tierHints) || parsed.tierHints.length === 0) {
-        const h = parsed.hints as Record<string, string>;
-        const samples = Array.isArray(parsed.sampleExplanations) ? (parsed.sampleExplanations as string[]) : [];
         parsed.tierHints = [
           { tier: 0, title: "Không gợi ý", content: "Tự diễn giải trong 5 giây mà không dùng từ cấm." },
-          { tier: 1, title: "Chức năng", content: h.functionHint || "Mô tả công dụng cốt lõi của khái niệm này." },
-          { tier: 2, title: "Chủng loại & Vị trí", content: `${h.categoryHint || ""} ${h.contextHint ? `— ${h.contextHint}` : ""}`.trim() || "Chủng loại và bối cảnh sử dụng" },
-          { tier: 3, title: "Khung câu mở đầu", content: h.starterHint || "It's a kind of ______ that you use to ______ ." },
-          { tier: 4, title: "Câu diễn giải mẫu", content: samples[0] || "It's an item that you use when you want to..." },
+          { tier: 1, title: "Chức năng", content: hObj.functionHint || "Chức năng chính" },
+          { tier: 2, title: "Chủng loại", content: hObj.categoryHint || "Chủng loại/vị trí" },
+          { tier: 3, title: "Khung câu", content: hObj.starterHint ? `${hObj.starterHint} ______` : "It is a kind of..." },
+          { tier: 4, title: "Câu mẫu", content: Array.isArray(parsed.sampleExplanations) && parsed.sampleExplanations[0] ? String(parsed.sampleExplanations[0]) : "Sample explanation..." },
         ];
-      } else {
-        parsed.tierHints = (parsed.tierHints as any[]).map((th, i) => ({
-          tier: typeof th.tier === "number" ? th.tier : i,
-          title: String(th.title || `Tầng ${i}`),
-          content: String(th.content || ""),
-        }));
+      }
+
+      // Sanitize sampleExplanations
+      if (!Array.isArray(parsed.sampleExplanations) || parsed.sampleExplanations.length === 0) {
+        parsed.sampleExplanations = [
+          `It's a ${parsed.genus} that ${parsed.differentia}.`,
+        ];
+      }
+
+      // Sanitize semanticKeyAnchors
+      if (!Array.isArray(parsed.semanticKeyAnchors) || parsed.semanticKeyAnchors.length === 0) {
+        const words = `${parsed.genus} ${parsed.differentia}`.toLowerCase().split(/\W+/).filter((w) => w.length > 3);
+        parsed.semanticKeyAnchors = words.slice(0, 5);
       }
 
       // Sanitize suggestedVocabulary
-      if (!Array.isArray(parsed.suggestedVocabulary) || parsed.suggestedVocabulary.length === 0) {
-        parsed.suggestedVocabulary = [
-          { term: "a kind of", meaningVi: "một dạng / một loại", partOfSpeech: "phrase" },
-          { term: "used for", meaningVi: "được dùng để", partOfSpeech: "phrase" },
-          { term: "you can find it in", meaningVi: "bạn có thể tìm thấy nó ở", partOfSpeech: "phrase" },
-        ];
+      if (!Array.isArray(parsed.suggestedVocabulary)) {
+        parsed.suggestedVocabulary = [];
+      } else {
+        parsed.suggestedVocabulary = (parsed.suggestedVocabulary as any[]).map((v) => ({
+          term: String(v.term || ""),
+          meaningVi: String(v.meaningVi || ""),
+          partOfSpeech: "phrase",
+        }));
       }
 
       const validated = circumlocutionTaskSchema.safeParse(parsed);
@@ -192,12 +216,38 @@ The learner must describe this concept without using the forbidden target word. 
   let task = await attemptGenerate();
   if (!task) task = await attemptGenerate();
 
-  // Never fall back silently to seed data; throw error directly
+  // Emergency Fallback to Content Bank on AI rate limits/outages
   if (!task) {
+    const fallbackBank = await sampleBankTask<CircumlocutionTask>({
+      module: "survival_circumlocution",
+      level: diff,
+      difficulty: numDiff,
+      forceSource: "bank",
+    });
+    if (fallbackBank) {
+      recordUserExposure(fallbackBank.contentId, "survival_circumlocution").catch(() => {});
+      return fallbackBank.task;
+    }
+
     throw new Error(
       `Không thể tạo bài tập Diễn đạt vòng (Circumlocution) từ AI: ${lastErrorMsg || "AI không phản hồi hoặc phản hồi không hợp lệ"}. Vui lòng thử lại hoặc đổi AI Model / Provider.`
     );
   }
+
+  // Save newly AI-generated task into Content Bank
+  saveBankTask({
+    module: "survival_circumlocution",
+    category: task.category || "general",
+    level: task.difficulty,
+    difficulty: numDiff,
+    topic: task.category || "general",
+    payload: task,
+    hashSourceText: task.targetWord,
+  })
+    .then((record) => {
+      recordUserExposure(record.id, "survival_circumlocution").catch(() => {});
+    })
+    .catch(() => {});
 
   return task;
 }
@@ -206,6 +256,7 @@ export async function generateSurvivalScenarioTask(options: {
   context?: string;
   provider?: string;
   model?: string;
+  forceSource?: "bank" | "ai" | "auto";
 } = {}): Promise<SurvivalScenarioTask> {
   const provider = options.provider || "gemini";
   const model = options.model && options.model !== "auto" ? options.model : "gemini-3.5-flash-lite";
@@ -213,6 +264,18 @@ export async function generateSurvivalScenarioTask(options: {
   if (provider === "mock") {
     const selected = SEED_SURVIVAL_SCENARIOS[Math.floor(Math.random() * SEED_SURVIVAL_SCENARIOS.length)];
     return { ...selected, id: `scen_${Date.now()}_${Math.random().toString(36).slice(2, 6)}` };
+  }
+
+  // 1. Check Content Bank (Hybrid 70/30 Policy)
+  const bankSample = await sampleBankTask<SurvivalScenarioTask>({
+    module: "survival_scenario",
+    topic: options.context,
+    forceSource: options.forceSource,
+  });
+
+  if (bankSample) {
+    recordUserExposure(bankSample.contentId, "survival_scenario").catch(() => {});
+    return bankSample.task;
   }
 
   const contexts = [
@@ -258,25 +321,20 @@ Create a real problem where the speaker must immediately react and repair the co
       // Sanitize 4-tier stepper hints
       if (!Array.isArray(parsed.tierHints) || parsed.tierHints.length === 0) {
         parsed.tierHints = [
-          { tier: 0, title: "Không gợi ý", content: "Phản xạ cứu cánh ngay lập tức." },
-          { tier: 1, title: "Chiến lược ứng biến", content: `Chiến lược khuyến nghị: ${String(parsed.recommendedSkill || "Ứng biến nhanh")}` },
-          { tier: 2, title: "Cụm từ cứu cánh", content: phrases.slice(0, 2).join(" / ") },
-          { tier: 3, title: "Khung câu ứng biến", content: `Sorry, ${phrases[0]?.split(" ")[0] || "could you"} ______ ?` },
-          { tier: 4, title: "Câu mẫu chuẩn bản xứ", content: phrases[0] || "Sorry, could you say that again a little more slowly?" },
+          { tier: 0, title: "Không gợi ý", content: "Tự phản xạ và xử lý tình huống ngay lập tức." },
+          { tier: 1, title: "Chiến lược", content: "Dùng câu đệm xin nhắc lại hoặc làm rõ ý." },
+          { tier: 2, title: "Mẫu mở đầu", content: phrases[0] ? `${phrases[0].slice(0, 20)}...` : "Could you..." },
+          { tier: 3, title: "Câu mẫu", content: phrases[0] || "Sorry, I didn't catch that. Could you say it again?" },
         ];
-      } else {
-        parsed.tierHints = (parsed.tierHints as any[]).map((th, i) => ({
-          tier: typeof th.tier === "number" ? th.tier : i,
-          title: String(th.title || `Tầng ${i}`),
-          content: String(th.content || ""),
-        }));
       }
 
       // Sanitize suggestedVocabulary
-      if (!Array.isArray(parsed.suggestedVocabulary) || parsed.suggestedVocabulary.length === 0) {
-        parsed.suggestedVocabulary = phrases.slice(0, 3).map((p) => ({
-          term: p,
-          meaningVi: "cụm từ cứu cánh giao tiếp",
+      if (!Array.isArray(parsed.suggestedVocabulary)) {
+        parsed.suggestedVocabulary = [];
+      } else {
+        parsed.suggestedVocabulary = (parsed.suggestedVocabulary as any[]).map((v) => ({
+          term: String(v.term || ""),
+          meaningVi: String(v.meaningVi || ""),
           partOfSpeech: "phrase",
         }));
       }
@@ -297,12 +355,35 @@ Create a real problem where the speaker must immediately react and repair the co
   let task = await attemptGenerate();
   if (!task) task = await attemptGenerate();
 
-  // Never fall back silently to seed data; throw error directly
+  // Emergency Fallback to Content Bank on AI rate limits/outages
   if (!task) {
+    const fallbackBank = await sampleBankTask<SurvivalScenarioTask>({
+      module: "survival_scenario",
+      forceSource: "bank",
+    });
+    if (fallbackBank) {
+      recordUserExposure(fallbackBank.contentId, "survival_scenario").catch(() => {});
+      return fallbackBank.task;
+    }
+
     throw new Error(
       `Không thể tạo bài tập Tình huống sinh tồn (Survival Scenario) từ AI: ${lastErrorMsg || "AI không phản hồi hoặc phản hồi không hợp lệ"}. Vui lòng thử lại hoặc đổi AI Model / Provider.`
     );
   }
+
+  // Save newly AI-generated task into Content Bank
+  saveBankTask({
+    module: "survival_scenario",
+    category: task.context || "general",
+    difficulty: 5,
+    topic: task.context || "general",
+    payload: task,
+    hashSourceText: task.audioPromptText || task.problemDescriptionVi,
+  })
+    .then((record) => {
+      recordUserExposure(record.id, "survival_scenario").catch(() => {});
+    })
+    .catch(() => {});
 
   return task;
 }

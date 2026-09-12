@@ -4,6 +4,11 @@ import {
   REPAIR_CHALLENGE_GENERATOR_SYSTEM,
   buildRepairChallengeUserPrompt,
 } from "@/lib/ai/prompts/retry-loop-prompts";
+import {
+  sampleBankTask,
+  saveBankTask,
+  getFallbackBankTask,
+} from "@/lib/foundation/services/content-bank.service";
 import { z } from "zod";
 
 export type RepairChallenge = z.infer<typeof repairChallengeSchema>;
@@ -13,6 +18,9 @@ export interface GenerateRepairChallengeParams {
   provider?: string;
   model?: string;
   recentPatterns?: string[];
+  userId?: string;
+  forceSource?: "bank" | "ai" | "auto";
+  bankRatio?: number;
 }
 
 function cleanJson(raw: string): unknown {
@@ -76,72 +84,122 @@ export async function generateRepairChallenge(
     return getDeterministicChallenge();
   }
 
-  const userPrompt = buildRepairChallengeUserPrompt(params);
-
-  const res = await generateTextWithRouting({
-    provider,
-    model,
-    input: {
-      messages: [{ role: "user", content: userPrompt }],
-      systemInstruction: REPAIR_CHALLENGE_GENERATOR_SYSTEM,
-      temperature: 0.7,
-      maxOutputTokens: 1000,
-    },
-  });
-
-  const parsed = cleanJson(res.text);
-  if (!parsed || typeof parsed !== "object") {
-    throw new Error("Could not parse JSON response from AI Challenge Generator.");
-  }
-
-  const obj = parsed as Record<string, unknown>;
-
-  // Ensure ID exists
-  if (!obj.id) obj.id = `repair_${Date.now()}`;
-
-  // Sanitize Hints
-  if (!Array.isArray(obj.hints) || obj.hints.length === 0) {
-    const errText = String(obj.userErroneousText || "lỗi khẩu ngữ");
-    const fixText = String(obj.whatToFix || "Sửa lỗi");
-    const better = String(obj.betterSentence || "");
-    const skeleton = String(obj.skeletonHint || better.replace(errText, "______"));
-    obj.hints = [
-      { tier: 0, title: "Không gợi ý", content: "Tự phát hiện và sửa lại ngay." },
-      { tier: 1, title: "Chỉ điểm lỗi", content: `Lỗi: ${errText}. Cần sửa: ${fixText}.` },
-      { tier: 2, title: "Gợi ý cấu trúc", content: String(obj.explanationVi || "Sửa lỗi để câu tự nhiên hơn.") },
-      { tier: 3, title: "Khung câu", content: skeleton },
-      { tier: 4, title: "Câu mẫu hoàn chỉnh", content: better },
-    ];
-  }
-
-  // Sanitize suggestedVocabulary
-  if (!Array.isArray(obj.suggestedVocabulary)) {
-    obj.suggestedVocabulary = [];
-  }
-
-  // Sanitize conversationalTrap
-  if (obj.conversationalTrap && typeof obj.conversationalTrap === "object") {
-    const ct = obj.conversationalTrap as Record<string, unknown>;
-    obj.conversationalTrap = {
-      partnerUtterance: String(ct.partnerUtterance || `Wait, did you mean "${obj.betterSentence}"?`),
-      reactionPromptVi: String(ct.reactionPromptVi || "Người đối thoại đang thắc mắc ý của bạn. Hãy nói lại cho chuẩn xác!"),
-      suggestedStarter: ct.suggestedStarter ? String(ct.suggestedStarter) : undefined,
-    };
-  } else {
-    obj.conversationalTrap = {
-      partnerUtterance: `Wait, did you say "${obj.erroneousSentence}"? Could you say that again?`,
-      reactionPromptVi: "Người đối thoại đang hỏi lại để làm rõ ý. Hãy nói lại câu chuẩn xác!",
-      suggestedStarter: "Sorry, I meant...",
-    };
-  }
-
-  const validated = repairChallengeSchema.safeParse(obj);
-  if (!validated.success) {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn("[RepairChallengeGenerator] Schema validation error:", validated.error);
+  // 1. Content Bank 70/30 Policy Lookup
+  try {
+    const cached = await sampleBankTask<RepairChallenge>({
+      module: "retry_loop_repair",
+      category: params.category || "grammar",
+      userId: params.userId,
+      forceSource: params.forceSource,
+      bankRatio: params.bankRatio,
+    });
+    if (cached) {
+      return cached.task;
     }
-    throw new Error(`AI generated invalid challenge format: ${validated.error.issues.map((i) => i.message).join(", ")}`);
+  } catch (bankErr) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[RepairChallengeGenerator] Bank lookup warning:", bankErr);
+    }
   }
 
-  return validated.data;
+  // 2. Real-time LLM Generation
+  try {
+    const userPrompt = buildRepairChallengeUserPrompt(params);
+
+    const res = await generateTextWithRouting({
+      provider,
+      model,
+      input: {
+        messages: [{ role: "user", content: userPrompt }],
+        systemInstruction: REPAIR_CHALLENGE_GENERATOR_SYSTEM,
+        temperature: 0.7,
+        maxOutputTokens: 1000,
+      },
+    });
+
+    const parsed = cleanJson(res.text);
+    if (!parsed || typeof parsed !== "object") {
+      throw new Error("Could not parse JSON response from AI Challenge Generator.");
+    }
+
+    const obj = parsed as Record<string, unknown>;
+
+    // Ensure ID exists
+    if (!obj.id) obj.id = `repair_${Date.now()}`;
+
+    // Sanitize Hints
+    if (!Array.isArray(obj.hints) || obj.hints.length === 0) {
+      const errText = String(obj.userErroneousText || "lỗi khẩu ngữ");
+      const fixText = String(obj.whatToFix || "Sửa lỗi");
+      const better = String(obj.betterSentence || "");
+      const skeleton = String(obj.skeletonHint || better.replace(errText, "______"));
+      obj.hints = [
+        { tier: 0, title: "Không gợi ý", content: "Tự phát hiện và sửa lại ngay." },
+        { tier: 1, title: "Chỉ điểm lỗi", content: `Lỗi: ${errText}. Cần sửa: ${fixText}.` },
+        { tier: 2, title: "Gợi ý cấu trúc", content: String(obj.explanationVi || "Sửa lỗi để câu tự nhiên hơn.") },
+        { tier: 3, title: "Khung câu", content: skeleton },
+        { tier: 4, title: "Câu mẫu hoàn chỉnh", content: better },
+      ];
+    }
+
+    // Sanitize suggestedVocabulary
+    if (!Array.isArray(obj.suggestedVocabulary)) {
+      obj.suggestedVocabulary = [];
+    }
+
+    // Sanitize conversationalTrap
+    if (obj.conversationalTrap && typeof obj.conversationalTrap === "object") {
+      const ct = obj.conversationalTrap as Record<string, unknown>;
+      obj.conversationalTrap = {
+        partnerUtterance: String(ct.partnerUtterance || `Wait, did you mean "${obj.betterSentence}"?`),
+        reactionPromptVi: String(ct.reactionPromptVi || "Người đối thoại đang thắc mắc ý của bạn. Hãy nói lại cho chuẩn xác!"),
+        suggestedStarter: ct.suggestedStarter ? String(ct.suggestedStarter) : undefined,
+      };
+    } else {
+      obj.conversationalTrap = {
+        partnerUtterance: `Wait, did you say "${obj.erroneousSentence}"? Could you say that again?`,
+        reactionPromptVi: "Người đối thoại đang hỏi lại để làm rõ ý. Hãy nói lại câu chuẩn xác!",
+        suggestedStarter: "Sorry, I meant...",
+      };
+    }
+
+    const validated = repairChallengeSchema.safeParse(obj);
+    if (!validated.success) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[RepairChallengeGenerator] Schema validation error:", validated.error);
+      }
+      throw new Error(`AI generated invalid challenge format: ${validated.error.issues.map((i) => i.message).join(", ")}`);
+    }
+
+    const challenge = validated.data;
+
+    // 3. Asynchronously save to Content Bank for future reuse
+    saveBankTask({
+      module: "retry_loop_repair",
+      category: challenge.category,
+      hashSourceText: challenge.targetIntent || challenge.erroneousSentence,
+      payload: challenge,
+      qualityScore: 9,
+    }).catch((saveErr) => {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[RepairChallengeGenerator] Failed to save to content bank:", saveErr);
+      }
+    });
+
+    return challenge;
+  } catch (genErr) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[RepairChallengeGenerator] AI generation failed, checking bank fallback:", genErr);
+    }
+    // 4. Emergency Fallback: Pool -> Mock
+    try {
+      const fallback = await getFallbackBankTask<RepairChallenge>({
+        module: "retry_loop_repair",
+        category: params.category || "grammar",
+      });
+      if (fallback) return fallback;
+    } catch {}
+
+    return getDeterministicChallenge();
+  }
 }

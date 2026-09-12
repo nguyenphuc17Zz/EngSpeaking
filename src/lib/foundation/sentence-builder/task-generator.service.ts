@@ -4,6 +4,7 @@
 import { generateTextWithRouting } from "@/lib/ai";
 import { sentenceBuilderTaskSchema } from "@/lib/validation/sentence-builder-schemas";
 import { TASK_GENERATOR_SYSTEM, buildTaskGeneratorUserPrompt } from "@/lib/ai/prompts/sentence-builder-prompts";
+import { sampleBankTask, saveBankTask, recordUserExposure } from "@/lib/foundation/services/content-bank.service";
 import type {
   SentenceBuilderTask,
   SentenceBuilderControlLevel,
@@ -19,6 +20,7 @@ export interface GenerateTaskOptions {
   provider?: string;
   model?: string;
   pedagogicalConstraint?: string;
+  forceSource?: "bank" | "ai" | "auto";
   // Legacy optional fields ignored
   weakSkills?: string[];
   recentErrors?: string[];
@@ -80,7 +82,9 @@ function cleanJson(text: string): unknown {
     if (m) {
       try {
         return JSON.parse(m[0]);
-      } catch {}
+      } catch {
+        return null;
+      }
     }
     return null;
   }
@@ -98,7 +102,21 @@ export async function generateSentenceBuilderTask(
     return getTestMockTask({ ...options, controlLevel, targetDifficulty });
   }
 
-  // Dynamic prompt with optional Targeted Error Bank pedagogical constraint
+  // 1. Check Content Bank (Hybrid 70/30 Policy: 70% chance to fetch from Bank)
+  const bankSample = await sampleBankTask<SentenceBuilderTask>({
+    module: "sentence_builder",
+    level: controlLevel,
+    difficulty: targetDifficulty,
+    topic: options.topic,
+    forceSource: options.forceSource,
+  });
+
+  if (bankSample) {
+    recordUserExposure(bankSample.contentId, "sentence_builder").catch(() => {});
+    return bankSample.task;
+  }
+
+  // 2. Dynamic AI Generation (30% novel LLM generation or when bank misses)
   const userPrompt = buildTaskGeneratorUserPrompt({
     controlLevel,
     taskType: options.taskType,
@@ -250,12 +268,38 @@ export async function generateSentenceBuilderTask(
     task = await attemptGenerate();
   }
 
-  // Never fall back silently to mock data; throw error directly so user/client knows
+  // Emergency Fallback to Content Bank on AI rate limits/outages
   if (!task) {
+    const fallbackBank = await sampleBankTask<SentenceBuilderTask>({
+      module: "sentence_builder",
+      level: controlLevel,
+      difficulty: targetDifficulty,
+      forceSource: "bank",
+    });
+    if (fallbackBank) {
+      recordUserExposure(fallbackBank.contentId, "sentence_builder").catch(() => {});
+      return fallbackBank.task;
+    }
+
     throw new Error(
       `Không thể tạo bài tập Sentence Builder từ AI: ${lastErrorMsg || "AI không phản hồi hoặc phản hồi không hợp lệ"}. Vui lòng thử lại hoặc đổi AI Model / Provider.`
     );
   }
+
+  // 3. Flywheel: Save newly AI-generated task into Content Bank for future reuse
+  saveBankTask({
+    module: "sentence_builder",
+    category: task.taskType || "sentence_completion",
+    level: task.controlLevel,
+    difficulty: task.difficulty.overall,
+    topic: task.topic || "general",
+    payload: task,
+    hashSourceText: task.promptVi || task.targetIntent,
+  })
+    .then((record) => {
+      recordUserExposure(record.id, "sentence_builder").catch(() => {});
+    })
+    .catch(() => {});
 
   return task;
 }

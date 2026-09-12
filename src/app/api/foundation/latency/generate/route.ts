@@ -12,6 +12,7 @@ export async function POST(req: NextRequest) {
       recentPrompts,
       provider,
       model,
+      forceSource,
     } = body;
 
     const task = await generateLatencyTask({
@@ -22,6 +23,7 @@ export async function POST(req: NextRequest) {
       recentPrompts,
       provider,
       model,
+      forceSource,
     });
 
     return NextResponse.json({ success: true, task });

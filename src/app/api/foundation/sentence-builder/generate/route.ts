@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
       prepTimeSec,
       provider,
       model,
+      forceSource,
     } = body;
 
     const task = await generateSentenceBuilderTask({
@@ -30,6 +31,7 @@ export async function POST(req: NextRequest) {
       prepTimeSec,
       provider,
       model,
+      forceSource,
     });
 
     return NextResponse.json({ success: true, task });

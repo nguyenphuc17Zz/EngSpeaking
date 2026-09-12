@@ -107,9 +107,23 @@ function extractJson(text: string): unknown {
   }
 }
 
+import {
+  sampleBankTask,
+  saveBankTask,
+  getFallbackBankTask,
+} from "@/lib/foundation/services/content-bank.service";
+
+export interface GenerateExerciseOptions {
+  provider?: string;
+  model?: string;
+  userId?: string;
+  forceSource?: "bank" | "ai" | "auto";
+  bankRatio?: number;
+}
+
 export async function generateExercise(
   params: GenerateExerciseParams,
-  opts?: { provider?: string; model?: string }
+  opts?: GenerateExerciseOptions
 ): Promise<FoundationExercise> {
   const difficulty = params.difficulty ?? 5;
   const level = params.level ?? getLevelForSkill(params.skill || "sentence_retrieval", difficulty);
@@ -122,6 +136,31 @@ export async function generateExercise(
     return mockExercise({ ...params, difficulty, level });
   }
 
+  // 1. Content Bank 70/30 Policy Lookup
+  try {
+    const cached = await sampleBankTask<FoundationExercise>({
+      module: "foundation_exercise",
+      category: params.type || "one_sentence",
+      level: String(level),
+      difficulty,
+      topic: params.topic,
+      userId: opts?.userId,
+      forceSource: opts?.forceSource,
+      bankRatio: opts?.bankRatio,
+    });
+    if (cached) {
+      return {
+        ...cached.task,
+        source: "bank",
+      };
+    }
+  } catch (bankErr) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[ExerciseGenerator] Bank lookup warning:", bankErr);
+    }
+  }
+
+  // 2. Real-time AI Generation
   const userPrompt = buildExerciseUserPrompt({ ...params, difficulty, level });
   let lastErrorMsg = "";
 
@@ -171,14 +210,44 @@ export async function generateExercise(
   let exercise = await attemptOnce();
   if (!exercise) exercise = await attemptOnce(); // regenerate once §57
 
-  if (!exercise) {
-    throw new Error(
-      `Không thể tạo bài tập Foundation Exercise từ AI: ${lastErrorMsg || "AI không phản hồi hoặc phản hồi không hợp lệ"}. Vui lòng thử lại hoặc đổi AI Model / Provider.`
-    );
+  if (exercise) {
+    // 3. Asynchronously save to Content Bank for future reuse
+    saveBankTask({
+      module: "foundation_exercise",
+      category: exercise.type,
+      level: String(exercise.level),
+      difficulty: exercise.difficulty,
+      topic: exercise.topic,
+      hashSourceText: exercise.prompt || exercise.instruction,
+      payload: exercise,
+      qualityScore: 9,
+    }).catch((saveErr) => {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[ExerciseGenerator] Failed to save exercise to content bank:", saveErr);
+      }
+    });
+
+    return exercise;
   }
 
-  // Normalize: ensure scalar difficulty consistent with dims (future)
-  return exercise;
+  // 4. Emergency Fallback: Pool -> Error
+  try {
+    const fallback = await getFallbackBankTask<FoundationExercise>({
+      module: "foundation_exercise",
+      category: params.type || "one_sentence",
+      level: String(level),
+    });
+    if (fallback) {
+      return {
+        ...fallback,
+        source: "bank",
+      };
+    }
+  } catch {}
+
+  throw new Error(
+    `Không thể tạo bài tập Foundation Exercise từ AI: ${lastErrorMsg || "AI không phản hồi hoặc phản hồi không hợp lệ"}. Vui lòng thử lại hoặc đổi AI Model / Provider.`
+  );
 }
 
 // Re-export mock for explicit use

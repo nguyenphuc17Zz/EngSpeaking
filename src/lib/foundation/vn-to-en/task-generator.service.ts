@@ -4,6 +4,7 @@
 import { generateTextWithRouting } from "@/lib/ai";
 import { vnToENTaskSchema } from "@/lib/validation/vn-to-en-schemas";
 import { VN_TO_EN_GENERATOR_SYSTEM, buildVNToENTaskPrompt } from "@/lib/ai/prompts/vn-to-en-prompts";
+import { sampleBankTask, saveBankTask, recordUserExposure } from "@/lib/foundation/services/content-bank.service";
 import type { VNToENTask, VNToENRetrievalMode, VNPromptCategory } from "@/types/vn-to-en";
 
 export interface GenerateVNTaskOptions {
@@ -16,6 +17,7 @@ export interface GenerateVNTaskOptions {
   topic?: string;
   provider?: string;
   model?: string;
+  forceSource?: "bank" | "ai" | "auto";
 }
 
 // Minimal test fixture strictly for offline test runner when provider === "mock"
@@ -73,7 +75,9 @@ function cleanJson(text: string): unknown {
     if (m) {
       try {
         return JSON.parse(m[0]);
-      } catch {}
+      } catch {
+        return null;
+      }
     }
     return null;
   }
@@ -91,6 +95,22 @@ export async function generateVNToENTask(
     return getTestMockTask({ ...options, retrievalMode, targetDifficulty });
   }
 
+  // 1. Check Content Bank (Hybrid 70/30 Policy: 70% chance to fetch from Bank)
+  const bankSample = await sampleBankTask<VNToENTask>({
+    module: "vn_to_en",
+    level: retrievalMode,
+    difficulty: targetDifficulty,
+    category: options.category,
+    topic: options.topic,
+    forceSource: options.forceSource,
+  });
+
+  if (bankSample) {
+    recordUserExposure(bankSample.contentId, "vn_to_en").catch(() => {});
+    return bankSample.task;
+  }
+
+  // 2. Dynamic AI Generation (30% novel LLM generation or when bank misses)
   const userPrompt = buildVNToENTaskPrompt({
     retrievalMode,
     category: options.category,
@@ -211,12 +231,38 @@ export async function generateVNToENTask(
     task = await attemptGenerate(); // retry once for transient errors
   }
 
-  // Never fall back silently to mock data; throw error directly
+  // Emergency Fallback to Content Bank on AI rate limits/outages
   if (!task) {
+    const fallbackBank = await sampleBankTask<VNToENTask>({
+      module: "vn_to_en",
+      level: retrievalMode,
+      difficulty: targetDifficulty,
+      forceSource: "bank",
+    });
+    if (fallbackBank) {
+      recordUserExposure(fallbackBank.contentId, "vn_to_en").catch(() => {});
+      return fallbackBank.task;
+    }
+
     throw new Error(
       `Không thể tạo bài tập VN-to-EN từ AI: ${lastErrorMsg || "AI không phản hồi hoặc phản hồi không hợp lệ"}. Vui lòng thử lại hoặc đổi AI Model / Provider.`
     );
   }
+
+  // 3. Flywheel: Save newly AI-generated task into Content Bank for future reuse
+  saveBankTask({
+    module: "vn_to_en",
+    category: task.category || "daily_life",
+    level: task.retrievalMode,
+    difficulty: task.difficulty.overall,
+    topic: task.topic || "general",
+    payload: task,
+    hashSourceText: task.promptVi || task.targetIntent,
+  })
+    .then((record) => {
+      recordUserExposure(record.id, "vn_to_en").catch(() => {});
+    })
+    .catch(() => {});
 
   return task;
 }

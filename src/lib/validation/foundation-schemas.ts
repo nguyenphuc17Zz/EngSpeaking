@@ -72,7 +72,7 @@ export const foundationExerciseSchema = z.object({
     .array(z.object({ dimension: z.string(), weight: z.number(), description: z.string() }))
     .min(1),
   topic: z.string().optional(),
-  source: z.enum(["ai", "mock"]).optional(),
+  source: z.enum(["ai", "mock", "bank"]).optional(),
 });
 
 export const foundationScoreSchema = z.object({

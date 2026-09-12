@@ -4,6 +4,7 @@
 import { generateTextWithRouting } from "@/lib/ai";
 import { latencyTaskSchema } from "@/lib/validation/latency-schemas";
 import { LATENCY_GENERATOR_SYSTEM, buildLatencyTaskUserPrompt } from "@/lib/ai/prompts/latency-prompts";
+import { sampleBankTask, saveBankTask, recordUserExposure } from "@/lib/foundation/services/content-bank.service";
 import type { LatencyTask, LatencyDrillMode } from "@/types/latency-training";
 
 export interface GenerateLatencyTaskOptions {
@@ -14,6 +15,7 @@ export interface GenerateLatencyTaskOptions {
   recentPrompts?: string[];
   provider?: string;
   model?: string;
+  forceSource?: "bank" | "ai" | "auto";
 }
 
 // Minimal test fixture strictly for offline test runner when provider === "mock"
@@ -65,7 +67,9 @@ function cleanJson(text: string): unknown {
     if (m) {
       try {
         return JSON.parse(m[0]);
-      } catch {}
+      } catch {
+        return null;
+      }
     }
     return null;
   }
@@ -84,6 +88,21 @@ export async function generateLatencyTask(
     return getTestMockTask({ ...options, drillMode, targetLatencyMs, targetDifficulty });
   }
 
+  // 1. Check Content Bank (Hybrid 70/30 Policy: 70% chance to fetch from Bank)
+  const bankSample = await sampleBankTask<LatencyTask>({
+    module: "latency",
+    level: drillMode,
+    difficulty: targetDifficulty,
+    category: options.category,
+    forceSource: options.forceSource,
+  });
+
+  if (bankSample) {
+    recordUserExposure(bankSample.contentId, "latency").catch(() => {});
+    return bankSample.task;
+  }
+
+  // 2. Dynamic AI Generation (30% novel LLM generation or when bank misses)
   let lastErrorMsg = "";
 
   const userPrompt = buildLatencyTaskUserPrompt({
@@ -185,12 +204,38 @@ export async function generateLatencyTask(
   let task = await attemptGenerate();
   if (!task) task = await attemptGenerate();
 
-  // Never fall back silently to mock data; throw error directly
+  // Emergency Fallback to Content Bank on AI rate limits/outages
   if (!task) {
+    const fallbackBank = await sampleBankTask<LatencyTask>({
+      module: "latency",
+      level: drillMode,
+      difficulty: targetDifficulty,
+      forceSource: "bank",
+    });
+    if (fallbackBank) {
+      recordUserExposure(fallbackBank.contentId, "latency").catch(() => {});
+      return fallbackBank.task;
+    }
+
     throw new Error(
       `Không thể tạo bài tập Response Latency từ AI: ${lastErrorMsg || "AI không phản hồi hoặc phản hồi không hợp lệ"}. Vui lòng thử lại hoặc đổi AI Model / Provider.`
     );
   }
+
+  // 3. Flywheel: Save newly AI-generated task into Content Bank for future reuse
+  saveBankTask({
+    module: "latency",
+    category: task.category || "daily_conversation",
+    level: task.drillMode,
+    difficulty: task.difficulty,
+    topic: "general",
+    payload: task,
+    hashSourceText: task.promptText,
+  })
+    .then((record) => {
+      recordUserExposure(record.id, "latency").catch(() => {});
+    })
+    .catch(() => {});
 
   return task;
 }

@@ -24,6 +24,7 @@ import {
   PRAGMATIC_DAG_STRATEGIES,
   DYNAMIC_SCENARIO_SEEDS,
 } from "./pragmatic-dag.engine";
+import { sampleBankTask, saveBankTask, recordUserExposure } from "@/lib/foundation/services/content-bank.service";
 
 import { SEED_CHUNK_LIBRARY } from "./seed-chunks";
 export { SEED_CHUNK_LIBRARY };
@@ -141,6 +142,7 @@ export async function generateChunkChainTask(options: {
   domain?: "workplace" | "daily_life" | "travel" | "tech_ai" | "opinions" | "career";
   provider?: string;
   model?: string;
+  forceSource?: "bank" | "ai" | "auto";
 } = {}): Promise<ChunkChainTask> {
   const provider = options.provider || "gemini";
   const model = options.model && options.model !== "auto" ? options.model : "gemini-3.5-flash-lite";
@@ -156,7 +158,20 @@ export async function generateChunkChainTask(options: {
     return getMockChainTask(options.topic || scenarioSeed.topic, options.strategy || strategyDef.strategy);
   }
 
-  // 2. Synthesize Rich Context-Infused LLM Prompt from DAG
+  // 2. Check Content Bank (Hybrid 70/30 Policy)
+  const bankSample = await sampleBankTask<ChunkChainTask>({
+    module: "chunk_chain",
+    level: options.strategy || strategyDef.strategy,
+    topic: options.topic,
+    forceSource: options.forceSource,
+  });
+
+  if (bankSample) {
+    recordUserExposure(bankSample.contentId, "chunk_chain").catch(() => {});
+    return bankSample.task;
+  }
+
+  // 3. Synthesize Rich Context-Infused LLM Prompt from DAG
   const userPrompt = buildPragmaticChainUserPrompt({
     topic: options.topic || scenarioSeed.topic,
     strategyTitleVi: strategyDef.titleVi,
@@ -294,12 +309,36 @@ export async function generateChunkChainTask(options: {
   let task = await attemptGenerate();
   if (!task) task = await attemptGenerate();
 
-  // Never fall back silently to mock data; throw error directly
+  // Emergency Fallback to Content Bank on AI rate limits/outages
   if (!task) {
+    const fallbackBank = await sampleBankTask<ChunkChainTask>({
+      module: "chunk_chain",
+      forceSource: "bank",
+    });
+    if (fallbackBank) {
+      recordUserExposure(fallbackBank.contentId, "chunk_chain").catch(() => {});
+      return fallbackBank.task;
+    }
+
     throw new Error(
       `Không thể tạo bài tập Chunk Chain từ AI: ${lastErrorMsg || "AI không phản hồi hoặc phản hồi không hợp lệ"}. Vui lòng thử lại hoặc đổi AI Model / Provider.`
     );
   }
+
+  // Save newly AI-generated task into Content Bank
+  saveBankTask({
+    module: "chunk_chain",
+    category: task.domain || "general",
+    level: task.pragmaticStrategy,
+    difficulty: 4,
+    topic: task.topic,
+    payload: task,
+    hashSourceText: `${task.topic}_${task.pragmaticStrategy}_${task.targetQuestion}`,
+  })
+    .then((record) => {
+      recordUserExposure(record.id, "chunk_chain").catch(() => {});
+    })
+    .catch(() => {});
 
   return task;
 }

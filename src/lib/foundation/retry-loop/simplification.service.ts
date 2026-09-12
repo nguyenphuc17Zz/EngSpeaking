@@ -4,6 +4,11 @@
 import { generateTextWithRouting } from "@/lib/ai";
 import { simplificationResultSchema } from "@/lib/validation/retry-loop-schemas";
 import { SIMPLIFICATION_SYSTEM } from "@/lib/ai/prompts/retry-loop-prompts";
+import {
+  findBankTaskByHash,
+  saveBankTask,
+  getFallbackBankTask,
+} from "@/lib/foundation/services/content-bank.service";
 
 export interface SimplifySentenceParams {
   originalPromptVi: string;
@@ -11,6 +16,8 @@ export interface SimplifySentenceParams {
   targetErrorPattern?: string;
   provider?: string;
   model?: string;
+  userId?: string;
+  forceSource?: "bank" | "ai" | "auto";
 }
 
 export interface SimplificationResult {
@@ -78,6 +85,24 @@ export async function simplifySentence(
     return computeDeterministicSimplification(params);
   }
 
+  // 1. Content Bank Exact Match Lookup (saves 100% tokens and eliminates latency for recurring sentences)
+  if (params.forceSource !== "ai") {
+    try {
+      const cached = await findBankTaskByHash<SimplificationResult>(
+        "retry_loop_simplification",
+        params.originalEnglish
+      );
+      if (cached) {
+        return cached;
+      }
+    } catch (bankErr) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[SimplificationService] Bank lookup warning:", bankErr);
+      }
+    }
+  }
+
+  // 2. Real-time AI Generation
   const prompt = `Simplify this complex speaking sentence for a learner who is struggling after multiple retries:
 - Original Vietnamese: "${params.originalPromptVi}"
 - Original English: "${params.originalEnglish}"
@@ -105,11 +130,35 @@ Create a clean, short (4-8 words) simplified pair. Return strict JSON.`;
       throw new Error("Invalid simplification schema");
     }
 
-    return validated.data as SimplificationResult;
+    const result = validated.data as SimplificationResult;
+
+    // 3. Asynchronously save to Content Bank for future reuse
+    saveBankTask({
+      module: "retry_loop_simplification",
+      category: params.targetErrorPattern || "core_grammar",
+      hashSourceText: params.originalEnglish,
+      payload: result,
+      qualityScore: 9,
+    }).catch((saveErr) => {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[SimplificationService] Failed to save simplification to bank:", saveErr);
+      }
+    });
+
+    return result;
   } catch (err) {
     if (process.env.NODE_ENV !== "production") {
-      console.warn("[SimplificationService] Fallback to deterministic simplification:", err);
+      console.warn("[SimplificationService] AI generation failed, checking bank fallback:", err);
     }
+    // 4. Emergency Fallback: Pool -> Deterministic
+    try {
+      const fallback = await getFallbackBankTask<SimplificationResult>({
+        module: "retry_loop_simplification",
+        category: params.targetErrorPattern || "core_grammar",
+      });
+      if (fallback) return fallback;
+    } catch {}
+
     return computeDeterministicSimplification(params);
   }
 }

@@ -78,7 +78,7 @@ export interface FoundationExercise {
   evaluationCriteria: EvaluationCriteria[];
   // metadata for generator
   topic?: string;
-  source?: "ai" | "mock";
+  source?: "ai" | "mock" | "bank";
 }
 
 export interface FoundationScore {
