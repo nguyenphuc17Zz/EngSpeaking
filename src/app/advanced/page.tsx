@@ -50,39 +50,39 @@ const MODULE_CATEGORIES = [
 
 const MODULES: ModuleDef[] = [
   // Pressure
-  { id: "rapidResponse", label: "Rapid Response", desc: "Câu hỏi khó → Bắt buộc trả lời ngay trong 3 giây", category: "pressure", level: "C1", icon: Zap, color: "text-amber-500 bg-amber-500/10" },
-  { id: "pressureConversation", label: "Pressure Conversation", desc: "AI liên tục dồn ép và hỏi xoáy vào điểm yếu", category: "pressure", level: "C1", icon: Flame, color: "text-red-500 bg-red-500/10" },
-  { id: "topicSwitching", label: "Topic Switching", desc: "Chuyển đề tài đột ngột không để nhịp nói bị đơ", category: "pressure", level: "B2", icon: Shuffle, color: "text-orange-500 bg-orange-500/10" },
-  { id: "spontaneous", label: "Spontaneous Speaking", desc: "Nói ngay không chuẩn bị về đề tài ngẫu nhiên", category: "pressure", level: "B2", icon: Sparkles, color: "text-yellow-500 bg-yellow-500/10" },
-  { id: "highPressure", label: "High Pressure Synthesis", desc: "Tổng hợp tất cả yếu tố áp lực cao nhất của kỳ thi", category: "pressure", level: "C1+", icon: ShieldAlert, color: "text-rose-500 bg-rose-500/10" },
+  { id: "rapidResponse", label: "Rapid Response", desc: "Câu hỏi khó → Bắt buộc trả lời ngay trong 3 giây", category: "pressure", level: "C1", icon: Zap, color: "text-primary bg-primary/10" },
+  { id: "pressureConversation", label: "Pressure Conversation", desc: "AI liên tục dồn ép và hỏi xoáy vào điểm yếu", category: "pressure", level: "C1", icon: Flame, color: "text-amber-700 dark:text-amber-400 bg-amber-500/10" },
+  { id: "topicSwitching", label: "Topic Switching", desc: "Chuyển đề tài đột ngột không để nhịp nói bị đơ", category: "pressure", level: "B2", icon: Shuffle, color: "text-primary bg-primary/10" },
+  { id: "spontaneous", label: "Spontaneous Speaking", desc: "Nói ngay không chuẩn bị về đề tài ngẫu nhiên", category: "pressure", level: "B2", icon: Sparkles, color: "text-amber-700 dark:text-amber-400 bg-amber-500/10" },
+  { id: "highPressure", label: "High Pressure Synthesis", desc: "Tổng hợp tất cả yếu tố áp lực cao nhất của kỳ thi", category: "pressure", level: "C1+", icon: ShieldAlert, color: "text-rose-700 dark:text-rose-400 bg-rose-500/10" },
 
   // Argument
-  { id: "opinion", label: "Opinion & Argument", desc: "Nêu quan điểm → Lý do → Dẫn chứng → Kết luận", category: "argument", level: "B2", icon: Scale, color: "text-blue-500 bg-blue-500/10" },
-  { id: "debate", label: "Competitive Debate", desc: "Tranh biện, phản bác trực diện lập luận của AI", category: "argument", level: "C1", icon: Scale, color: "text-indigo-500 bg-indigo-500/10" },
-  { id: "persuasion", label: "Persuasive Pitch", desc: "Thuyết phục người nghe đồng thuận ý kiến khó", category: "argument", level: "B2-C1", icon: Target, color: "text-violet-500 bg-violet-500/10" },
-  { id: "negotiation", label: "Contract Negotiation", desc: "Đàm phán thương lượng, nhượng bộ có điều kiện", category: "argument", level: "C1", icon: GraduationCap, color: "text-purple-500 bg-purple-500/10" },
-  { id: "devilsAdvocate", label: "Devil's Advocate", desc: "AI đóng vai người phản đối mọi ý tưởng của bạn", category: "argument", level: "C1", icon: AlertTriangle, color: "text-pink-500 bg-pink-500/10" },
+  { id: "opinion", label: "Opinion & Argument", desc: "Nêu quan điểm → Lý do → Dẫn chứng → Kết luận", category: "argument", level: "B2", icon: Scale, color: "text-indigo-600 dark:text-indigo-400 bg-indigo-500/10" },
+  { id: "debate", label: "Competitive Debate", desc: "Tranh biện, phản bác trực diện lập luận của AI", category: "argument", level: "C1", icon: Scale, color: "text-primary bg-primary/10" },
+  { id: "persuasion", label: "Persuasive Pitch", desc: "Thuyết phục người nghe đồng thuận ý kiến khó", category: "argument", level: "B2-C1", icon: Target, color: "text-indigo-700 dark:text-indigo-300 bg-indigo-500/10" },
+  { id: "negotiation", label: "Contract Negotiation", desc: "Đàm phán thương lượng, nhượng bộ có điều kiện", category: "argument", level: "C1", icon: GraduationCap, color: "text-amber-800 dark:text-amber-300 bg-amber-500/10" },
+  { id: "devilsAdvocate", label: "Devil's Advocate", desc: "AI đóng vai người phản đối mọi ý tưởng của bạn", category: "argument", level: "C1", icon: AlertTriangle, color: "text-rose-700 dark:text-rose-400 bg-rose-500/10" },
 
   // Challenge
-  { id: "unexpectedQuestion", label: "Unexpected Question", desc: "Tình huống giả định bất ngờ, hóc búa", category: "challenge", level: "B2", icon: Wand2, color: "text-emerald-500 bg-emerald-500/10" },
-  { id: "qaChallenge", label: "Q&A Press Challenge", desc: "Trả lời các câu hỏi chất vấn gay gắt từ thính giả", category: "challenge", level: "C1", icon: Mic2, color: "text-teal-500 bg-teal-500/10" },
-  { id: "interview", label: "Executive Interview", desc: "Phỏng vấn cấp quản lý với các câu hỏi bẫy", category: "challenge", level: "C1", icon: GraduationCap, color: "text-cyan-500 bg-cyan-500/10" },
-  { id: "escalation", label: "Conflict Escalation", desc: "Tình huống căng thẳng leo thang cần khéo léo hạ nhiệt", category: "challenge", level: "B2-C1", icon: ShieldAlert, color: "text-sky-500 bg-sky-500/10" },
-  { id: "ambiguity", label: "Navigating Ambiguity", desc: "Thông tin mập mờ, cần hỏi lại để làm sáng tỏ", category: "challenge", level: "B2", icon: Sparkles, color: "text-blue-500 bg-blue-500/10" },
+  { id: "unexpectedQuestion", label: "Unexpected Question", desc: "Tình huống giả định bất ngờ, hóc búa", category: "challenge", level: "B2", icon: Wand2, color: "text-emerald-700 dark:text-emerald-400 bg-emerald-500/10" },
+  { id: "qaChallenge", label: "Q&A Press Challenge", desc: "Trả lời các câu hỏi chất vấn gay gắt từ thính giả", category: "challenge", level: "C1", icon: Mic2, color: "text-indigo-600 dark:text-indigo-400 bg-indigo-500/10" },
+  { id: "interview", label: "Executive Interview", desc: "Phỏng vấn cấp quản lý với các câu hỏi bẫy", category: "challenge", level: "C1", icon: GraduationCap, color: "text-amber-700 dark:text-amber-400 bg-amber-500/10" },
+  { id: "escalation", label: "Conflict Escalation", desc: "Tình huống căng thẳng leo thang cần khéo léo hạ nhiệt", category: "challenge", level: "B2-C1", icon: ShieldAlert, color: "text-rose-700 dark:text-rose-400 bg-rose-500/10" },
+  { id: "ambiguity", label: "Navigating Ambiguity", desc: "Thông tin mập mờ, cần hỏi lại để làm sáng tỏ", category: "challenge", level: "B2", icon: Sparkles, color: "text-emerald-800 dark:text-emerald-300 bg-emerald-500/10" },
 
   // Longform
-  { id: "storytelling", label: "Storytelling Arc", desc: "Kể chuyện có mở đầu, cao trào, nút thắt và bài học", category: "longform", level: "B2", icon: BookOpen, color: "text-amber-500 bg-amber-500/10" },
-  { id: "longForm", label: "Long-form Monologue", desc: "Nói liên tục từ 2-4 phút không ngắt quãng", category: "longform", level: "C1", icon: Clock, color: "text-orange-500 bg-orange-500/10" },
-  { id: "presentation", label: "Keynote Presentation", desc: "Thuyết trình chuyên đề và bảo vệ luận điểm", category: "longform", level: "B2-C1", icon: Mic2, color: "text-emerald-500 bg-emerald-500/10" },
-  { id: "deepFollowup", label: "Deep Follow-up Drill", desc: "Đào sâu vấn đề: What → Why → Example → Nuance", category: "longform", level: "C1", icon: Target, color: "text-indigo-500 bg-indigo-500/10" },
-  { id: "abstract", label: "Abstract Philosophies", desc: "Bàn về triết học, đạo đức AI và xu hướng tương lai", category: "longform", level: "C1+", icon: Sparkles, color: "text-purple-500 bg-purple-500/10" },
+  { id: "storytelling", label: "Storytelling Arc", desc: "Kể chuyện có mở đầu, cao trào, nút thắt và bài học", category: "longform", level: "B2", icon: BookOpen, color: "text-emerald-700 dark:text-emerald-400 bg-emerald-500/10" },
+  { id: "longForm", label: "Long-form Monologue", desc: "Nói liên tục từ 2-4 phút không ngắt quãng", category: "longform", level: "C1", icon: Clock, color: "text-amber-700 dark:text-amber-400 bg-amber-500/10" },
+  { id: "presentation", label: "Keynote Presentation", desc: "Thuyết trình chuyên đề và bảo vệ luận điểm", category: "longform", level: "B2-C1", icon: Mic2, color: "text-indigo-600 dark:text-indigo-400 bg-indigo-500/10" },
+  { id: "deepFollowup", label: "Deep Follow-up Drill", desc: "Đào sâu vấn đề: What → Why → Example → Nuance", category: "longform", level: "C1", icon: Target, color: "text-primary bg-primary/10" },
+  { id: "abstract", label: "Abstract Philosophies", desc: "Bàn về triết học, đạo đức AI và xu hướng tương lai", category: "longform", level: "C1+", icon: Sparkles, color: "text-indigo-700 dark:text-indigo-300 bg-indigo-500/10" },
 
   // Resilience
-  { id: "resilience", label: "Speech Resilience", desc: "Khắc phục hiểu lầm và lấy lại mạch nói trơn tru", category: "resilience", level: "B2", icon: ShieldAlert, color: "text-teal-500 bg-teal-500/10" },
-  { id: "clarification", label: "Tactical Clarification", desc: "Hỏi lại tinh tế khi không nắm rõ thông tin", category: "resilience", level: "B2", icon: Wand2, color: "text-blue-500 bg-blue-500/10" },
-  { id: "reformulation", label: "Idiomatic Reformulation", desc: "Diễn đạt lại câu nói đơn giản thành tiếng Anh B2/C1", category: "resilience", level: "B2-C1", icon: Sparkles, color: "text-violet-500 bg-violet-500/10" },
-  { id: "roleReversal", label: "Role Reversal Drill", desc: "Bạn là người chủ động phỏng vấn và chất vấn AI", category: "resilience", level: "B2", icon: Shuffle, color: "text-rose-500 bg-rose-500/10" },
-  { id: "professional", label: "Polite Disagreement", desc: "Bày tỏ bất đồng quan điểm lịch sự nhưng cương quyết", category: "resilience", level: "C1", icon: Scale, color: "text-pink-500 bg-pink-500/10" },
+  { id: "resilience", label: "Speech Resilience", desc: "Khắc phục hiểu lầm và lấy lại mạch nói trơn tru", category: "resilience", level: "B2", icon: ShieldAlert, color: "text-emerald-700 dark:text-emerald-400 bg-emerald-500/10" },
+  { id: "clarification", label: "Tactical Clarification", desc: "Hỏi lại tinh tế khi không nắm rõ thông tin", category: "resilience", level: "B2", icon: Wand2, color: "text-sky-700 dark:text-sky-400 bg-sky-500/10" },
+  { id: "reformulation", label: "Idiomatic Reformulation", desc: "Diễn đạt lại câu nói đơn giản thành tiếng Anh B2/C1", category: "resilience", level: "B2-C1", icon: Sparkles, color: "text-indigo-600 dark:text-indigo-400 bg-indigo-500/10" },
+  { id: "roleReversal", label: "Role Reversal Drill", desc: "Bạn là người chủ động phỏng vấn và chất vấn AI", category: "resilience", level: "B2", icon: Shuffle, color: "text-amber-700 dark:text-amber-400 bg-amber-500/10" },
+  { id: "professional", label: "Polite Disagreement", desc: "Bày tỏ bất đồng quan điểm lịch sự nhưng cương quyết", category: "resilience", level: "C1", icon: Scale, color: "text-primary bg-primary/10" },
 ];
 
 export default function AdvancedModesPage() {
@@ -108,37 +108,27 @@ export default function AdvancedModesPage() {
     toast.info("Đang tạo thử thách nâng cao...", "Thiết lập bối cảnh thử thách và câu hỏi phản xạ.");
     try {
       const mode = overrideId || selectedId;
-      const provider =
-        settings.conversation.provider === "browser" ? "gemini" : settings.conversation.provider;
-      const model = settings.conversation.model;
-
-      const body = {
-        context: {
-          targetSkills: [mode],
-          durationMinutes: parseInt(duration, 10),
-          pressureLevel: pressure,
-          topic: aiPrompt.trim() ? aiPrompt.trim() : "auto",
-          scenario: aiPrompt.trim() || undefined,
-          goal: mode,
-        },
-        provider,
-        model,
-      };
-
       const res = await fetch("/api/advanced/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          mode,
+          durationMinutes: parseInt(duration, 10),
+          pressureLevel: pressure,
+          customPrompt: aiPrompt || undefined,
+          provider: settings.conversation.provider === "browser" ? "gemini" : settings.conversation.provider,
+          model: settings.conversation.model,
+        }),
       });
-
       const data = await res.json();
-      if (data.session) {
-        localStorage.setItem("advanced_session", JSON.stringify(data.session));
-        toast.success("Thử thách đã sẵn sàng!", selectedModule.label);
-        router.push("/advanced/session");
+      if (data.sessionId) {
+        toast.success("Thử thách đã sẵn sàng!", `Bắt đầu module: ${selectedModule.label}`);
+        router.push(`/advanced/session?id=${data.sessionId}`);
+      } else {
+        toast.error("Lỗi khởi tạo", data.error || "Không thể tạo phiên nâng cao.");
       }
     } catch {
-      toast.error("Lỗi khởi tạo", "Không thể tạo thử thách lúc này. Vui lòng thử lại.");
+      toast.error("Lỗi mạng", "Vui lòng thử lại sau.");
     } finally {
       setLoading(false);
     }
@@ -157,34 +147,39 @@ export default function AdvancedModesPage() {
         {/* Left: Back + Title + Badge */}
         <div className="flex items-center gap-2 min-w-0">
           <Link href="/foundation">
-            <Button variant="ghost" size="sm" className="size-7 p-0 rounded-xl" title="Quay lại Foundation">
-              <ArrowLeft className="size-3.5" />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="size-8 p-0 rounded-xl hover:bg-secondary border border-transparent hover:border-border/60"
+              title="Quay lại Foundation"
+            >
+              <ArrowLeft className="size-4" />
             </Button>
           </Link>
 
-          <div className="flex items-center gap-1.5 shrink-0">
-            <div className="size-6 rounded-lg bg-gradient-to-tr from-amber-500 to-rose-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="size-7 rounded-xl bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0">
               <Flame className="size-3.5" />
             </div>
-            <span className="font-bold text-xs sm:text-sm tracking-tight text-foreground">
+            <span className="font-serif font-bold text-sm sm:text-base tracking-tight text-foreground">
               Thử Thách Nói Nâng Cao
             </span>
-            <Badge variant="secondary" className="text-[10px] font-mono h-5 hidden sm:inline-flex">
+            <Badge variant="secondary" className="text-[10px] font-mono h-5 hidden sm:inline-flex bg-secondary/80 text-foreground/80 border border-border/60 rounded-full px-2">
               25 Modules B2-C1
             </Badge>
           </div>
         </div>
 
         {/* Center: Category Filter Tabs */}
-        <div className="hidden md:flex items-center gap-1 bg-muted/60 p-0.5 rounded-xl border border-border/60">
+        <div className="hidden md:flex items-center gap-1 bg-secondary/50 p-1 rounded-full border border-border/60">
           {MODULE_CATEGORIES.map((cat) => (
             <button
               key={cat.id}
               onClick={() => setSelectedCategory(cat.id)}
-              className={`text-[11px] font-bold px-2 py-0.5 rounded-lg transition-all ${
+              className={`text-xs px-3 py-1 rounded-full transition-all ${
                 selectedCategory === cat.id
-                  ? "bg-primary text-primary-foreground shadow-2xs"
-                  : "text-muted-foreground hover:text-foreground"
+                  ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                  : "text-muted-foreground hover:text-foreground font-medium"
               }`}
             >
               {cat.label}
@@ -193,16 +188,16 @@ export default function AdvancedModesPage() {
         </div>
 
         {/* Right: Random + Global AI Selector */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           <Button
             variant="outline"
             size="sm"
             onClick={handleRandomLaunch}
             disabled={loading}
-            className="h-7 px-2.5 rounded-xl text-xs font-bold gap-1 border-border/80 hidden sm:flex"
+            className="h-8 px-3 rounded-xl text-xs font-semibold gap-1.5 border-border/80 bg-background hover:bg-secondary/60 text-foreground paper-shadow-sm hidden sm:flex"
             title="Chọn ngẫu nhiên thử thách"
           >
-            <Shuffle className="size-3 text-amber-500" />
+            <Shuffle className="size-3.5 text-primary" />
             <span>Ngẫu Nhiên</span>
           </Button>
 
@@ -213,16 +208,18 @@ export default function AdvancedModesPage() {
       {/* ── MAIN CONTENT (7:5 Ratio, Zero Body Scroll) ── */}
       <main className="flex-1 p-2.5 sm:p-3 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-2.5 sm:gap-3 min-h-0">
         {/* LEFT (7 cols): Module Card Grid strictly scrollable inside */}
-        <div className="lg:col-span-7 h-full flex flex-col min-h-0 rounded-3xl border border-border/80 bg-card overflow-hidden shadow-xs">
-          <div className="px-3 py-2 border-b border-border/60 bg-muted/20 flex items-center justify-between shrink-0">
-            <span className="font-bold text-xs text-foreground">Chọn chuyên đề luyện tập</span>
-            <span className="text-[11px] text-muted-foreground font-mono">
+        <div className="lg:col-span-7 h-full flex flex-col min-h-0 rounded-3xl border border-border/80 bg-card overflow-hidden paper-shadow-sm">
+          <div className="px-4 py-2.5 border-b border-border/60 bg-muted/20 flex items-center justify-between shrink-0">
+            <span className="font-serif font-bold text-xs sm:text-sm text-foreground flex items-center gap-1.5">
+              <span>Chọn chuyên đề luyện tập</span>
+            </span>
+            <span className="text-[11px] text-muted-foreground font-mono bg-secondary px-2.5 py-0.5 rounded-full border border-border/50">
               {filteredModules.length} chuyên đề khả dụng
             </span>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="flex-1 min-h-0 overflow-y-auto p-3.5 space-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {filteredModules.map((m) => {
                 const Icon = m.icon;
                 const isSelected = selectedId === m.id;
@@ -232,22 +229,22 @@ export default function AdvancedModesPage() {
                     key={m.id}
                     onClick={() => setSelectedId(m.id)}
                     className={cn(
-                      "p-3 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between space-y-2 relative group",
+                      "p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between space-y-2.5 relative group paper-shadow-sm",
                       isSelected
-                        ? "border-primary bg-primary/5 shadow-xs ring-1 ring-primary/40"
-                        : "border-border/70 bg-card hover:border-primary/40 hover:bg-muted/30"
+                        ? "border-primary bg-primary/[0.03] ring-1 ring-primary/40 shadow-xs"
+                        : "border-border/70 bg-card hover:border-primary/40 hover:bg-muted/20 hover:paper-shadow-hover"
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className={cn("size-8 rounded-xl flex items-center justify-center shrink-0", m.color)}>
-                          <Icon className="size-4" />
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={cn("size-9 rounded-xl flex items-center justify-center shrink-0 border border-border/40", m.color)}>
+                          <Icon className="size-4.5" />
                         </div>
                         <div className="min-w-0">
-                          <h4 className="font-bold text-xs text-foreground group-hover:text-primary transition-colors truncate">
+                          <h4 className="font-serif font-bold text-sm text-foreground group-hover:text-primary transition-colors truncate">
                             {m.label}
                           </h4>
-                          <span className="text-[10px] text-muted-foreground block truncate">
+                          <span className="text-[10px] font-mono text-muted-foreground block truncate">
                             Chuẩn {m.level}
                           </span>
                         </div>
@@ -257,7 +254,7 @@ export default function AdvancedModesPage() {
                       )}
                     </div>
 
-                    <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                    <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
                       {m.desc}
                     </p>
                   </div>
@@ -268,35 +265,35 @@ export default function AdvancedModesPage() {
         </div>
 
         {/* RIGHT (5 cols): Selected Module Preview & Launcher */}
-        <div className="lg:col-span-5 h-full flex flex-col min-h-0 rounded-3xl border border-border/80 bg-card overflow-hidden shadow-xs">
+        <div className="lg:col-span-5 h-full flex flex-col min-h-0 rounded-3xl border border-border/80 bg-card overflow-hidden paper-shadow-sm">
           {/* Header Preview Banner */}
-          <div className="p-4 border-b border-border/60 bg-gradient-to-b from-primary/10 via-card to-card shrink-0">
-            <div className="flex items-center gap-2 mb-2">
-              <div className={cn("size-10 rounded-2xl flex items-center justify-center shrink-0 shadow-xs", selectedModule.color)}>
-                <selectedModule.icon className="size-5" />
+          <div className="p-4 sm:p-5 border-b border-border/60 bg-gradient-to-b from-primary/[0.06] via-card to-card shrink-0">
+            <div className="flex items-center gap-3 mb-2.5">
+              <div className={cn("size-12 rounded-2xl flex items-center justify-center shrink-0 border border-border/50 paper-shadow-sm", selectedModule.color)}>
+                <selectedModule.icon className="size-6" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <h3 className="font-bold text-sm text-foreground truncate">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-serif font-bold text-base text-foreground truncate">
                     {selectedModule.label}
                   </h3>
-                  <Badge variant="outline" className="text-[9px] font-mono px-1 py-0 h-4">
+                  <Badge variant="outline" className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-secondary text-foreground/80 border border-border/60">
                     {selectedModule.level}
                   </Badge>
                 </div>
-                <p className="text-xs text-muted-foreground truncate">{selectedModule.desc}</p>
+                <p className="text-xs text-muted-foreground truncate mt-0.5">{selectedModule.desc}</p>
               </div>
             </div>
 
             {/* Quick Context Strip */}
-            <div className="p-2.5 rounded-xl bg-muted/40 border border-border/60 space-y-1 text-xs">
-              <div className="flex items-center gap-1 text-muted-foreground">
-                <Target className="size-3 text-primary shrink-0" />
+            <div className="p-3 rounded-2xl bg-secondary/50 border border-border/60 space-y-1.5 text-xs">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Target className="size-3.5 text-primary shrink-0" />
                 <span className="font-medium">Mục tiêu kỹ năng:</span>
-                <span className="font-bold text-foreground truncate">Phản xạ tức thì & Lập luận logic</span>
+                <span className="font-semibold text-foreground truncate">Phản xạ tức thì & Lập luận logic</span>
               </div>
-              <div className="flex items-center gap-1 text-muted-foreground">
-                <Clock className="size-3 text-amber-500 shrink-0" />
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Clock className="size-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                 <span className="font-medium">Thời lượng đề xuất:</span>
                 <span className="text-foreground">{duration} phút (4 thử thách)</span>
               </div>
@@ -304,11 +301,11 @@ export default function AdvancedModesPage() {
           </div>
 
           {/* Configuration Form strictly scrollable inside */}
-          <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 space-y-4">
             {/* Custom Topic Textarea */}
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-foreground">
+                <label className="text-xs font-serif font-bold text-foreground">
                   Chủ đề thử thách
                 </label>
                 <button
@@ -327,10 +324,10 @@ export default function AdvancedModesPage() {
                     setAiPrompt(rnd);
                     toast.info("Đã chọn chủ đề", rnd);
                   }}
-                  className="text-[10px] text-primary hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                  className="text-[11px] text-primary hover:underline font-semibold flex items-center gap-1 cursor-pointer"
                 >
-                  <Sparkles className="size-2.5" />
-                  <span>🎲 Gợi ý chủ đề AI</span>
+                  <Sparkles className="size-3" />
+                  <span>Gợi ý chủ đề AI</span>
                 </button>
               </div>
               <Textarea
@@ -338,16 +335,16 @@ export default function AdvancedModesPage() {
                 onChange={(e) => setAiPrompt(e.target.value)}
                 placeholder="Ví dụ: Thuyết phục nhà đầu tư rót vốn vào ứng dụng AI y tế; Tranh biện về làm việc từ xa..."
                 rows={3}
-                className="text-xs bg-background rounded-xl resize-none p-2.5"
+                className="text-xs bg-background rounded-2xl resize-none p-3 border-border/80 focus:border-primary paper-shadow-sm"
               />
             </div>
 
             {/* Pressure Level Selection */}
-            <div className="space-y-1.5">
-              <span className="text-xs font-bold text-foreground block">
-                Mức độ áp lực & Tốc độ
+            <div className="space-y-2">
+              <span className="text-xs font-serif font-bold text-foreground block">
+                Mức độ áp lực & Tốc độ phản xạ
               </span>
-              <div className="grid grid-cols-3 gap-1.5">
+              <div className="grid grid-cols-3 gap-2">
                 {[
                   { id: "normal" as const, label: "Vừa phải", desc: "Có thời gian nghĩ" },
                   { id: "challenging" as const, label: "Thử thách", desc: "Hỏi dồn 5s" },
@@ -356,25 +353,25 @@ export default function AdvancedModesPage() {
                   <button
                     key={p.id}
                     onClick={() => setPressure(p.id)}
-                    className={`p-2 rounded-xl border text-left transition-all ${
+                    className={`p-2.5 rounded-xl border text-left transition-all ${
                       pressure === p.id
-                        ? "bg-primary text-primary-foreground border-primary shadow-2xs"
-                        : "border-border/70 bg-card hover:border-primary/40 text-muted-foreground hover:text-foreground"
+                        ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                        : "border-border/70 bg-background text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    <span className="block font-bold text-[11px]">{p.label}</span>
-                    <span className="block text-[9px] opacity-80 truncate">{p.desc}</span>
+                    <span className="block font-semibold text-xs">{p.label}</span>
+                    <span className="block text-[10px] opacity-80 truncate">{p.desc}</span>
                   </button>
                 ))}
               </div>
             </div>
 
             {/* Duration selector */}
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <span className="text-[11px] font-semibold text-muted-foreground">
                 Thời lượng phiên luyện tập
               </span>
-              <div className="flex gap-1">
+              <div className="flex gap-1.5">
                 {[
                   { id: "5", label: "5 phút" },
                   { id: "10", label: "10 phút" },
@@ -383,10 +380,10 @@ export default function AdvancedModesPage() {
                   <button
                     key={d.id}
                     onClick={() => setDuration(d.id)}
-                    className={`flex-1 text-[10px] font-bold py-1.5 rounded-lg border transition-all ${
+                    className={`flex-1 text-xs font-medium py-1.5 rounded-xl border transition-all ${
                       duration === d.id
-                        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/40"
-                        : "border-border/70 text-muted-foreground"
+                        ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40 font-semibold"
+                        : "border-border/70 text-muted-foreground bg-background"
                     }`}
                   >
                     {d.label}
@@ -397,11 +394,11 @@ export default function AdvancedModesPage() {
           </div>
 
           {/* Launch Button Footer */}
-          <div className="p-3.5 border-t border-border/60 bg-muted/10 shrink-0">
+          <div className="p-4 border-t border-border/60 bg-secondary/20 shrink-0">
             <Button
               onClick={() => handleLaunchSession()}
               disabled={loading}
-              className="w-full h-11 rounded-2xl font-bold text-sm gap-2 shadow-md"
+              className="w-full h-12 rounded-2xl font-serif font-bold text-sm sm:text-base gap-2 bg-primary text-primary-foreground btn-spring shadow-sm"
             >
               {loading ? (
                 <>

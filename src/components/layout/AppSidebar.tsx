@@ -216,14 +216,14 @@ export function AppSidebar({ collapsed, onToggleCollapse, onNavigateMobile }: Ap
           onClick={onNavigateMobile}
           className="flex items-center gap-3 overflow-hidden group focus:outline-none"
         >
-          <div className="flex items-center justify-center size-9 rounded-xl bg-gradient-to-tr from-primary to-primary/80 text-primary-foreground shadow-sm shadow-primary/30 group-hover:scale-105 transition-transform shrink-0">
-            <Volume2 className="size-5" />
+          <div className="flex items-center justify-center size-9 rounded-xl bg-primary text-primary-foreground shadow-xs group-hover:scale-105 transition-transform shrink-0">
+            <Volume2 className="size-4.5" />
           </div>
           {!collapsed && (
             <div className="flex flex-col truncate">
-              <span className="font-bold text-base tracking-tight text-sidebar-foreground">EngSpeak</span>
-              <span className="text-[11px] text-muted-foreground font-medium -mt-0.5 truncate">
-                AI Speaking Coach
+              <span className="font-serif font-bold text-base tracking-tight text-sidebar-foreground">EngSpeak</span>
+              <span className="text-[10px] text-muted-foreground font-medium -mt-0.5 tracking-wider uppercase">
+                The Art of Fluency
               </span>
             </div>
           )}
@@ -289,7 +289,7 @@ export function AppSidebar({ collapsed, onToggleCollapse, onNavigateMobile }: Ap
                   className={cn(
                     "flex items-center gap-3 px-3 py-2 rounded-xl font-medium text-xs transition-all group relative",
                     active
-                      ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20 font-semibold"
+                      ? "bg-primary text-primary-foreground shadow-xs font-semibold"
                       : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                   )}
                 >
@@ -313,22 +313,22 @@ export function AppSidebar({ collapsed, onToggleCollapse, onNavigateMobile }: Ap
 
       {/* Learner Daily Streak Card */}
       {!collapsed && (
-        <div className="p-3 mx-2 mb-3 rounded-2xl bg-gradient-to-br from-primary/10 via-accent/30 to-background border border-primary/20 space-y-2">
+        <div className="p-3.5 mx-2 mb-3 rounded-2xl bg-card border border-border/80 paper-shadow-sm space-y-2.5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
-              <Flame className="size-4 text-orange-500 fill-orange-500 animate-pulse" />
+              <Flame className="size-4 fill-primary/20 text-primary" />
               <span>3 ngày liên tiếp</span>
             </div>
-            <Badge variant="outline" className="text-[10px] border-primary/30 text-primary font-mono">
+            <Badge variant="outline" className="text-[10px] border-border/80 text-muted-foreground font-mono">
               10' / ngày
             </Badge>
           </div>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            Mỗi ngày 10 phút luyện phản xạ để kích hoạt khả năng sản sinh câu tự nhiên.
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            10 phút khẩu ngữ mỗi ngày để đánh thức phản xạ nói tự nhiên, không cần nhẩm dịch.
           </p>
           <Link href="/curriculum" onClick={onNavigateMobile} className="block">
-            <Button size="sm" variant="default" className="w-full text-xs font-semibold gap-1.5 h-8 rounded-xl btn-spring">
-              <Sparkles className="size-3.5" /> Luyện hôm nay
+            <Button size="sm" variant="default" className="w-full text-xs font-semibold gap-1.5 h-8 rounded-xl btn-spring shadow-xs">
+              Luyện bài hôm nay
             </Button>
           </Link>
         </div>

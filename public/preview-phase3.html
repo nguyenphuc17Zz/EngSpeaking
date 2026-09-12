@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bản Mẫu Giao Diện Xem Trước: Phase 3 — Warm Editorial Luxury</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #FAF7F2;
+      --fg: #24211E;
+      --card: #FFFFFF;
+      --card-border: #E8E2D6;
+      --primary: #C25E38;
+      --primary-fg: #FFFFFF;
+      --secondary: #F2EDE4;
+      --muted: #706B63;
+      --sage: #4D6A56;
+      --sage-bg: #EDF3EF;
+      --amber: #B45309;
+      --amber-bg: #FEF3C7;
+      --shadow: 0 1px 3px rgba(36, 33, 30, 0.04), 0 10px 28px -6px rgba(36, 33, 30, 0.06);
+      --shadow-hover: 0 14px 34px -8px rgba(194, 94, 56, 0.12), 0 4px 12px rgba(36, 33, 30, 0.04);
+    }
+
+    .dark {
+      --bg: #181614;
+      --fg: #EAE5DD;
+      --card: #221F1C;
+      --card-border: #322D28;
+      --primary: #E07A5F;
+      --primary-fg: #181614;
+      --secondary: #2A2521;
+      --muted: #9E978E;
+      --sage: #7A9A84;
+      --sage-bg: #1F2822;
+      --amber: #F59E0B;
+      --amber-bg: #2C2214;
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 10px 28px -6px rgba(0, 0, 0, 0.4);
+      --shadow-hover: 0 14px 34px -8px rgba(224, 122, 95, 0.2), 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--fg);
+      font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+      line-height: 1.5;
+      padding: 24px;
+      transition: background-color 0.3s, color 0.3s;
+    }
+
+    .font-serif { font-family: 'Lora', Georgia, serif; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+    .container { max-width: 1100px; margin: 0 auto; }
+
+    /* Top Preview Control Bar */
+    .preview-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 20px;
+      border-radius: 9999px;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      box-shadow: var(--shadow);
+      margin-bottom: 28px;
+    }
+    .preview-title {
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .badge {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 9999px;
+      background: var(--secondary);
+      border: 1px solid var(--card-border);
+      color: var(--fg);
+      font-weight: 500;
+    }
+    .tab-btn {
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid transparent;
+      cursor: pointer;
+      background: transparent;
+      color: var(--muted);
+      transition: all 0.2s;
+    }
+    .tab-btn.active {
+      background: var(--primary);
+      color: var(--primary-fg);
+    }
+    .mode-btn {
+      padding: 6px 12px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid var(--card-border);
+      cursor: pointer;
+      background: var(--secondary);
+      color: var(--fg);
+    }
+
+    /* Page Viewports */
+    .view-content { display: none; }
+    .view-content.active { display: block; animation: fadeIn 0.3s ease; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Card Systems */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .card:hover {
+      box-shadow: var(--shadow-hover);
+    }
+
+    /* Grid & Layouts */
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+    @media (max-width: 768px) {
+      .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 18px;
+      border-radius: 14px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+      text-decoration: none;
+    }
+    .btn-primary { background: var(--primary); color: var(--primary-fg); }
+    .btn-primary:hover { opacity: 0.92; transform: translateY(-1px); }
+    .btn-outline { background: transparent; border: 1px solid var(--card-border); color: var(--fg); }
+    .btn-outline:hover { background: var(--secondary); }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Top Switcher -->
+  <div class="preview-bar">
+    <div class="preview-title font-serif">
+      <span style="font-size: 18px;">🏛️</span>
+      <span>EngSpeak Phase 3 UI Showcase</span>
+      <span class="badge">Warm Editorial Luxury</span>
+    </div>
+
+    <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+      <button class="tab-btn active" onclick="switchTab('foundation')">1. Nền Tảng (/foundation)</button>
+      <button class="tab-btn" onclick="switchTab('advanced')">2. Đấu Trường Nâng Cao (/advanced)</button>
+      <button class="tab-btn" onclick="switchTab('settings')">3. Cài Đặt (/settings)</button>
+    </div>
+
+    <div>
+      <button class="mode-btn" onclick="toggleTheme()">☀️ / 🌙 Đổi Giao Diện</button>
+    </div>
+  </div>
+
+  <!-- ==================== VIEW 1: FOUNDATION ==================== -->
+  <div id="view-foundation" class="view-content active">
+    <!-- Hero Banner -->
+    <div class="card" style="padding: 32px; margin-bottom: 24px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+        <div style="max-width: 650px;">
+          <span class="badge" style="margin-bottom: 12px; display: inline-block; color: var(--primary);">
+            🧱 22 Foundation Speaking Drills
+          </span>
+          <h1 class="font-serif" style="font-size: 28px; font-weight: 700; margin-bottom: 8px;">
+            Luyện phản xạ nền tảng (22 bài tập cốt lõi)
+          </h1>
+          <p style="color: var(--muted); font-size: 14px; line-height: 1.6;">
+            Tiêu điểm hôm nay: <strong>Khôi phục câu tức thì (52/100)</strong> — Luyện tập từ cấp độ nghe hiểu, ghép khối cụm từ đến phản xạ câu dưới 3 giây.
+          </p>
+        </div>
+
+        <div style="display: flex; gap: 10px;">
+          <button class="btn btn-primary">⏱ Daily 10' Drill</button>
+          <button class="btn btn-outline">🎯 Kiểm tra Baseline</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Spotlight Grid: 4 Cốt Lõi -->
+    <h3 class="font-serif" style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">
+      4 Phòng Luyện Cốt Lõi (Core Reflex Laboratories)
+    </h3>
+    <div class="grid-4" style="margin-bottom: 28px;">
+      <div class="card" style="padding: 20px; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div style="width: 36px; height: 36px; border-radius: 12px; background: rgba(194, 94, 56, 0.12); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 16px;">✨</div>
+            <span class="badge font-mono" style="font-size: 10px;">Level A-B-C</span>
+          </div>
+          <h4 class="font-serif" style="font-size: 15px; font-weight: 700; margin-bottom: 4px;">Sentence Builder</h4>
+          <p style="font-size: 12px; color: var(--muted); line-height: 1.5;">Khôi phục phản xạ tạo câu có kiểm soát từ mảnh ghép ý niệm.</p>
+        </div>
+        <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--card-border); display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 11px; color: var(--muted); font-family: monospace;">Khôi phục: <strong>68/100</strong></span>
+          <a href="#" class="btn btn-primary" style="padding: 6px 12px; font-size: 11px;">Luyện →</a>
+        </div>
+      </div>
+
+      <div class="card" style="padding: 20px; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div style="width: 36px; height: 36px; border-radius: 12px; background: var(--sage-bg); color: var(--sage); display: flex; align-items: center; justify-content: center; font-size: 16px;">🎯</div>
+            <span class="badge font-mono" style="font-size: 10px;">Reflex Flow</span>
+          </div>
+          <h4 class="font-serif" style="font-size: 15px; font-weight: 700; margin-bottom: 4px;">VN → EN Speaking</h4>
+          <p style="font-size: 12px; color: var(--muted); line-height: 1.5;">Truy xuất trực tiếp từ ý niệm tiếng Việt sang phản xạ khẩu ngữ.</p>
+        </div>
+        <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--card-border); display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 11px; color: var(--muted); font-family: monospace;">Tốc độ: <strong>74/100</strong></span>
+          <a href="#" class="btn btn-primary" style="padding: 6px 12px; font-size: 11px;">Luyện →</a>
+        </div>
+      </div>
+
+      <div class="card" style="padding: 20px; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div style="width: 36px; height: 36px; border-radius: 12px; background: var(--amber-bg); color: var(--amber); display: flex; align-items: center; justify-content: center; font-size: 16px;">🔄</div>
+            <span class="badge font-mono" style="font-size: 10px;">Error Bank</span>
+          </div>
+          <h4 class="font-serif" style="font-size: 15px; font-weight: 700; margin-bottom: 4px;">Spoken Repair Lab</h4>
+          <p style="font-size: 12px; color: var(--muted); line-height: 1.5;">Chu trình Correct → Say Again: Khắc phục lỗi sai thực tế từ nhật ký.</p>
+        </div>
+        <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--card-border); display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 11px; color: var(--muted); font-family: monospace;">Tự sửa: <strong>92%</strong></span>
+          <a href="#" class="btn btn-primary" style="padding: 6px 12px; font-size: 11px;">Sửa →</a>
+        </div>
+      </div>
+
+      <div class="card" style="padding: 20px; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div style="width: 36px; height: 36px; border-radius: 12px; background: rgba(194, 94, 56, 0.12); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 16px;">⚡</div>
+            <span class="badge font-mono" style="font-size: 10px;">TTFW Gym</span>
+          </div>
+          <h4 class="font-serif" style="font-size: 15px; font-weight: 700; margin-bottom: 4px;">Latency Training</h4>
+          <p style="font-size: 12px; color: var(--muted); line-height: 1.5;">Thu hẹp độ trễ phát âm đầu tiên xuống dưới 1.5 giây.</p>
+        </div>
+        <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--card-border); display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 11px; color: var(--muted); font-family: monospace;">Độ trễ: <strong>1.8s</strong></span>
+          <a href="#" class="btn btn-primary" style="padding: 6px 12px; font-size: 11px;">Gym →</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== VIEW 2: ADVANCED ==================== -->
+  <div id="view-advanced" class="view-content">
+    <!-- Studio Header & Grid -->
+    <div class="card" style="padding: 32px; margin-bottom: 24px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+        <div style="max-width: 650px;">
+          <span class="badge" style="margin-bottom: 12px; display: inline-block; color: var(--primary);">
+            ⚔️ 25 High-Pressure & Debate Arenas
+          </span>
+          <h1 class="font-serif" style="font-size: 28px; font-weight: 700; margin-bottom: 8px;">
+            Đấu trường phản biện & Áp lực thời gian
+          </h1>
+          <p style="color: var(--muted); font-size: 14px; line-height: 1.6;">
+            Thử thách phản xạ đỉnh cao: Phản biện đối kháng, chuyển chủ đề đột ngột, phỏng vấn bẫy và độc thoại liên tục 4 phút.
+          </p>
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+          <span class="badge" style="background: var(--sage-bg); color: var(--sage);">Cấp độ B2 - C1+</span>
+          <span class="badge" style="background: var(--secondary);">Toulmin Model</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Category Tabs -->
+    <div style="display: flex; gap: 8px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 6px;">
+      <button class="badge" style="background: var(--primary); color: white; border: none; padding: 6px 14px; cursor: pointer;">Tất cả (25)</button>
+      <button class="badge" style="background: var(--secondary); padding: 6px 14px; cursor: pointer;">⚡ Áp lực dồn dập (5)</button>
+      <button class="badge" style="background: var(--secondary); padding: 6px 14px; cursor: pointer;">⚖️ Tranh biện đối kháng (5)</button>
+      <button class="badge" style="background: var(--secondary); padding: 6px 14px; cursor: pointer;">🎯 Tình huống bất ngờ (5)</button>
+      <button class="badge" style="background: var(--secondary); padding: 6px 14px; cursor: pointer;">📖 Độc thoại & Thuyết trình (5)</button>
+      <button class="badge" style="background: var(--secondary); padding: 6px 14px; cursor: pointer;">🛡️ Ứng biến & Sửa sai (5)</button>
+    </div>
+
+    <!-- Cards Grid -->
+    <div class="grid-3">
+      <div class="card" style="padding: 20px; border-left: 4px solid var(--primary);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+          <h4 class="font-serif" style="font-size: 16px; font-weight: 700;">Rapid Response</h4>
+          <span class="badge font-mono" style="color: var(--primary);">Level C1</span>
+        </div>
+        <p style="font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 16px;">
+          AI đưa ra câu hỏi hóc búa → Bắt buộc khởi phát câu trả lời ngay trong 3 giây.
+        </p>
+        <button class="btn btn-primary" style="width: 100%; justify-content: center; font-size: 12px;">Vào đấu trường</button>
+      </div>
+
+      <div class="card" style="padding: 20px; border-left: 4px solid var(--amber);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+          <h4 class="font-serif" style="font-size: 16px; font-weight: 700;">Competitive Debate</h4>
+          <span class="badge font-mono" style="color: var(--amber);">Level C1</span>
+        </div>
+        <p style="font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 16px;">
+          Tranh biện đối kháng trực diện, phản bác logic của AI theo mô hình Toulmin Argument.
+        </p>
+        <button class="btn btn-primary" style="width: 100%; justify-content: center; font-size: 12px;">Vào đấu trường</button>
+      </div>
+
+      <div class="card" style="padding: 20px; border-left: 4px solid var(--sage);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+          <h4 class="font-serif" style="font-size: 16px; font-weight: 700;">Long-form Monologue</h4>
+          <span class="badge font-mono" style="color: var(--sage);">Level B2-C1</span>
+        </div>
+        <p style="font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 16px;">
+          Nói liên tục từ 2-4 phút không ngắt quãng về đề tài trừu tượng và chuyên sâu.
+        </p>
+        <button class="btn btn-primary" style="width: 100%; justify-content: center; font-size: 12px;">Vào đấu trường</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== VIEW 3: SETTINGS ==================== -->
+  <div id="view-settings" class="view-content">
+    <!-- Settings Header -->
+    <div class="card" style="padding: 32px; margin-bottom: 24px;">
+      <span class="badge" style="margin-bottom: 12px; display: inline-block; color: var(--primary);">
+        ⚙️ Audio & AI Engine Preferences
+      </span>
+      <h1 class="font-serif" style="font-size: 28px; font-weight: 700; margin-bottom: 8px;">
+        Cài đặt hệ thống & Giọng đọc
+      </h1>
+      <p style="color: var(--muted); font-size: 14px; line-height: 1.6;">
+        Tuỳ chỉnh công nghệ chuyển giọng nói sang văn bản (STT), tổng hợp giọng AI (TTS) và kết nối Provider ngoại tuyến/đám mây.
+      </p>
+    </div>
+
+    <div class="grid-2">
+      <!-- Voice & Audio Section -->
+      <div class="card" style="padding: 24px;">
+        <h4 class="font-serif" style="font-size: 17px; font-weight: 700; margin-bottom: 16px; border-bottom: 1px solid var(--card-border); padding-bottom: 10px;">
+          🎙️ Cấu hình Giọng đọc & Micro
+        </h4>
+
+        <div style="display: flex; flex-direction: column; gap: 16px; font-size: 13px;">
+          <div>
+            <label style="display: block; font-weight: 600; margin-bottom: 6px;">Bộ đọc văn bản (TTS Engine)</label>
+            <select style="width: 100%; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--card-border); background: var(--secondary); color: var(--fg); font-weight: 500;">
+              <option>Microsoft Edge Neural (Khuyến nghị - Tự nhiên như người thật)</option>
+              <option>Kokoro-82M (Chạy Offline trên thiết bị)</option>
+              <option>Web Speech API (Trình duyệt tích hợp)</option>
+            </select>
+          </div>
+
+          <div>
+            <label style="display: block; font-weight: 600; margin-bottom: 6px;">Nhận diện giọng nói (STT Engine)</label>
+            <select style="width: 100%; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--card-border); background: var(--secondary); color: var(--fg); font-weight: 500;">
+              <option>Web Speech API (Không độ trễ, mượt mà trên Chrome/Edge)</option>
+              <option>Whisper ONNX (Chạy máy chủ cục bộ, nhận diện phát âm chuẩn)</option>
+            </select>
+          </div>
+
+          <!-- Test Mic Strip -->
+          <div style="padding: 16px; border-radius: 16px; background: var(--secondary); display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <span style="font-weight: 600; display: block;">Kiểm tra Micro & VAD</span>
+              <span style="font-size: 11px; color: var(--muted);">Thử nói một câu ngắn để kiểm tra độ nhạy</span>
+            </div>
+            <button class="btn btn-outline" style="font-size: 12px; background: var(--card);">🎤 Thử Mic</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI Provider Section -->
+      <div class="card" style="padding: 24px;">
+        <h4 class="font-serif" style="font-size: 17px; font-weight: 700; margin-bottom: 16px; border-bottom: 1px solid var(--card-border); padding-bottom: 10px;">
+          🧠 Mô hình AI Cố Vấn
+        </h4>
+
+        <div style="display: flex; flex-direction: column; gap: 16px; font-size: 13px;">
+          <div>
+            <label style="display: block; font-weight: 600; margin-bottom: 6px;">AI Engine mặc định</label>
+            <select style="width: 100%; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--card-border); background: var(--secondary); color: var(--fg); font-weight: 500;">
+              <option>Google Gemini 2.5 Flash (Phản hồi tức thì < 800ms)</option>
+              <option>OpenAI GPT-4o-mini</option>
+              <option>Groq Llama-3-70B</option>
+              <option>Mock Mode (Không cần mạng / Không tốn API)</option>
+            </select>
+          </div>
+
+          <div style="padding: 14px; border-radius: 14px; border: 1px solid var(--card-border); background: var(--sage-bg);">
+            <span style="font-weight: 700; color: var(--sage); display: block;">✓ Quyền riêng tư & Bảo mật âm thanh</span>
+            <p style="font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.5;">
+              Toàn bộ âm thanh luyện tập được xử lý trực tiếp trong phiên học. Bạn có toàn quyền xóa lịch sử phiên nói bất cứ lúc nào.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function switchTab(tabId) {
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.view-content').forEach(view => view.classList.remove('active'));
+
+    if (tabId === 'foundation') {
+      document.querySelectorAll('.tab-btn')[0].classList.add('active');
+      document.getElementById('view-foundation').classList.add('active');
+    } else if (tabId === 'advanced') {
+      document.querySelectorAll('.tab-btn')[1].classList.add('active');
+      document.getElementById('view-advanced').classList.add('active');
+    } else {
+      document.querySelectorAll('.tab-btn')[2].classList.add('active');
+      document.getElementById('view-settings').classList.add('active');
+    }
+  }
+
+  function toggleTheme() {
+    document.documentElement.classList.toggle('dark');
+  }
+</script>
+</body>
+</html>

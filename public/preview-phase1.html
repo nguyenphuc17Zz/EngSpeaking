@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bản Mẫu Giao Diện Xem Trước: Phase 1 — Warm Editorial Luxury</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #FAF7F2;
+      --fg: #24211E;
+      --card: #FFFFFF;
+      --card-border: #E8E2D6;
+      --primary: #C25E38;
+      --primary-fg: #FFFFFF;
+      --secondary: #F2EDE4;
+      --muted: #706B63;
+      --sage: #4D6A56;
+      --sage-bg: #EDF3EF;
+      --amber: #B45309;
+      --amber-bg: #FEF3C7;
+      --shadow: 0 1px 3px rgba(36, 33, 30, 0.04), 0 10px 28px -6px rgba(36, 33, 30, 0.06);
+      --shadow-hover: 0 14px 34px -8px rgba(194, 94, 56, 0.12), 0 4px 12px rgba(36, 33, 30, 0.04);
+    }
+
+    .dark {
+      --bg: #181614;
+      --fg: #EAE5DD;
+      --card: #221F1C;
+      --card-border: #322D28;
+      --primary: #E07A5F;
+      --primary-fg: #181614;
+      --secondary: #2A2521;
+      --muted: #9E978E;
+      --sage: #7A9A84;
+      --sage-bg: #1F2822;
+      --amber: #F59E0B;
+      --amber-bg: #2C2214;
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 10px 28px -6px rgba(0, 0, 0, 0.4);
+      --shadow-hover: 0 14px 34px -8px rgba(224, 122, 95, 0.2), 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--fg);
+      font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+      line-height: 1.5;
+      padding: 24px;
+      transition: background-color 0.3s, color 0.3s;
+    }
+
+    .font-serif { font-family: 'Lora', Georgia, serif; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+    .container { max-width: 1100px; margin: 0 auto; }
+
+    /* Top Preview Control Bar */
+    .preview-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 18px;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      margin-bottom: 24px;
+    }
+
+    .tabs { display: flex; gap: 8px; }
+    .tab-btn {
+      padding: 8px 16px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tab-btn.active {
+      background: var(--primary);
+      color: var(--primary-fg);
+      border-color: var(--primary);
+    }
+    .theme-btn {
+      padding: 6px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--card-border);
+      background: var(--secondary);
+      color: var(--fg);
+      font-size: 12px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    /* Page Viewports */
+    .page-view { display: none; }
+    .page-view.active { display: block; animation: fadeIn 0.3s ease; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Hero Banner */
+    .hero-card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      padding: 28px;
+      box-shadow: var(--shadow);
+      margin-bottom: 24px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 20px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-terracotta { background: rgba(194, 94, 56, 0.12); color: var(--primary); }
+    .badge-sage { background: var(--sage-bg); color: var(--sage); }
+    .badge-amber { background: var(--amber-bg); color: var(--amber); }
+
+    .btn-primary {
+      background: var(--primary);
+      color: var(--primary-fg);
+      border: none;
+      padding: 10px 20px;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(194, 94, 56, 0.3);
+    }
+    .btn-outline {
+      background: transparent;
+      color: var(--fg);
+      border: 1px solid var(--card-border);
+      padding: 10px 18px;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-outline:hover { background: var(--secondary); }
+
+    /* Timeline & Grid */
+    .timeline-list { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+    .timeline-item {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: var(--shadow);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .timeline-item:hover {
+      transform: translateY(-3px);
+      border-color: var(--primary);
+      box-shadow: var(--shadow-hover);
+    }
+    .step-num {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      background: rgba(194, 94, 56, 0.12);
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    /* Scenario Cards Grid */
+    .scenario-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+      gap: 16px;
+      margin-top: 20px;
+    }
+    .scenario-card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .scenario-card:hover {
+      transform: translateY(-4px);
+      border-color: var(--primary);
+      box-shadow: var(--shadow-hover);
+    }
+    .category-tabs {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+    }
+    .cat-chip {
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid var(--card-border);
+      background: var(--card);
+      color: var(--muted);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .cat-chip.active {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Top Preview Switcher Bar -->
+  <div class="preview-bar">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span style="font-weight: 700; font-size: 14px;" class="font-serif">EngSpeak • Phase 1 Preview</span>
+    </div>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('curriculum')">1. Lộ Trình AI (/curriculum)</button>
+      <button class="tab-btn" onclick="switchTab('conversation')">2. 14 Kịch Bản (/conversation)</button>
+    </div>
+    <button class="theme-btn" onclick="toggleTheme()">🌓 Đổi Sáng / Tối</button>
+  </div>
+
+  <!-- VIEWPORT 1: /curriculum -->
+  <div id="view-curriculum" class="page-view active">
+    <!-- Hero Plan Banner -->
+    <div class="hero-card">
+      <div style="max-width: 600px;">
+        <div class="badge badge-terracotta" style="margin-bottom: 8px;">
+          ✦ AI Adaptive Curriculum
+        </div>
+        <h1 class="font-serif" style="font-size: 26px; font-weight: 700; margin-bottom: 8px;">
+          Lộ trình luyện đàm thoại hôm nay
+        </h1>
+        <p style="font-size: 13px; color: var(--muted); line-height: 1.6;">
+          Hệ thống tự động thiết kế chuỗi bài tập can thiệp đúng điểm nghẽn của bạn. Phân bổ: <strong>Khởi động 2' → Drill cụm từ 3' → Luyện có hướng dẫn 3' → Đối thoại tự do 2'</strong>.
+        </p>
+      </div>
+
+      <div style="display: flex; gap: 10px; align-items: center;">
+        <select style="padding: 10px 14px; border-radius: 12px; border: 1px solid var(--card-border); background: var(--bg); color: var(--fg); font-weight: 600; font-size: 13px;">
+          <option>10 phút (Chuẩn)</option>
+          <option>5 phút</option>
+          <option>15 phút</option>
+          <option>20 phút</option>
+        </select>
+        <button class="btn-primary">
+          ▶ Bắt đầu học ngay
+        </button>
+      </div>
+    </div>
+
+    <!-- Pedagogical Reason Box -->
+    <div style="background: var(--card); border: 1px solid var(--card-border); border-left: 4px solid var(--primary); border-radius: 16px; padding: 16px 20px; margin-bottom: 24px; box-shadow: var(--shadow);">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+        <span class="font-serif" style="font-weight: 700; font-size: 14px; color: var(--primary);">
+          💡 Phân tích sư phạm: Tại sao lại học bài học này hôm nay?
+        </span>
+        <span class="badge badge-sage">Độ ưu tiên cao</span>
+      </div>
+      <p style="font-size: 12px; color: var(--muted); line-height: 1.6;">
+        Hôm qua tốc độ bật từ đầu tiên (TTFW) của bạn ở ngưỡng <strong>2.1s</strong> do thói quen dịch nhẩm cấu trúc phức. Lộ trình hôm nay tập trung nạp khối cụm từ (Chunks) có sẵn để bạn bật câu trong dưới <strong>1.4s</strong> mà không cần suy nghĩ.
+      </p>
+    </div>
+
+    <!-- Timeline Blocks -->
+    <h3 class="font-serif" style="font-size: 18px; font-weight: 700; margin-bottom: 12px;">
+      Timeline các chặng luyện tập
+    </h3>
+
+    <div class="timeline-list">
+      <!-- Step 1 -->
+      <div class="timeline-item">
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <div class="step-num">01</div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-weight: 700; font-size: 14px;">Khởi động cơ hàm & Nhịp thở</span>
+              <span class="badge badge-sage">Phát âm & Nhịp ngắt</span>
+            </div>
+            <p style="font-size: 12px; color: var(--muted); margin-top: 2px;">
+              Đọc 4 câu ngữ cảnh du lịch ngắn, làm ấm thanh quản và nhả âm tự nhiên.
+            </p>
+          </div>
+        </div>
+        <div style="text-align: right;">
+          <span class="font-mono" style="font-weight: 700; font-size: 13px;">2 phút</span>
+          <div style="font-size: 11px; color: var(--muted);">Độ khó: Nhẹ</div>
+        </div>
+      </div>
+
+      <!-- Step 2 -->
+      <div class="timeline-item">
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <div class="step-num">02</div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-weight: 700; font-size: 14px;">Lắp ráp câu khẩu ngữ (Chunk Builder)</span>
+              <span class="badge badge-terracotta">Trọng tâm phản xạ</span>
+            </div>
+            <p style="font-size: 12px; color: var(--muted); margin-top: 2px;">
+              Tập phản xạ nối các khối: "I was wondering if..." + "...you could help me with..."
+            </p>
+          </div>
+        </div>
+        <div style="text-align: right;">
+          <span class="font-mono" style="font-weight: 700; font-size: 13px;">3 phút</span>
+          <div style="font-size: 11px; color: var(--muted);">Độ khó: Vừa</div>
+        </div>
+      </div>
+
+      <!-- Step 3 -->
+      <div class="timeline-item">
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <div class="step-num">03</div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-weight: 700; font-size: 14px;">Hội thoại ứng dụng thực tế (Guided Roleplay)</span>
+              <span class="badge badge-amber">Xử lý tình huống</span>
+            </div>
+            <p style="font-size: 12px; color: var(--muted); margin-top: 2px;">
+              Đàm thoại với nhân viên quầy vé máy bay về việc đổi chuyến bay trễ.
+            </p>
+          </div>
+        </div>
+        <div style="text-align: right;">
+          <span class="font-mono" style="font-weight: 700; font-size: 13px;">3 phút</span>
+          <div style="font-size: 11px; color: var(--muted);">Độ khó: Thách thức</div>
+        </div>
+      </div>
+
+      <!-- Step 4 -->
+      <div class="timeline-item">
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <div class="step-num">04</div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-weight: 700; font-size: 14px;">Phản xạ tự do & Đúc kết (Free Speech)</span>
+              <span class="badge badge-sage">Củng cố</span>
+            </div>
+            <p style="font-size: 12px; color: var(--muted); margin-top: 2px;">
+              Chia sẻ cảm xúc hoặc tóm tắt lại bài học bằng 3 câu tiếng Anh tự do.
+            </p>
+          </div>
+        </div>
+        <div style="text-align: right;">
+          <span class="font-mono" style="font-weight: 700; font-size: 13px;">2 phút</span>
+          <div style="font-size: 11px; color: var(--muted);">Độ khó: Tự do</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VIEWPORT 2: /conversation -->
+  <div id="view-conversation" class="page-view">
+    <!-- Header -->
+    <div style="margin-bottom: 20px;">
+      <h1 class="font-serif" style="font-size: 26px; font-weight: 700; margin-bottom: 6px;">
+        Bộ Sưu Tập Kịch Bản Đàm Thoại AI
+      </h1>
+      <p style="font-size: 13px; color: var(--muted);">
+        14 kịch bản nhập vai thực tế được thiết kế chuyên sâu giúp bạn làm chủ phản xạ nói trong mọi tình huống đời thực.
+      </p>
+    </div>
+
+    <!-- Category Chips -->
+    <div class="category-tabs">
+      <button class="cat-chip active">Tất cả (14)</button>
+      <button class="cat-chip">Công sở & Họp (4)</button>
+      <button class="cat-chip">Phỏng vấn việc làm (3)</button>
+      <button class="cat-chip">Đời sống & Mua sắm (4)</button>
+      <button class="cat-chip">Thương lượng & Thuyết phục (3)</button>
+    </div>
+
+    <!-- Scenario Cards Grid -->
+    <div class="scenario-grid">
+      <!-- Card 1 -->
+      <div class="scenario-card">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <span class="badge badge-terracotta">B2 - C1</span>
+            <span style="font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono';">6 turns • 5 phút</span>
+          </div>
+          <h3 class="font-serif" style="font-size: 17px; font-weight: 700; margin-bottom: 8px;">
+            Phỏng Vấn Kỹ Sư Phần Mềm
+          </h3>
+          <p style="font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.5;">
+            Trả lời các câu hỏi kỹ thuật theo mô hình STAR, trình bày kinh nghiệm giải quyết lỗi hệ thống.
+          </p>
+          <div style="font-size: 11px; background: var(--secondary); padding: 8px 12px; border-radius: 10px; margin-bottom: 16px;">
+            <strong>AI Đối tác:</strong> Senior Tech Hiring Manager
+          </div>
+        </div>
+        <button class="btn-outline" style="width: 100%; justify-content: center; display: flex;">
+          Vào phòng đàm thoại →
+        </button>
+      </div>
+
+      <!-- Card 2 -->
+      <div class="scenario-card">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <span class="badge badge-sage">B1 - B2</span>
+            <span style="font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono';">8 turns • 6 phút</span>
+          </div>
+          <h3 class="font-serif" style="font-size: 17px; font-weight: 700; margin-bottom: 8px;">
+            Họp Sprint Tiến Độ Dự Án
+          </h3>
+          <p style="font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.5;">
+            Cập nhật công việc hoàn thành, nêu rõ các blocker và đề xuất giải pháp cho team.
+          </p>
+          <div style="font-size: 11px; background: var(--secondary); padding: 8px 12px; border-radius: 10px; margin-bottom: 16px;">
+            <strong>AI Đối tác:</strong> Technical Project Manager (PM)
+          </div>
+        </div>
+        <button class="btn-outline" style="width: 100%; justify-content: center; display: flex;">
+          Vào phòng đàm thoại →
+        </button>
+      </div>
+
+      <!-- Card 3 -->
+      <div class="scenario-card">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <span class="badge badge-amber">B2 - C1</span>
+            <span style="font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono';">6 turns • 5 phút</span>
+          </div>
+          <h3 class="font-serif" style="font-size: 17px; font-weight: 700; margin-bottom: 8px;">
+            Đàm Phán Lương Thưởng
+          </h3>
+          <p style="font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.5;">
+            Trình bày giá trị đóng góp cho công ty và thuyết phục mức đãi ngộ xứng đáng một cách chuyên nghiệp.
+          </p>
+          <div style="font-size: 11px; background: var(--secondary); padding: 8px 12px; border-radius: 10px; margin-bottom: 16px;">
+            <strong>AI Đối tác:</strong> Giám đốc Nhân sự (HR Director)
+          </div>
+        </div>
+        <button class="btn-outline" style="width: 100%; justify-content: center; display: flex;">
+          Vào phòng đàm thoại →
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function switchTab(tabId) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.page-view').forEach(p => p.classList.remove('active'));
+
+    if (tabId === 'curriculum') {
+      document.querySelectorAll('.tab-btn')[0].classList.add('active');
+      document.getElementById('view-curriculum').classList.add('active');
+    } else {
+      document.querySelectorAll('.tab-btn')[1].classList.add('active');
+      document.getElementById('view-conversation').classList.add('active');
+    }
+  }
+
+  function toggleTheme() {
+    document.body.classList.toggle('dark');
+  }
+</script>
+
+</body>
+</html>

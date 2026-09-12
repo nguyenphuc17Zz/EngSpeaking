@@ -78,37 +78,38 @@ export default function CurriculumTodayPage() {
   const primaryBottleneck = state.skills.slice().sort((a, b) => a.mastery - b.mastery)[0];
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-7 pb-12">
       {/* Hero Today Plan Card */}
-      <Card className="rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-background shadow-xs overflow-hidden">
-        <CardContent className="p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div className="space-y-2 max-w-xl">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/15 text-primary text-xs font-semibold">
-              <Sparkles className="size-3.5" />
-              <span>AI Adaptive Teacher</span>
+      <div className="rounded-3xl border border-border/80 bg-card paper-shadow p-6 md:p-8">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="space-y-3 max-w-xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary border border-border/60 text-foreground/80 text-xs font-medium">
+              <span className="size-1.5 rounded-full bg-primary" />
+              <span>Lộ Trình Tự Động • Adaptive Curriculum</span>
             </div>
-            <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
-              Lộ trình luyện tập hôm nay (10 phút)
+            <h1 className="text-2xl md:text-3xl font-serif font-bold tracking-tight text-foreground leading-snug">
+              Lộ trình luyện đàm thoại hôm nay
             </h1>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Hệ thống tự động thiết kế chuỗi bài tập can thiệp đúng điểm nghẽn của bạn, phân bổ tỷ lệ: Khởi động 2' → Drill 3' → Luyện có hướng dẫn 3' → Hội thoại tự do 2'.
+            <p className="text-sm text-muted-foreground leading-relaxed font-sans">
+              Hệ thống thiết kế chuỗi bài tập can thiệp đúng điểm nghẽn của bạn theo tỷ lệ tối ưu:{" "}
+              <strong>Khởi động 2' → Drill cụm từ 3' → Luyện có hướng dẫn 3' → Đối thoại tự do 2'</strong>.
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-center gap-2.5 shrink-0 w-full md:w-auto">
+          <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full md:w-auto">
             <Select
               value={String(duration)}
               onValueChange={(v: string | null) => v && setDuration(parseInt(v, 10))}
             >
-              <SelectTrigger className="w-full sm:w-[120px] rounded-xl h-11 text-xs">
-                <span>{duration} phút</span>
+              <SelectTrigger className="w-full sm:w-[130px] rounded-xl h-11 text-xs border-border/80 bg-background font-medium">
+                <span>{duration} phút (Chuẩn)</span>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="5">5 phút</SelectItem>
+                <SelectItem value="5">5 phút (Nhanh)</SelectItem>
                 <SelectItem value="10">10 phút (Chuẩn)</SelectItem>
                 <SelectItem value="15">15 phút</SelectItem>
                 <SelectItem value="20">20 phút</SelectItem>
-                <SelectItem value="30">30 phút</SelectItem>
+                <SelectItem value="30">30 phút (Chuyên sâu)</SelectItem>
               </SelectContent>
             </Select>
 
@@ -116,7 +117,7 @@ export default function CurriculumTodayPage() {
               size="lg"
               onClick={handleJustPractice}
               disabled={loading}
-              className="w-full sm:w-auto gap-2.5 h-11 px-6 rounded-2xl font-bold shadow-md shadow-primary/25 hover:scale-105 transition-transform"
+              className="w-full sm:w-auto gap-2.5 h-11 px-6 rounded-xl font-semibold btn-spring shadow-xs"
             >
               {loading ? (
                 <>
@@ -131,24 +132,27 @@ export default function CurriculumTodayPage() {
               )}
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Generated Plan Section */}
       {plan ? (
         <div className="space-y-6">
-          <Card className="rounded-3xl border-primary/30 bg-card shadow-sm">
-            <CardHeader className="p-6 pb-3 border-b border-border/40">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="default" className="text-xs rounded-full px-2.5">
+          <Card className="rounded-3xl border-border/80 bg-card paper-shadow">
+            <CardHeader className="p-6 pb-4 border-b border-border/60">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2.5">
+                    <Badge variant="default" className="text-xs rounded-full px-2.5 shadow-2xs font-mono">
                       {plan.estimatedDurationMinutes} phút
                     </Badge>
-                    <CardTitle className="text-lg font-bold">{plan.title}</CardTitle>
+                    <CardTitle className="text-xl font-serif font-bold text-foreground">
+                      {plan.title}
+                    </CardTitle>
                   </div>
-                  <CardDescription className="text-xs mt-1">
-                    Mục tiêu: {plan.objective} • Kỹ năng trọng tâm: {plan.primarySkill}
+                  <CardDescription className="text-xs text-muted-foreground">
+                    Mục tiêu: {plan.objective} • Kỹ năng trọng tâm:{" "}
+                    <span className="font-semibold text-foreground">{plan.primarySkill}</span>
                   </CardDescription>
                 </div>
 
@@ -156,7 +160,7 @@ export default function CurriculumTodayPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => generate(duration)}
-                  className="rounded-xl text-xs gap-1.5 h-8"
+                  className="rounded-xl text-xs gap-1.5 h-8.5 border-border/80 hover:bg-secondary btn-spring"
                 >
                   <RotateCcw className="size-3.5" />
                   <span>Tạo lại</span>
@@ -164,37 +168,47 @@ export default function CurriculumTodayPage() {
               </div>
             </CardHeader>
 
-            <CardContent className="p-6 space-y-4">
+            <CardContent className="p-6 space-y-5">
               <div className="space-y-3">
-                <span className="text-xs font-bold text-foreground">Timeline các khối bài học:</span>
-                {plan.blocks.map((b, i) => (
-                  <div
-                    key={b.id}
-                    className="p-3.5 rounded-2xl bg-muted/20 border border-border/60 flex items-center justify-between gap-3 hover:border-primary/40 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="size-7 rounded-lg bg-primary/10 text-primary font-mono text-xs font-bold flex items-center justify-center shrink-0">
-                        {i + 1}
-                      </div>
-                      <div>
-                        <div className="text-xs font-bold text-foreground flex items-center gap-2">
-                          <span>{b.type.toUpperCase()}</span>
-                          <Badge variant="outline" className="text-[10px] font-normal">
-                            {b.skillId || "general"}
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">{b.rationale}</p>
-                      </div>
-                    </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-serif font-bold text-foreground uppercase tracking-wider">
+                    Timeline các chặng luyện tập
+                  </span>
+                  <span className="text-[11px] text-muted-foreground font-mono">
+                    {plan.blocks.length} chặng hoàn thành
+                  </span>
+                </div>
 
-                    <div className="text-right shrink-0">
-                      <span className="text-xs font-mono font-bold text-foreground block">
-                        {b.durationMinutes} phút
-                      </span>
-                      <span className="text-[10px] text-muted-foreground">Độ khó: {b.difficulty}</span>
+                <div className="space-y-3">
+                  {plan.blocks.map((b, i) => (
+                    <div
+                      key={b.id}
+                      className="p-4 rounded-2xl bg-card border border-border/80 flex items-center justify-between gap-4 paper-shadow-sm paper-shadow-hover transition-all"
+                    >
+                      <div className="flex items-center gap-3.5">
+                        <div className="size-8 rounded-xl bg-primary/10 text-primary border border-primary/20 font-serif text-sm font-bold flex items-center justify-center shrink-0 shadow-2xs">
+                          0{i + 1}
+                        </div>
+                        <div>
+                          <div className="text-sm font-serif font-bold text-foreground flex items-center gap-2">
+                            <span>{b.type.toUpperCase()}</span>
+                            <Badge variant="outline" className="text-[10px] font-normal border-border/80">
+                              {b.skillId || "general"}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{b.rationale}</p>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span className="text-xs font-mono font-bold text-foreground block">
+                          {b.durationMinutes} phút
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">Độ khó: {b.difficulty}</span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
 
               {explanation && (
@@ -205,7 +219,7 @@ export default function CurriculumTodayPage() {
 
               <div className="pt-3 flex justify-end">
                 <Link href="/session">
-                  <Button size="lg" className="gap-2 rounded-2xl px-6 font-bold shadow-md shadow-primary/25">
+                  <Button size="lg" className="gap-2 rounded-xl px-6 font-semibold btn-spring shadow-xs">
                     <Play className="size-4 fill-current" />
                     <span>Bắt đầu luyện theo lộ trình này</span>
                     <ArrowRight className="size-4" />
@@ -219,37 +233,37 @@ export default function CurriculumTodayPage() {
 
       {/* Learner State Overview & Mastery Matrix */}
       <div className="grid md:grid-cols-2 gap-6">
-        <Card className="rounded-3xl border border-border/80 bg-card shadow-xs">
-          <CardHeader className="p-5 pb-3 border-b border-border/40">
-            <CardTitle className="text-sm font-bold flex items-center gap-2">
-              <Brain className="size-4 text-primary" />
-              <span>Hồ sơ năng lực hiện tại</span>
+        <Card className="rounded-3xl border border-border/80 bg-card paper-shadow-sm">
+          <CardHeader className="p-5 pb-3 border-b border-border/60">
+            <CardTitle className="text-base font-serif font-bold flex items-center gap-2.5 text-foreground">
+              <Brain className="size-4.5 text-primary" />
+              <span>Hồ sơ năng lực phản xạ</span>
             </CardTitle>
-            <CardDescription className="text-xs">
-              Trạng thái phản xạ & mục tiêu cá nhân
+            <CardDescription className="text-xs text-muted-foreground">
+              Trạng thái phản xạ & mục tiêu cá nhân hoá của bạn
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-5 space-y-3 text-xs leading-relaxed">
-            <div className="flex items-center justify-between p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300">
-              <span className="font-semibold">Điểm nghẽn cần khắc phục nhất:</span>
-              <Badge variant="outline" className="font-mono text-xs">
+          <CardContent className="p-5 space-y-3.5 text-xs leading-relaxed">
+            <div className="flex items-center justify-between p-3 rounded-2xl bg-secondary/70 border border-border/80">
+              <span className="font-medium text-foreground">Điểm nghẽn cần tháo gỡ nhất:</span>
+              <Badge variant="outline" className="font-mono text-xs border-primary/40 text-primary bg-background">
                 {primaryBottleneck?.skillId} ({Math.round((primaryBottleneck?.mastery || 0) * 100)}%)
               </Badge>
             </div>
 
             <div className="space-y-1.5 pt-1">
-              <span className="text-muted-foreground font-semibold">Mục tiêu học tập:</span>
+              <span className="text-muted-foreground font-medium">Mục tiêu đàm thoại:</span>
               <div className="flex flex-wrap gap-1.5">
                 {state.goals.map((g) => (
-                  <Badge key={g.id} variant="secondary" className="rounded-lg text-xs">
+                  <Badge key={g.id} variant="secondary" className="rounded-lg text-xs font-normal border border-border/60">
                     {g.id}
                   </Badge>
                 ))}
               </div>
             </div>
 
-            <div className="pt-2 border-t border-border/40 flex items-center justify-between text-muted-foreground">
-              <span>Độ dài buổi học ưu tiên:</span>
+            <div className="pt-2.5 border-t border-border/60 flex items-center justify-between text-muted-foreground">
+              <span>Độ dài buổi học tối ưu:</span>
               <span className="font-mono font-bold text-foreground">
                 {state.preferences.preferredSessionLength || 10} phút
               </span>
@@ -258,17 +272,17 @@ export default function CurriculumTodayPage() {
         </Card>
 
         {/* Top 5 Weakest Skills for Targeted Practice */}
-        <Card className="rounded-3xl border border-border/80 bg-card shadow-xs">
-          <CardHeader className="p-5 pb-3 border-b border-border/40">
-            <CardTitle className="text-sm font-bold flex items-center gap-2">
-              <Target className="size-4 text-primary" />
+        <Card className="rounded-3xl border border-border/80 bg-card paper-shadow-sm">
+          <CardHeader className="p-5 pb-3 border-b border-border/60">
+            <CardTitle className="text-base font-serif font-bold flex items-center gap-2.5 text-foreground">
+              <Target className="size-4.5 text-primary" />
               <span>5 Kỹ năng cần củng cố nhất</span>
             </CardTitle>
-            <CardDescription className="text-xs">
+            <CardDescription className="text-xs text-muted-foreground">
               Mức độ thành thục (Mastery 0-100%) và xu hướng
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-5 space-y-3">
+          <CardContent className="p-5 space-y-3.5">
             {state.skills
               .slice()
               .sort((a, b) => a.mastery - b.mastery)
@@ -276,9 +290,9 @@ export default function CurriculumTodayPage() {
               .map((s) => {
                 const percent = Math.round(s.mastery * 100);
                 return (
-                  <div key={s.skillId} className="space-y-1">
+                  <div key={s.skillId} className="space-y-1.5">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold text-foreground">{s.skillId}</span>
+                      <span className="font-medium text-foreground">{s.skillId}</span>
                       <span className="font-mono font-bold text-muted-foreground">{percent}%</span>
                     </div>
                     <Progress value={percent} className="h-2 rounded-full" />
@@ -291,3 +305,4 @@ export default function CurriculumTodayPage() {
     </div>
   );
 }
+

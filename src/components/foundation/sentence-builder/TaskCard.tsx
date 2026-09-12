@@ -157,7 +157,7 @@ export function TaskCard({
             <span>{task.instruction}</span>
           </div>
 
-          <h2 className="text-lg md:text-xl font-bold tracking-tight text-foreground leading-snug">
+          <h2 className="font-serif text-xl md:text-2xl italic font-normal tracking-tight text-foreground leading-snug">
             "{task.promptVi}"
           </h2>
 
@@ -283,7 +283,7 @@ export function TaskCard({
           )}
 
           {task.controlLevel === "free" && (
-            <div className="p-2.5 rounded-2xl bg-indigo-500/5 border border-indigo-500/20 flex items-center justify-between gap-2 text-xs text-indigo-600 dark:text-indigo-400 mt-1">
+            <div className="p-2.5 rounded-2xl bg-primary/5 border border-primary/20 flex items-center justify-between gap-2 text-xs text-primary mt-1">
               <div className="flex items-center gap-2">
                 <Sparkles className="size-3.5 shrink-0" />
                 <span>Thử thách tự thân: Cấu trúc ý và phản xạ nói 1-2 câu trôi chảy!</span>

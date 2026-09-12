@@ -18,33 +18,38 @@ export function BottleneckCard({
   return (
     <Card
       className={cn(
-        "rounded-3xl border transition-all overflow-hidden shadow-xs",
+        "rounded-3xl border transition-all overflow-hidden paper-shadow-sm",
         primary
-          ? "border-amber-500/40 bg-gradient-to-br from-amber-500/10 via-card to-background"
+          ? "border-primary/40 bg-gradient-to-br from-primary/[0.05] via-card to-card"
           : "border-border/80 bg-card"
       )}
     >
-      <CardHeader className="p-5 pb-3 border-b border-border/40">
+      <CardHeader className="p-5 pb-3 border-b border-border/60">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
             <div
               className={cn(
-                "size-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0",
+                "size-7 rounded-xl flex items-center justify-center text-xs font-mono font-bold shrink-0",
                 primary
-                  ? "bg-amber-500 text-white shadow-xs"
-                  : "bg-muted text-muted-foreground"
+                  ? "bg-primary text-primary-foreground shadow-2xs"
+                  : "bg-secondary text-muted-foreground border border-border/60"
               )}
             >
               {primary ? "1" : "2"}
             </div>
-            <CardTitle className="text-sm font-bold truncate">
+            <CardTitle className="text-sm font-serif font-bold truncate text-foreground">
               {primary ? "Điểm nghẽn ưu tiên số 1" : "Điểm nghẽn thứ hai"}
             </CardTitle>
           </div>
 
           <Badge
             variant={primary ? "default" : "secondary"}
-            className="text-[11px] font-semibold rounded-full px-2.5"
+            className={cn(
+              "text-[11px] rounded-full px-2.5 py-0.5 font-medium",
+              primary
+                ? "bg-primary/15 text-primary border border-primary/25 hover:bg-primary/20"
+                : "bg-secondary text-foreground/80 border border-border/60"
+            )}
           >
             {bottleneck.category}
           </Badge>
@@ -52,13 +57,19 @@ export function BottleneckCard({
       </CardHeader>
 
       <CardContent className="p-5 space-y-3.5">
-        <p className="text-sm text-foreground leading-relaxed">{bottleneck.reason}</p>
+        <p className="text-sm text-foreground leading-relaxed font-sans">{bottleneck.reason}</p>
 
         {/* Diagnostic Meta Metrics */}
-        <div className="flex flex-wrap gap-2 text-[11px] font-mono text-muted-foreground pt-1 border-t border-border/40">
-          <span className="bg-muted/40 px-2 py-0.5 rounded-md">Mức độ nghiêm trọng: {bottleneck.severity}/100</span>
-          <span className="bg-muted/40 px-2 py-0.5 rounded-md">Tần suất lặp: {bottleneck.recurrence}×</span>
-          <span className="bg-muted/40 px-2 py-0.5 rounded-md">Độ tin cậy: {bottleneck.confidence}</span>
+        <div className="flex flex-wrap gap-1.5 text-[11px] font-mono text-muted-foreground pt-2 border-t border-border/60">
+          <span className="bg-secondary/70 border border-border/50 px-2 py-0.5 rounded-lg">
+            Mức độ: {bottleneck.severity}/100
+          </span>
+          <span className="bg-secondary/70 border border-border/50 px-2 py-0.5 rounded-lg">
+            Tần suất: {bottleneck.recurrence}×
+          </span>
+          <span className="bg-secondary/70 border border-border/50 px-2 py-0.5 rounded-lg">
+            Độ tin cậy: {bottleneck.confidence}
+          </span>
         </div>
 
         {/* Direct Action Link to Practice */}
@@ -66,7 +77,10 @@ export function BottleneckCard({
           <Button
             size="sm"
             variant={primary ? "default" : "outline"}
-            className="w-full gap-2 rounded-xl text-xs font-semibold h-9"
+            className={cn(
+              "w-full gap-2 rounded-xl text-xs font-semibold h-9.5",
+              primary ? "btn-spring shadow-xs" : "border-border/80 hover:bg-secondary/60"
+            )}
           >
             <Target className="size-3.5" />
             <span>Luyện bài tập khắc phục điểm nghẽn này</span>

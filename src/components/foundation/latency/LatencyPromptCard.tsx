@@ -225,7 +225,7 @@ export function LatencyPromptCard({
               </div>
             </div>
 
-            <h2 className="text-lg md:text-xl font-bold tracking-tight text-foreground leading-snug">
+            <h2 className="font-serif text-xl md:text-2xl italic font-normal tracking-tight text-foreground leading-snug">
               "{task.promptText}"
             </h2>
             {task.targetIntent && (

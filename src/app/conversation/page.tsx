@@ -55,7 +55,7 @@ const MODES: ModeItem[] = [
     desc: "Trò chuyện cởi mở, không giới hạn chủ đề với AI Coach",
     level: "Mọi cấp độ",
     icon: MessageCircle,
-    color: "text-blue-500 bg-blue-500/10",
+    color: "text-primary bg-primary/10",
     defaultRole: "Người bạn quốc tế thân thiện",
     defaultGoal: "Giao lưu, chia sẻ suy nghĩ và luyện phản xạ tự nhiên.",
   },
@@ -66,7 +66,7 @@ const MODES: ModeItem[] = [
     desc: "Họp nhóm, thảo luận tiến độ sprint, báo cáo tiến độ",
     level: "B1 - B2",
     icon: Briefcase,
-    color: "text-purple-500 bg-purple-500/10",
+    color: "text-amber-700 dark:text-amber-400 bg-amber-500/10",
     defaultRole: "Quản lý dự án kỹ thuật (Tech PM)",
     defaultGoal: "Báo cáo tiến độ và đề xuất giải pháp xử lý blocker.",
   },
@@ -77,7 +77,7 @@ const MODES: ModeItem[] = [
     desc: "Câu hỏi tình huống STAR, giới thiệu bản thân và kinh nghiệm",
     level: "B2 - C1",
     icon: GraduationCap,
-    color: "text-amber-500 bg-amber-500/10",
+    color: "text-indigo-600 dark:text-indigo-400 bg-indigo-500/10",
     defaultRole: "Giám đốc tuyển dụng (Hiring Manager)",
     defaultGoal: "Trình bày năng lực chuyên môn và trả lời tự tin.",
   },
@@ -88,7 +88,7 @@ const MODES: ModeItem[] = [
     desc: "Đàm phán lương thưởng, hợp đồng và quyền lợi",
     level: "B2 - C1",
     icon: Target,
-    color: "text-violet-500 bg-violet-500/10",
+    color: "text-rose-700 dark:text-rose-400 bg-rose-500/10",
     defaultRole: "Giám đốc Nhân sự (HR Director)",
     defaultGoal: "Thuyết phục tăng ngân sách hoặc phúc lợi hợp lý.",
   },
@@ -99,7 +99,7 @@ const MODES: ModeItem[] = [
     desc: "Gọi món nhà hàng, mua sắm siêu thị, hỏi đường phố",
     level: "A2 - B1",
     icon: Globe,
-    color: "text-teal-500 bg-teal-500/10",
+    color: "text-emerald-700 dark:text-emerald-400 bg-emerald-500/10",
     defaultRole: "Nhân viên phục vụ bản địa",
     defaultGoal: "Đặt món ăn đúng sở thích và hỏi hóa đơn.",
   },
@@ -110,7 +110,7 @@ const MODES: ModeItem[] = [
     desc: "Check-in sân bay, đổi phòng khách sạn, xử lý sự cố hành lý",
     level: "B1 - B2",
     icon: Plane,
-    color: "text-sky-500 bg-sky-500/10",
+    color: "text-sky-700 dark:text-sky-400 bg-sky-500/10",
     defaultRole: "Lễ tân khách sạn 5 sao",
     defaultGoal: "Báo cáo sự cố phòng và yêu cầu đổi phòng hướng biển.",
   },
@@ -121,7 +121,7 @@ const MODES: ModeItem[] = [
     desc: "Kết bạn tại tiệc tùng, sự kiện networking và tán gẫu",
     level: "B1 - B2",
     icon: Users,
-    color: "text-indigo-500 bg-indigo-500/10",
+    color: "text-primary bg-primary/10",
     defaultRole: "Người quen mới tại sự kiện Networking",
     defaultGoal: "Bắt chuyện tự nhiên, trao đổi thông tin liên lạc.",
   },
@@ -132,7 +132,7 @@ const MODES: ModeItem[] = [
     desc: "Bảo vệ luận điểm, phản biện quan điểm đối lập sắc bén",
     level: "B2 - C1",
     icon: Scale,
-    color: "text-rose-500 bg-rose-500/10",
+    color: "text-amber-800 dark:text-amber-300 bg-amber-500/10",
     defaultRole: "Đối thủ tranh biện giàu kinh nghiệm",
     defaultGoal: "Đưa ra lập luận logic và dẫn chứng thuyết phục.",
   },
@@ -143,7 +143,7 @@ const MODES: ModeItem[] = [
     desc: "Trình bày ý tưởng kinh doanh và trả lời chất vấn Q&A",
     level: "B2 - C1",
     icon: Mic2,
-    color: "text-cyan-500 bg-cyan-500/10",
+    color: "text-indigo-700 dark:text-indigo-300 bg-indigo-500/10",
     defaultRole: "Nhà đầu tư khó tính (Angel Investor)",
     defaultGoal: "Pitch sản phẩm trong 3 phút và trả lời phản biện.",
   },
@@ -154,7 +154,7 @@ const MODES: ModeItem[] = [
     desc: "Kể lại kỷ niệm đáng nhớ, chuyến đi hoặc bài học cuộc sống",
     level: "B1 - B2",
     icon: BookOpen,
-    color: "text-pink-500 bg-pink-500/10",
+    color: "text-emerald-800 dark:text-emerald-300 bg-emerald-500/10",
     defaultRole: "Người lắng nghe tò mò, thích khám phá",
     defaultGoal: "Truyền tải mạch chuyện lôi cuốn và cảm xúc chân thật.",
   },
@@ -165,7 +165,7 @@ const MODES: ModeItem[] = [
     desc: "Tự tạo kịch bản theo bất kỳ ý tưởng hoặc tình huống nào bạn muốn",
     level: "Tùy biến",
     icon: Wand2,
-    color: "text-fuchsia-500 bg-fuchsia-500/10",
+    color: "text-primary bg-primary/10",
     defaultRole: "Nhân vật AI theo mô tả của bạn",
     defaultGoal: "Tự do khám phá theo prompt bạn nhập.",
   },
@@ -282,34 +282,39 @@ export default function ConversationModesPage() {
         {/* Left: Back + Title + Badge */}
         <div className="flex items-center gap-2 min-w-0">
           <Link href="/foundation">
-            <Button variant="ghost" size="sm" className="size-7 p-0 rounded-xl" title="Quay lại">
-              <ArrowLeft className="size-3.5" />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="size-8 p-0 rounded-xl hover:bg-secondary border border-transparent hover:border-border/60"
+              title="Quay lại"
+            >
+              <ArrowLeft className="size-4" />
             </Button>
           </Link>
 
-          <div className="flex items-center gap-1.5 shrink-0">
-            <div className="size-6 rounded-lg bg-gradient-to-tr from-indigo-500 to-purple-600 text-white flex items-center justify-center shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="size-7 rounded-xl bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0">
               <Globe className="size-3.5" />
             </div>
-            <span className="font-bold text-xs sm:text-sm tracking-tight text-foreground">
+            <span className="font-serif font-bold text-sm sm:text-base tracking-tight text-foreground">
               Thế Giới Giao Tiếp AI
             </span>
-            <Badge variant="secondary" className="text-[10px] font-mono h-5 hidden sm:inline-flex">
+            <Badge variant="secondary" className="text-[10px] font-mono h-5 hidden sm:inline-flex bg-secondary/80 text-foreground/80 border border-border/60 rounded-full px-2">
               11+ Kịch Bản Nhập Vai
             </Badge>
           </div>
         </div>
 
         {/* Center: Category Filter Tabs */}
-        <div className="hidden md:flex items-center gap-1 bg-muted/60 p-0.5 rounded-xl border border-border/60">
+        <div className="hidden md:flex items-center gap-1 bg-secondary/50 p-1 rounded-full border border-border/60">
           {CATEGORIES.map((cat) => (
             <button
               key={cat.id}
               onClick={() => setActiveCategory(cat.id)}
-              className={`text-[11px] font-bold px-2 py-0.5 rounded-lg transition-all ${
+              className={`text-xs px-3 py-1 rounded-full transition-all ${
                 activeCategory === cat.id
-                  ? "bg-primary text-primary-foreground shadow-2xs"
-                  : "text-muted-foreground hover:text-foreground"
+                  ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                  : "text-muted-foreground hover:text-foreground font-medium"
               }`}
             >
               {cat.label}
@@ -318,16 +323,16 @@ export default function ConversationModesPage() {
         </div>
 
         {/* Right: Random + Global AI Selector */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           <Button
             variant="outline"
             size="sm"
             onClick={handleRandomLaunch}
             disabled={loading}
-            className="h-7 px-2.5 rounded-xl text-xs font-bold gap-1 border-border/80 hidden sm:flex"
+            className="h-8 px-3 rounded-xl text-xs font-semibold gap-1.5 border-border/80 bg-background hover:bg-secondary/60 text-foreground paper-shadow-sm hidden sm:flex"
             title="Chọn ngẫu nhiên tình huống"
           >
-            <Shuffle className="size-3 text-amber-500" />
+            <Shuffle className="size-3.5 text-primary" />
             <span>Ngẫu Nhiên</span>
           </Button>
 
@@ -338,16 +343,18 @@ export default function ConversationModesPage() {
       {/* ── MAIN CONTENT (7:5 Ratio, Zero Body Scroll) ── */}
       <main className="flex-1 p-2.5 sm:p-3 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-2.5 sm:gap-3 min-h-0">
         {/* LEFT (7 cols): Scenario Card Grid strictly scrollable inside */}
-        <div className="lg:col-span-7 h-full flex flex-col min-h-0 rounded-3xl border border-border/80 bg-card overflow-hidden shadow-xs">
-          <div className="px-3 py-2 border-b border-border/60 bg-muted/20 flex items-center justify-between shrink-0">
-            <span className="font-bold text-xs text-foreground">Chọn tình huống nhập vai</span>
-            <span className="text-[11px] text-muted-foreground font-mono">
+        <div className="lg:col-span-7 h-full flex flex-col min-h-0 rounded-3xl border border-border/80 bg-card overflow-hidden paper-shadow-sm">
+          <div className="px-4 py-2.5 border-b border-border/60 bg-muted/20 flex items-center justify-between shrink-0">
+            <span className="font-serif font-bold text-xs sm:text-sm text-foreground flex items-center gap-1.5">
+              <span>Chọn tình huống nhập vai</span>
+            </span>
+            <span className="text-[11px] text-muted-foreground font-mono bg-secondary px-2.5 py-0.5 rounded-full border border-border/50">
               {filteredModes.length} kịch bản khả dụng
             </span>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="flex-1 min-h-0 overflow-y-auto p-3.5 space-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {filteredModes.map((m) => {
                 const Icon = m.icon;
                 const isSelected = selectedModeId === m.id;
@@ -357,22 +364,22 @@ export default function ConversationModesPage() {
                     key={m.id}
                     onClick={() => setSelectedModeId(m.id)}
                     className={cn(
-                      "p-3 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between space-y-2 relative group",
+                      "p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between space-y-2.5 relative group paper-shadow-sm",
                       isSelected
-                        ? "border-primary bg-primary/5 shadow-xs ring-1 ring-primary/40"
-                        : "border-border/70 bg-card hover:border-primary/40 hover:bg-muted/30"
+                        ? "border-primary bg-primary/[0.03] ring-1 ring-primary/40 shadow-xs"
+                        : "border-border/70 bg-card hover:border-primary/40 hover:bg-muted/20 hover:paper-shadow-hover"
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className={cn("size-8 rounded-xl flex items-center justify-center shrink-0", m.color)}>
-                          <Icon className="size-4" />
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={cn("size-9 rounded-xl flex items-center justify-center shrink-0 border border-border/40", m.color)}>
+                          <Icon className="size-4.5" />
                         </div>
                         <div className="min-w-0">
-                          <h4 className="font-bold text-xs text-foreground group-hover:text-primary transition-colors truncate">
+                          <h4 className="font-serif font-bold text-sm text-foreground group-hover:text-primary transition-colors truncate">
                             {m.label}
                           </h4>
-                          <span className="text-[10px] text-muted-foreground block truncate">
+                          <span className="text-[10px] font-mono text-muted-foreground block truncate">
                             {m.level}
                           </span>
                         </div>
@@ -382,7 +389,7 @@ export default function ConversationModesPage() {
                       )}
                     </div>
 
-                    <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                    <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
                       {m.desc}
                     </p>
                   </div>
@@ -393,35 +400,35 @@ export default function ConversationModesPage() {
         </div>
 
         {/* RIGHT (5 cols): Selected Scenario Blueprint & Quick Launcher */}
-        <div className="lg:col-span-5 h-full flex flex-col min-h-0 rounded-3xl border border-border/80 bg-card overflow-hidden shadow-xs">
+        <div className="lg:col-span-5 h-full flex flex-col min-h-0 rounded-3xl border border-border/80 bg-card overflow-hidden paper-shadow-sm">
           {/* Header Preview Banner */}
-          <div className="p-4 border-b border-border/60 bg-gradient-to-b from-primary/10 via-card to-card shrink-0">
-            <div className="flex items-center gap-2 mb-2">
-              <div className={cn("size-10 rounded-2xl flex items-center justify-center shrink-0 shadow-xs", selectedMode.color)}>
-                <selectedMode.icon className="size-5" />
+          <div className="p-4 sm:p-5 border-b border-border/60 bg-gradient-to-b from-primary/[0.06] via-card to-card shrink-0">
+            <div className="flex items-center gap-3 mb-2.5">
+              <div className={cn("size-12 rounded-2xl flex items-center justify-center shrink-0 border border-border/50 paper-shadow-sm", selectedMode.color)}>
+                <selectedMode.icon className="size-6" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <h3 className="font-bold text-sm text-foreground truncate">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-serif font-bold text-base text-foreground truncate">
                     {selectedMode.label}
                   </h3>
-                  <Badge variant="outline" className="text-[9px] font-mono px-1 py-0 h-4">
+                  <Badge variant="outline" className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-secondary text-foreground/80 border border-border/60">
                     {selectedMode.level}
                   </Badge>
                 </div>
-                <p className="text-xs text-muted-foreground truncate">{selectedMode.desc}</p>
+                <p className="text-xs text-muted-foreground truncate mt-0.5">{selectedMode.desc}</p>
               </div>
             </div>
 
             {/* Quick Context Strip */}
-            <div className="p-2.5 rounded-xl bg-muted/40 border border-border/60 space-y-1 text-xs">
-              <div className="flex items-center gap-1 text-muted-foreground">
-                <Users className="size-3 text-primary shrink-0" />
+            <div className="p-3 rounded-2xl bg-secondary/50 border border-border/60 space-y-1.5 text-xs">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Users className="size-3.5 text-primary shrink-0" />
                 <span className="font-medium">Nhân vật AI:</span>
-                <span className="font-bold text-foreground truncate">{selectedMode.defaultRole}</span>
+                <span className="font-semibold text-foreground truncate">{selectedMode.defaultRole}</span>
               </div>
-              <div className="flex items-center gap-1 text-muted-foreground">
-                <Target className="size-3 text-amber-500 shrink-0" />
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Target className="size-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                 <span className="font-medium">Nhiệm vụ:</span>
                 <span className="text-foreground truncate">{selectedMode.defaultGoal}</span>
               </div>
@@ -429,11 +436,11 @@ export default function ConversationModesPage() {
           </div>
 
           {/* Configuration Form strictly scrollable inside */}
-          <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 space-y-4">
             {/* Custom Prompt Textarea if ai_generated */}
             {selectedModeId === "ai_generated" && (
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-foreground">
+              <div className="space-y-1.5">
+                <label className="text-xs font-serif font-bold text-foreground">
                   Mô tả tình huống bạn muốn (Prompt)
                 </label>
                 <Textarea
@@ -441,18 +448,18 @@ export default function ConversationModesPage() {
                   onChange={(e) => setAiPrompt(e.target.value)}
                   placeholder="Ví dụ: Tôi là kỹ sư phần mềm muốn xin sếp cho làm việc từ xa 2 ngày/tuần..."
                   rows={3}
-                  className="text-xs bg-background rounded-xl resize-none p-2.5"
+                  className="text-xs bg-background rounded-2xl resize-none p-3 border-border/80 focus:border-primary paper-shadow-sm"
                 />
               </div>
             )}
 
             {/* Quick Parameters */}
             <div className="space-y-2">
-              <span className="text-xs font-bold text-foreground block">
+              <span className="text-xs font-serif font-bold text-foreground block">
                 Độ khó & Thử thách phản xạ
               </span>
 
-              <div className="grid grid-cols-3 gap-1.5">
+              <div className="grid grid-cols-3 gap-2">
                 {[
                   { id: "auto", label: "Tự động" },
                   { id: "b1", label: "B1 (Vừa)" },
@@ -461,10 +468,10 @@ export default function ConversationModesPage() {
                   <button
                     key={d.id}
                     onClick={() => setDifficulty(d.id)}
-                    className={`text-[11px] font-bold py-1.5 px-2 rounded-xl border transition-all ${
+                    className={`text-xs font-semibold py-2 px-2.5 rounded-xl border transition-all ${
                       difficulty === d.id
-                        ? "bg-primary text-primary-foreground border-primary shadow-2xs"
-                        : "border-border/70 text-muted-foreground hover:text-foreground"
+                        ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                        : "border-border/70 text-muted-foreground hover:text-foreground bg-background"
                     }`}
                   >
                     {d.label}
@@ -474,12 +481,12 @@ export default function ConversationModesPage() {
             </div>
 
             {/* Surprise & Conflict level */}
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
                 <span className="text-[11px] font-semibold text-muted-foreground">
                   Yếu tố bất ngờ
                 </span>
-                <div className="flex gap-1">
+                <div className="flex gap-1.5">
                   {[
                     { id: "low", label: "Ít" },
                     { id: "medium", label: "Vừa" },
@@ -488,10 +495,10 @@ export default function ConversationModesPage() {
                     <button
                       key={s.id}
                       onClick={() => setSurprise(s.id)}
-                      className={`flex-1 text-[10px] font-bold py-1 rounded-lg border transition-all ${
+                      className={`flex-1 text-xs font-medium py-1.5 rounded-xl border transition-all ${
                         surprise === s.id
-                          ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/40"
-                          : "border-border/70 text-muted-foreground"
+                          ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40 font-semibold"
+                          : "border-border/70 text-muted-foreground bg-background"
                       }`}
                     >
                       {s.label}
@@ -500,11 +507,11 @@ export default function ConversationModesPage() {
                 </div>
               </div>
 
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <span className="text-[11px] font-semibold text-muted-foreground">
                   Mức độ xung đột
                 </span>
-                <div className="flex gap-1">
+                <div className="flex gap-1.5">
                   {[
                     { id: "low", label: "Êm" },
                     { id: "medium", label: "Thử thách" },
@@ -512,10 +519,10 @@ export default function ConversationModesPage() {
                     <button
                       key={c.id}
                       onClick={() => setConflict(c.id)}
-                      className={`flex-1 text-[10px] font-bold py-1 rounded-lg border transition-all ${
+                      className={`flex-1 text-xs font-medium py-1.5 rounded-xl border transition-all ${
                         conflict === c.id
-                          ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/40"
-                          : "border-border/70 text-muted-foreground"
+                          ? "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/40 font-semibold"
+                          : "border-border/70 text-muted-foreground bg-background"
                       }`}
                     >
                       {c.label}
@@ -527,11 +534,11 @@ export default function ConversationModesPage() {
           </div>
 
           {/* Launch Button Footer */}
-          <div className="p-3.5 border-t border-border/60 bg-muted/10 shrink-0">
+          <div className="p-4 border-t border-border/60 bg-secondary/20 shrink-0">
             <Button
               onClick={() => handleLaunchWorld()}
               disabled={loading}
-              className="w-full h-11 rounded-2xl font-bold text-sm gap-2 shadow-md"
+              className="w-full h-12 rounded-2xl font-serif font-bold text-sm sm:text-base gap-2 bg-primary text-primary-foreground btn-spring shadow-sm"
             >
               {loading ? (
                 <>
@@ -540,7 +547,7 @@ export default function ConversationModesPage() {
                 </>
               ) : (
                 <>
-                  <Play className="size-4 fill-current" />
+                  <Play className="size-4.5 fill-current" />
                   <span>Khởi Tạo & Vào Nhập Vai</span>
                 </>
               )}

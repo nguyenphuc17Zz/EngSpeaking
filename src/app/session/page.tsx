@@ -892,24 +892,24 @@ export default function SessionPage() {
       {/* ── MAIN CONTENT (7:5 Ratio, Zero Body Scroll) ── */}
       <main className="flex-1 p-2.5 sm:p-3 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-2.5 sm:gap-3 min-h-0">
         {/* LEFT (7 cols): Dialogue Canvas */}
-        <div className="lg:col-span-7 h-full flex flex-col min-h-0 rounded-3xl border border-border/80 bg-card overflow-hidden shadow-xs">
+        <div className="lg:col-span-7 h-full flex flex-col min-h-0 rounded-3xl border border-border/80 bg-card overflow-hidden paper-shadow">
           {/* Scenario Banner Strip (in Goal Mode) */}
           {sessionMode === "goal" && (
-            <div className="px-3 py-2 border-b border-border/60 bg-muted/20 flex items-center justify-between gap-2 shrink-0">
+            <div className="px-3.5 py-2.5 border-b border-border/60 bg-secondary/40 flex items-center justify-between gap-2 shrink-0">
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-bold text-xs text-foreground truncate">
+                <div className="flex items-center gap-2">
+                  <span className="font-serif font-bold text-xs sm:text-sm text-foreground truncate">
                     Mục tiêu: {selectedScenario.titleVi}
                   </span>
-                  <Badge variant="outline" className="text-[9px] font-mono px-1 py-0 h-4">
+                  <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 h-4 border-border/80 text-muted-foreground">
                     {selectedScenario.category}
                   </Badge>
                 </div>
-                <p className="text-[10px] text-muted-foreground truncate">{selectedScenario.goal}</p>
+                <p className="text-[11px] text-muted-foreground truncate font-sans">{selectedScenario.goal}</p>
               </div>
 
               {/* Scenario Selector & Infinite Generator */}
-              <div className="flex items-center gap-1 shrink-0">
+              <div className="flex items-center gap-1.5 shrink-0">
                 <select
                   value={selectedScenario.id}
                   onChange={(e) => {
@@ -919,7 +919,7 @@ export default function SessionPage() {
                       startSession(sc, "goal");
                     }
                   }}
-                  className="text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-background border border-border/80 text-foreground cursor-pointer focus:outline-hidden max-w-[130px] truncate"
+                  className="text-[11px] font-medium px-2 py-1 rounded-lg bg-background border border-border/80 text-foreground cursor-pointer focus:outline-hidden max-w-[130px] truncate"
                 >
                   {PRESET_SCENARIOS.map((sc) => (
                     <option key={sc.id} value={sc.id}>
@@ -938,7 +938,7 @@ export default function SessionPage() {
                   size="sm"
                   onClick={() => setShowScenarioModal(true)}
                   disabled={isGeneratingScenario}
-                  className="h-6 px-1.5 rounded-lg text-[10px] font-bold gap-1 text-primary border-primary/40 hover:bg-primary/10"
+                  className="h-7 px-2 rounded-lg text-[10px] font-semibold gap-1 text-primary border-primary/30 hover:bg-primary/10"
                   title="AI Tạo Kịch Bản Vô Hạn"
                 >
                   {isGeneratingScenario ? (
@@ -946,7 +946,7 @@ export default function SessionPage() {
                   ) : (
                     <Sparkles className="size-2.5" />
                   )}
-                  <span>AI Tạo Mới</span>
+                  <span>Tạo mới</span>
                 </Button>
               </div>
             </div>
@@ -954,9 +954,9 @@ export default function SessionPage() {
 
           {/* Discourse Stage Progression Bar */}
           {sessionMode === "goal" && (
-            <div className="px-3 py-1.5 bg-muted/40 border-b border-border/50 flex items-center justify-between gap-1 overflow-x-auto text-[10px] shrink-0">
+            <div className="px-3.5 py-1.5 bg-secondary/50 border-b border-border/50 flex items-center justify-between gap-1 overflow-x-auto text-[10px] shrink-0">
               <div className="flex items-center gap-1.5">
-                <span className="text-muted-foreground font-semibold shrink-0">Giai đoạn:</span>
+                <span className="text-muted-foreground font-medium shrink-0">Giai đoạn:</span>
                 <div className="flex items-center gap-1">
                   {DISCOURSE_STAGES.map((st, idx) => {
                     const isCurrent = st.key === currentStageKey;
@@ -965,12 +965,12 @@ export default function SessionPage() {
                     return (
                       <span
                         key={st.key}
-                        className={`px-1.5 py-0.5 rounded-md font-mono flex items-center gap-0.5 transition-all ${
+                        className={`px-1.5 py-0.5 rounded-md font-sans flex items-center gap-1 transition-all ${
                           isCurrent
-                            ? "bg-primary text-primary-foreground font-bold shadow-2xs"
+                            ? "bg-primary text-primary-foreground font-semibold shadow-2xs"
                             : isPast
-                            ? "bg-muted text-foreground/80 font-medium"
-                            : "text-muted-foreground/50 opacity-60"
+                            ? "bg-card border border-border/70 text-foreground font-medium"
+                            : "text-muted-foreground/60"
                         }`}
                       >
                         <span>{st.icon}</span>
@@ -983,10 +983,10 @@ export default function SessionPage() {
               {activeTwist && (
                 <Badge
                   variant={activeTwist.isResolved ? "outline" : "destructive"}
-                  className="text-[9px] font-mono px-1.5 py-0 h-4.5 gap-1 shrink-0 animate-pulse"
+                  className="text-[9px] font-mono px-1.5 py-0 h-4.5 gap-1 shrink-0 animate-pulse border"
                 >
                   <AlertTriangle className="size-2.5" />
-                  <span>{activeTwist.isResolved ? "Đã gỡ biến cố" : "Biến cố đang diễn ra"}</span>
+                  <span>{activeTwist.isResolved ? "Đã gỡ biến cố" : "Biến cố bất ngờ"}</span>
                 </Badge>
               )}
             </div>
@@ -994,19 +994,19 @@ export default function SessionPage() {
 
           {/* Active Twist Alert Banner */}
           {activeTwist && !activeTwist.isResolved && (
-            <div className="mx-3 my-2 p-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 flex items-start gap-2.5 shadow-2xs shrink-0 animate-in fade-in slide-in-from-top-2 duration-300">
-              <div className="size-7 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
-                <Zap className="size-4" />
+            <div className="mx-3.5 my-2.5 p-3 rounded-2xl bg-card border border-amber-600/40 text-foreground flex items-start gap-2.5 paper-shadow-sm shrink-0 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="size-7 rounded-xl bg-amber-500/15 text-amber-700 dark:text-amber-400 flex items-center justify-center shrink-0 mt-0.5 border border-amber-500/30">
+                <Zap className="size-3.5" />
               </div>
               <div className="min-w-0 flex-1 text-xs">
-                <div className="flex items-center gap-1.5 font-bold text-amber-800 dark:text-amber-300">
-                  <span>⚡ Tình huống bất ngờ: {activeTwist.titleVi}</span>
+                <div className="flex items-center gap-1.5 font-serif font-bold text-amber-800 dark:text-amber-300">
+                  <span>Tình huống bất ngờ: {activeTwist.titleVi}</span>
                 </div>
-                <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed font-sans">
                   {activeTwist.promptAiVi || activeTwist.descriptionEn}
                 </p>
-                <div className="mt-1 text-[10px] text-amber-700 dark:text-amber-300/90 font-medium">
-                  💡 Gợi ý phản xạ: Hãy giữ bình tĩnh, giải thích lý do hoặc đề xuất một giải pháp xử lý cụ thể.
+                <div className="mt-1 text-[10px] text-amber-700 dark:text-amber-300 font-medium">
+                  💡 Gợi ý: Giữ bình tĩnh, diễn giải lý do hoặc đề xuất một giải pháp cụ thể.
                 </div>
               </div>
             </div>
@@ -1014,10 +1014,10 @@ export default function SessionPage() {
 
           {/* Active Twist Resolved Feedback Banner */}
           {activeTwist && activeTwist.isResolved && activeTwistFeedback && (
-            <div className="mx-3 my-2 p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-900 dark:text-emerald-200 flex items-center gap-2 shrink-0 animate-in fade-in duration-300">
-              <CheckCircle2 className="size-4 text-emerald-500 shrink-0" />
+            <div className="mx-3.5 my-2 p-2.5 rounded-xl bg-card border border-chart-2/40 text-foreground flex items-center gap-2 shrink-0 animate-in fade-in duration-300 paper-shadow-sm">
+              <CheckCircle2 className="size-4 text-chart-2 shrink-0" />
               <div className="text-xs">
-                <span className="font-bold text-emerald-600 dark:text-emerald-400">Xử lý tình huống tốt!</span>{" "}
+                <span className="font-bold text-chart-2">Xử lý tình huống tốt!</span>{" "}
                 <span className="text-muted-foreground text-[11px]">{activeTwistFeedback}</span>
               </div>
             </div>
@@ -1027,13 +1027,13 @@ export default function SessionPage() {
           <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-3">
             {!session?.turns || session.turns.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-3">
-                <div className="size-14 rounded-2xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shadow-xs">
-                  <MessageSquare className="size-7" />
+                <div className="size-14 rounded-2xl bg-secondary border border-border/80 text-primary flex items-center justify-center paper-shadow-sm">
+                  <MessageSquare className="size-6" />
                 </div>
                 <div className="space-y-1 max-w-xs">
-                  <h3 className="text-sm font-bold text-foreground">Sẵn sàng luyện nói cùng AI</h3>
+                  <h3 className="text-base font-serif font-bold text-foreground">Sẵn sàng luyện nói cùng AI</h3>
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    Nhấn nút bắt đầu để AI mở đầu kịch bản và phản hồi từng câu của bạn.
+                    Nhấn nút bắt đầu để mở đầu kịch bản và cùng đàm thoại theo nhịp tự nhiên.
                   </p>
                 </div>
                 <Button

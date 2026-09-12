@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bản Mẫu Giao Diện Xem Trước: Các Phòng Luyện Thực Chiến — Warm Editorial Luxury</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;0,700;1,400;1,500&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #FAF7F2;
+      --fg: #24211E;
+      --card: #FFFFFF;
+      --card-border: #E8E2D6;
+      --primary: #C25E38;
+      --primary-fg: #FFFFFF;
+      --secondary: #F2EDE4;
+      --muted: #706B63;
+      --sage: #4D6A56;
+      --sage-bg: #EDF3EF;
+      --amber: #B45309;
+      --amber-bg: #FEF3C7;
+      --shadow: 0 1px 3px rgba(36, 33, 30, 0.04), 0 10px 28px -6px rgba(36, 33, 30, 0.06);
+      --shadow-hover: 0 14px 34px -8px rgba(194, 94, 56, 0.12), 0 4px 12px rgba(36, 33, 30, 0.04);
+    }
+
+    .dark {
+      --bg: #181614;
+      --fg: #EAE5DD;
+      --card: #221F1C;
+      --card-border: #322D28;
+      --primary: #E07A5F;
+      --primary-fg: #181614;
+      --secondary: #2A2521;
+      --muted: #9E978E;
+      --sage: #7A9A84;
+      --sage-bg: #1F2822;
+      --amber: #F59E0B;
+      --amber-bg: #2C2214;
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 10px 28px -6px rgba(0, 0, 0, 0.4);
+      --shadow-hover: 0 14px 34px -8px rgba(224, 122, 95, 0.2), 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--fg);
+      font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+      line-height: 1.5;
+      padding: 24px;
+      transition: background-color 0.3s, color 0.3s;
+    }
+
+    .font-serif { font-family: 'Lora', Georgia, serif; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+    .container { max-width: 1120px; margin: 0 auto; }
+
+    /* Top Preview Control Bar (Matching Phase 2 & 3 exact luxury pill) */
+    .preview-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 20px;
+      border-radius: 9999px;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      box-shadow: var(--shadow);
+      margin-bottom: 28px;
+    }
+    .preview-title {
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .badge {
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 9999px;
+      background: var(--secondary);
+      border: 1px solid var(--card-border);
+      color: var(--fg);
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .badge-primary {
+      background: rgba(194, 94, 56, 0.12);
+      color: var(--primary);
+      border-color: rgba(194, 94, 56, 0.25);
+    }
+    .badge-sage {
+      background: var(--sage-bg);
+      color: var(--sage);
+      border-color: rgba(77, 106, 86, 0.25);
+    }
+    .badge-amber {
+      background: var(--amber-bg);
+      color: var(--amber);
+      border-color: rgba(180, 83, 9, 0.25);
+    }
+
+    .tab-btn {
+      padding: 7px 15px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid transparent;
+      cursor: pointer;
+      background: transparent;
+      color: var(--muted);
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+    .tab-btn:hover {
+      color: var(--fg);
+    }
+    .tab-btn.active {
+      background: var(--primary);
+      color: var(--primary-fg);
+      box-shadow: 0 2px 8px rgba(194, 94, 56, 0.25);
+    }
+
+    .mode-btn {
+      padding: 7px 14px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid var(--card-border);
+      cursor: pointer;
+      background: var(--secondary);
+      color: var(--fg);
+      transition: all 0.2s;
+    }
+    .mode-btn:hover {
+      border-color: var(--primary);
+    }
+
+    /* Page Viewports */
+    .view-content { display: none; }
+    .view-content.active { display: block; animation: fadeIn 0.3s ease; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Card Systems */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .card:hover {
+      box-shadow: var(--shadow-hover);
+    }
+
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+    @media (max-width: 860px) {
+      .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 11px 22px;
+      border-radius: 14px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+      text-decoration: none;
+      font-family: inherit;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary {
+      background: var(--primary);
+      color: var(--primary-fg);
+      box-shadow: 0 4px 14px rgba(194, 94, 56, 0.25);
+    }
+    .btn-primary:hover {
+      filter: brightness(1.08);
+      transform: translateY(-1px);
+    }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--card-border);
+      color: var(--fg);
+    }
+    .btn-outline:hover {
+      background: var(--secondary);
+    }
+
+    /* Equalizer Bars Animation */
+    .eq-bar-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 3.5px;
+      height: 22px;
+      vertical-align: middle;
+    }
+    .eq-bar {
+      width: 3.5px;
+      background: var(--primary);
+      border-radius: 3px;
+      animation: eqBreathe 1.2s ease-in-out infinite alternate;
+    }
+    .eq-bar:nth-child(1) { height: 7px; animation-delay: 0.1s; }
+    .eq-bar:nth-child(2) { height: 16px; animation-delay: 0.3s; }
+    .eq-bar:nth-child(3) { height: 20px; animation-delay: 0.0s; }
+    .eq-bar:nth-child(4) { height: 12px; animation-delay: 0.4s; }
+    .eq-bar:nth-child(5) { height: 8px; animation-delay: 0.2s; }
+
+    @keyframes eqBreathe {
+      0% { transform: scaleY(0.35); opacity: 0.5; }
+      100% { transform: scaleY(1.15); opacity: 1; }
+    }
+
+    /* Progress Bar */
+    .p-bar {
+      height: 8px;
+      border-radius: 9999px;
+      background: var(--secondary);
+      overflow: hidden;
+      position: relative;
+    }
+    .p-fill {
+      height: 100%;
+      border-radius: 9999px;
+      background: var(--primary);
+      transition: width 0.5s ease;
+    }
+
+    .quote-box {
+      background: var(--secondary);
+      border-left: 3px solid var(--primary);
+      padding: 16px 20px;
+      border-radius: 0 16px 16px 0;
+      line-height: 1.6;
+    }
+
+    .vocab-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      background: var(--secondary);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .vocab-chip:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+      background: rgba(194, 94, 56, 0.06);
+      transform: translateY(-1px);
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Top Switcher Pill Bar -->
+  <div class="preview-bar">
+    <div class="preview-title font-serif">
+      <span style="font-size: 18px;">🏛️</span>
+      <span>Phòng Luyện Thực Chiến Showcase</span>
+      <span class="badge badge-primary">Warm Editorial Luxury</span>
+    </div>
+
+    <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+      <button class="tab-btn active" onclick="switchTab('sentence-builder')">1. Sentence Builder</button>
+      <button class="tab-btn" onclick="switchTab('vn-to-en')">2. VN → EN Reflex</button>
+      <button class="tab-btn" onclick="switchTab('latency')">3. Latency (&lt;2.5s)</button>
+      <button class="tab-btn" onclick="switchTab('shadowing')">4. Corodomo Shadowing</button>
+      <button class="tab-btn" onclick="switchTab('advanced-arena')">5. Advanced Arena</button>
+    </div>
+
+    <div>
+      <button class="mode-btn" onclick="toggleTheme()">☀️ / 🌙 Đổi Giao Diện</button>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- VIEW 1: SENTENCE BUILDER STUDIO -->
+  <!-- ========================================================================= -->
+  <div id="view-sentence-builder" class="view-content active">
+    <!-- Hero Banner -->
+    <div class="card" style="padding: 32px; margin-bottom: 24px; position: relative; overflow: hidden;">
+      <div style="position: absolute; right: -20px; bottom: -20px; font-size: 140px; opacity: 0.035; font-family: 'Lora', serif;">SB</div>
+      <div style="max-width: 700px;">
+        <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+          <span class="badge badge-primary">PHÒNG THÍ NGHIỆM KHUNG CÂU & TỪ KHOÁ</span>
+          <span class="badge badge-sage">Level B • Semi-Controlled</span>
+          <span class="badge font-mono">Độ khó: 6/10</span>
+        </div>
+        <h1 class="font-serif" style="font-size: 28px; font-weight: 700; margin-bottom: 10px; line-height: 1.3;">
+          Sentence Builder Studio
+        </h1>
+        <p style="color: var(--muted); font-size: 14px; line-height: 1.6;">
+          Xây dựng phản xạ sản sinh câu tiếng Anh hoàn chỉnh từ ngữ cảnh ý nghĩ. Tích hợp từ vựng chuyên ngành, collocations tự nhiên và nhận chấm điểm đối chiếu Oxford tức thì.
+        </p>
+      </div>
+
+      <div style="margin-top: 24px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--card-border); pt-16; padding-top: 16px; flex-wrap: wrap; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 16px; font-size: 12px; color: var(--muted);">
+          <span>Bài tập: <strong class="font-mono" style="color: var(--fg);">#3 / 10</strong></span>
+          <span>•</span>
+          <span>Chủ đề: <strong style="color: var(--fg);">Business Strategy</strong></span>
+          <span>•</span>
+          <span>Thời gian trung bình: <strong class="font-mono" style="color: var(--sage);">2.4s</strong></span>
+        </div>
+        <div class="badge badge-sage">✓ Fast-Pass Engine 0ms Sẵn Sàng</div>
+      </div>
+    </div>
+
+    <!-- 2-Column Workout Canvas -->
+    <div class="grid-2" style="margin-bottom: 24px;">
+      <!-- Left Column: TaskCard (Oxford Language Prompt) -->
+      <div class="card" style="padding: 28px; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--card-border); padding-bottom: 14px; margin-bottom: 20px;">
+            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--muted); letter-spacing: 0.6px;">
+              🎯 Ý ĐỒ GIAO TIẾP CẦN NÓI:
+            </span>
+            <span class="badge badge-amber font-mono">Họp Quản Trị Chiến Lược</span>
+          </div>
+
+          <div style="margin-bottom: 24px;">
+            <div class="quote-box font-serif" style="font-size: 19px; font-weight: 600; color: var(--fg);">
+              "Tôi muốn đề xuất phương án tối ưu hoá chi phí vận hành trước khi quý tới bắt đầu."
+            </div>
+            <p style="font-size: 12px; color: var(--muted); margin-top: 8px;">
+              Mục tiêu: Đưa ra kiến nghị với ban giám đốc một cách chuyên nghiệp và tự tin.
+            </p>
+          </div>
+
+          <!-- Base Sentence Reference (With Single-Listen Audio Pill) -->
+          <div style="background: var(--secondary); border: 1px solid var(--card-border); border-radius: 18px; padding: 14px 18px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+            <div style="overflow: hidden;">
+              <span style="font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; display: block; margin-bottom: 2px;">Cấu trúc câu gợi ý:</span>
+              <span class="font-mono" style="font-size: 13px; color: var(--primary); font-weight: 600;">
+                I would like to propose a cost-saving solution...
+              </span>
+            </div>
+            <button class="btn btn-outline" style="padding: 6px 12px; font-size: 11px; border-radius: 10px; shrink-0;" onclick="simulateAudio(this, 'Nghe câu mẫu')">
+              🔊 Nghe (1 lần)
+            </button>
+          </div>
+
+          <!-- Suggested Vocabulary Bank -->
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <span style="font-size: 11px; font-weight: 700; color: var(--amber); text-transform: uppercase; letter-spacing: 0.5px;">
+                💡 Cụm từ nên tích hợp (Collocations):
+              </span>
+              <span class="font-mono" style="font-size: 11px; color: var(--muted);">Bấm để nghe phát âm</span>
+            </div>
+
+            <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+              <div class="vocab-chip" onclick="simulateAudio(this, 'optimize operational costs')">
+                <span>optimize operational costs</span>
+                <span style="color: var(--muted); font-size: 11px;">🔊</span>
+              </div>
+              <div class="vocab-chip" onclick="simulateAudio(this, 'ahead of the upcoming quarter')">
+                <span>ahead of the upcoming quarter</span>
+                <span style="color: var(--muted); font-size: 11px;">🔊</span>
+              </div>
+              <div class="vocab-chip" onclick="simulateAudio(this, 'streamline expenses')">
+                <span>streamline expenses</span>
+                <span style="color: var(--muted); font-size: 11px;">🔊</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding-top: 20px; border-top: 1px solid var(--card-border); margin-top: 24px; display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 12px; color: var(--muted);">Gợi ý 5 tầng (Scaffolding):</span>
+          <button class="btn btn-outline" style="padding: 6px 14px; font-size: 11px;">Xem khung câu gợi ý [H]</button>
+        </div>
+      </div>
+
+      <!-- Right Column: Speaking Controller & Review -->
+      <div class="card" style="padding: 28px; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--card-border); padding-bottom: 14px; margin-bottom: 20px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--sage); display: inline-block;"></span>
+              <span style="font-size: 12px; font-weight: 700; color: var(--fg);">Microphone & Nhận Diện Âm Thanh</span>
+            </div>
+            <div class="badge badge-sage">✓ Đã ghi nhận giọng nói</div>
+          </div>
+
+          <!-- Manuscript Voice Transcript Box -->
+          <div style="background: var(--secondary); border: 1px solid var(--card-border); border-radius: 20px; padding: 24px; text-align: center; margin-bottom: 20px;">
+            <div style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--muted); margin-bottom: 10px; letter-spacing: 0.5px;">
+              Câu nói vừa thu được từ micro của bạn:
+            </div>
+            <div class="font-serif" style="font-size: 17px; font-weight: 600; color: var(--fg); line-height: 1.6; font-style: italic;">
+              “I’d like to propose optimizing our operational costs before the next quarter kicks off.”
+            </div>
+            <div style="display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: 16px;">
+              <div class="eq-bar-wrap">
+                <div class="eq-bar"></div>
+                <div class="eq-bar"></div>
+                <div class="eq-bar"></div>
+                <div class="eq-bar"></div>
+                <div class="eq-bar"></div>
+              </div>
+              <span class="font-mono" style="font-size: 12px; color: var(--muted);">Độ dài: 3.1s • Không có từ đệm rác</span>
+            </div>
+          </div>
+
+          <!-- Instant Feedback Callout -->
+          <div style="background: var(--sage-bg); border: 1px solid rgba(77, 106, 86, 0.25); border-radius: 20px; padding: 20px; margin-bottom: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
+              <span class="badge badge-sage">⚡ Fast-Pass 0ms • Khớp Chuẩn Tuyệt Đối</span>
+              <div style="display: flex; align-items: baseline; gap: 4px;">
+                <span class="font-serif" style="font-size: 26px; font-weight: 700; color: var(--sage); line-height: 1;">96</span>
+                <span class="font-mono" style="font-size: 13px; color: var(--muted);">/ 100</span>
+              </div>
+            </div>
+            <p style="font-size: 13px; color: var(--fg); line-height: 1.5; margin-bottom: 10px;">
+              <strong>Nhận xét Oxford:</strong> Phản xạ rất nhanh (TTFW 1.2s), ngữ pháp chuẩn xác với cấu trúc <em>"propose + V-ing"</em>.
+            </p>
+            <div style="border-top: 1px dashed rgba(77, 106, 86, 0.3); padding-top: 10px; font-size: 12px;">
+              <span style="color: var(--muted);">Cách diễn đạt đẳng cấp hơn (Say It Better):</span>
+              <div class="font-mono" style="font-weight: 600; color: var(--primary); margin-top: 4px;">
+                "I'd like to propose streamlining our operational expenses well ahead of the upcoming quarter."
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div style="display: flex; gap: 12px; padding-top: 12px;">
+          <button class="btn btn-outline" style="flex: 1;" onclick="alert('Đã đặt lại microphone và sẵn sàng thu âm lại')">
+            🔄 Thu âm lại [Space]
+          </button>
+          <button class="btn btn-primary" style="flex: 1.6;" onclick="alert('Chuyển sang bài tập tiếp theo')">
+            Chuyển bài tiếp theo ➔ [Enter]
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- VIEW 2: VN -> EN REFLEX TRANSLATION -->
+  <!-- ========================================================================= -->
+  <div id="view-vn-to-en" class="view-content">
+    <!-- Hero Banner -->
+    <div class="card" style="padding: 32px; margin-bottom: 24px; position: relative; overflow: hidden;">
+      <div style="position: absolute; right: -20px; bottom: -20px; font-size: 140px; opacity: 0.035; font-family: 'Lora', serif;">TR</div>
+      <div style="max-width: 700px;">
+        <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+          <span class="badge badge-primary">PHẢN XẠ VIỆT → ANH SONG NGỮ TỨC THÌ</span>
+          <span class="badge badge-amber">Cấp độ: B2 Professional</span>
+          <span class="badge font-mono">Không dịch Word-by-Word</span>
+        </div>
+        <h1 class="font-serif" style="font-size: 28px; font-weight: 700; margin-bottom: 10px; line-height: 1.3;">
+          VN → EN Reflex Translation Studio
+        </h1>
+        <p style="color: var(--muted); font-size: 14px; line-height: 1.6;">
+          Rèn luyện phản xạ bật ngay câu hoàn chỉnh khi có ý nghĩ tiếng Việt trong đầu mà không bị gián đoạn bởi việc dịch từng từ đơn lẻ.
+        </p>
+      </div>
+
+      <div style="margin-top: 24px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--card-border); padding-top: 16px; flex-wrap: wrap; gap: 12px;">
+        <div style="font-size: 12px; color: var(--muted);">
+          Tình huống: <strong style="color: var(--fg);">Đàm phán giải quyết khủng hoảng với đối tác</strong>
+        </div>
+        <span class="badge badge-sage">✓ Fast-Pass Engine Hoạt Động</span>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-bottom: 24px;">
+      <!-- Left: Prompt Card -->
+      <div class="card" style="padding: 28px; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; border-bottom: 1px solid var(--card-border); padding-bottom: 12px;">
+            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--muted);">Câu tiếng Việt cần bật âm:</span>
+            <span class="badge badge-secondary font-mono">Thời gian phản xạ: &lt; 2.0s</span>
+          </div>
+
+          <div class="quote-box font-serif" style="font-size: 20px; font-weight: 600; margin-bottom: 24px; color: var(--fg);">
+            “Nếu chúng ta không giải quyết dứt điểm vấn đề này ngay hôm nay, hậu quả sau này sẽ rất khó lường.”
+          </div>
+
+          <div style="background: var(--secondary); border-radius: 18px; padding: 18px; margin-bottom: 20px;">
+            <div style="font-size: 11px; font-weight: 700; color: var(--primary); margin-bottom: 8px; text-transform: uppercase;">
+              🔑 TỪ KHOÁ BẮT BUỘC TÍCH HỢP (MUST INTEGRATE):
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+              <span class="badge badge-primary">address this once and for all</span>
+              <span class="badge badge-secondary">unforeseen consequences</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="text-align: center; padding: 16px 0;">
+          <button class="btn btn-primary" style="padding: 14px 32px; font-size: 14px; border-radius: 16px; width: 100%;">
+            🎙️ Bấm để nói câu phản xạ tiếng Anh [Space]
+          </button>
+          <p style="font-size: 11px; color: var(--muted); margin-top: 8px;">
+            Nhận diện tức thì bằng Whisper ONNX / Groq Whisper Large V3
+          </p>
+        </div>
+      </div>
+
+      <!-- Right: Say It Better 3 Tiers -->
+      <div class="card" style="padding: 28px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; border-bottom: 1px solid var(--card-border); padding-bottom: 12px;">
+          <h3 class="font-serif" style="font-size: 16px; font-weight: 700; color: var(--fg);">Bộ 3 Câu Bản Xứ "Say It Better":</h3>
+          <span class="badge badge-sage">Oxford Benchmark</span>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 14px;">
+          <!-- Tier 1 -->
+          <div style="border: 1px solid var(--card-border); border-radius: 18px; padding: 16px; background: var(--card);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase;">Tier 1 • Đúng ngữ pháp & Rõ ý</span>
+              <button class="btn btn-outline" style="padding: 3px 10px; font-size: 11px; border-radius: 8px;">🔊 Nghe</button>
+            </div>
+            <p class="font-mono" style="font-size: 13px; color: var(--fg); line-height: 1.5;">
+              "If we don't resolve this issue today, the consequences will be very hard to predict."
+            </p>
+          </div>
+
+          <!-- Tier 2 (Recommended) -->
+          <div style="border: 2px solid var(--primary); border-radius: 18px; padding: 18px; background: rgba(194, 94, 56, 0.04); position: relative;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span class="badge badge-primary">Tier 2 • Bản xứ tự nhiên (Khuyên dùng)</span>
+              <button class="btn btn-primary" style="padding: 3px 10px; font-size: 11px; border-radius: 8px;">🔊 Nghe</button>
+            </div>
+            <p class="font-mono" style="font-size: 14px; font-weight: 600; color: var(--fg); line-height: 1.5;">
+              "If we don't address this once and for all today, the fallout could be far worse down the road."
+            </p>
+            <p style="font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.4;">
+              <em>"Fallout" và "down the road" là lối diễn đạt tự nhiên chuẩn mực của người bản xứ khi nói về rủi ro tương lai.</em>
+            </p>
+          </div>
+
+          <!-- Tier 3 -->
+          <div style="border: 1px solid var(--card-border); border-radius: 18px; padding: 16px; background: var(--card);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase;">Tier 3 • Ngoại giao & Quản trị</span>
+              <button class="btn btn-outline" style="padding: 3px 10px; font-size: 11px; border-radius: 8px;">🔊 Nghe</button>
+            </div>
+            <p class="font-mono" style="font-size: 13px; color: var(--fg); line-height: 1.5;">
+              "Failing to decisively tackle this matter now exposes us to severe and unpredictable repercussions."
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- VIEW 3: LATENCY TRAINING -->
+  <!-- ========================================================================= -->
+  <div id="view-latency" class="view-content">
+    <div class="card" style="padding: 32px; margin-bottom: 24px; position: relative; overflow: hidden;">
+      <div style="position: absolute; right: -20px; bottom: -20px; font-size: 140px; opacity: 0.035; font-family: 'Lora', serif;">⏱</div>
+      <div style="max-width: 700px;">
+        <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+          <span class="badge badge-primary">ĐO ĐỘ TRỄ KHỞI PHÁT PHÁT ÂM (TTFW)</span>
+          <span class="badge badge-sage">Mục tiêu: &lt; 2.5 giây</span>
+        </div>
+        <h1 class="font-serif" style="font-size: 28px; font-weight: 700; margin-bottom: 10px; line-height: 1.3;">
+          Response Latency Training Lab
+        </h1>
+        <p style="color: var(--muted); font-size: 14px; line-height: 1.6;">
+          Rèn luyện khả năng nói câu đầu tiên không do dự. Xoá bỏ hiện tượng "đơ phản xạ" (Freezing) và lạm dụng từ đệm rác "uhm, ah".
+        </p>
+      </div>
+
+      <div style="margin-top: 24px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--card-border); padding-top: 16px; flex-wrap: wrap; gap: 12px;">
+        <div style="font-size: 12px; color: var(--muted);">
+          Kỷ lục tốt nhất hôm nay: <strong class="font-mono" style="color: var(--sage);">0.76 giây</strong>
+        </div>
+        <span class="badge badge-sage">Độ nhạy: Voice Activity Detector 20ms</span>
+      </div>
+    </div>
+
+    <!-- Center Stage Latency Gauge -->
+    <div class="card" style="padding: 40px 32px; max-width: 820px; margin: 0 auto 24px; text-align: center;">
+      <span style="font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px;">
+        Thời gian phát ra từ đầu tiên (Time to First Word):
+      </span>
+
+      <div style="margin: 16px 0;">
+        <div class="font-mono font-serif" style="font-size: 64px; font-weight: 700; color: var(--sage); line-height: 1;">
+          0.82<span style="font-size: 28px; font-weight: 500;">s</span>
+        </div>
+        <div style="margin-top: 10px;">
+          <span class="badge badge-sage" style="font-size: 12px; padding: 4px 14px;">⚡ PHẢN XẠ XUẤT SẮC • DƯỚI 1.5S</span>
+        </div>
+      </div>
+
+      <!-- Ink Gauge Threshold Bar -->
+      <div style="max-width: 520px; margin: 24px auto 10px;">
+        <div class="p-bar" style="height: 12px;">
+          <div class="p-fill" style="width: 32%; background: var(--sage);"></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--muted); margin-top: 6px;">
+          <span>0s</span>
+          <span style="color: var(--sage); font-weight: 700;">1.5s (Bản xứ)</span>
+          <span style="color: var(--amber); font-weight: 700;">2.5s (Chuẩn)</span>
+          <span>4.0s (Trễ)</span>
+        </div>
+      </div>
+
+      <!-- Exercise Context -->
+      <div style="background: var(--secondary); border: 1px solid var(--card-border); border-radius: 20px; padding: 24px; margin: 28px 0; text-align: left;">
+        <div style="font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; margin-bottom: 6px;">
+          Tình huống kích hoạt tức thì:
+        </div>
+        <div class="font-serif" style="font-size: 18px; font-weight: 600; color: var(--fg); margin-bottom: 14px;">
+          "Khách hàng bất ngờ hỏi: Can you explain why your pricing is 20% higher than competitors?"
+        </div>
+
+        <div style="background: var(--card); border-radius: 14px; padding: 14px; border: 1px solid var(--card-border);">
+          <span style="font-size: 11px; font-weight: 700; color: var(--primary);">Khung câu đệm bản xứ (Filler Bridge) được khuyên dùng:</span>
+          <p class="font-mono" style="font-size: 13px; color: var(--fg); margin-top: 4px;">
+            "That is a completely fair question. The core difference comes down to our end-to-end dedicated support..."
+          </p>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: center; gap: 14px;">
+        <button class="btn btn-outline" style="padding: 12px 24px;">Thử lại câu này</button>
+        <button class="btn btn-primary" style="padding: 12px 28px;">Câu hỏi bất ngờ tiếp theo ➔</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- VIEW 4: CORODOMO SHADOWING (GIỮ NGUYÊN BỐ CỤC THỰC TẾ, ĐỒNG BỘ BẢNG MÀU DỰ ÁN) -->
+  <!-- ========================================================================= -->
+  <div id="view-shadowing" class="view-content">
+    <!-- Hub / Studio Mode Switcher within Shadowing Preview -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+      <div style="display: flex; gap: 6px; background: var(--secondary); padding: 4px; border-radius: 9999px;">
+        <button id="btn-shadow-hub" class="tab-btn active" style="padding: 5px 14px; font-size: 11px;" onclick="switchShadowSubView('hub')">1. Màn Hình Chính (Shadowing Hub & YouTube Extractor)</button>
+        <button id="btn-shadow-studio" class="tab-btn" style="padding: 5px 14px; font-size: 11px;" onclick="switchShadowSubView('studio')">2. Phòng Luyện Studio (Video + Xếp Tầng IPA)</button>
+      </div>
+      <span class="badge badge-sage">✓ Giữ 100% cấu trúc thực tế • Đồng bộ màu Terracotta & Sage</span>
+    </div>
+
+    <!-- SUB-VIEW A: SHADOWING HUB (Trích xuất YouTube & Kho video) -->
+    <div id="shadow-subview-hub">
+      <!-- Hero Banner -->
+      <div class="card" style="padding: 32px; margin-bottom: 24px; position: relative; overflow: hidden;">
+        <div style="position: absolute; right: -20px; bottom: -20px; font-size: 140px; opacity: 0.035; font-family: 'Lora', serif;">YT</div>
+        <div style="max-width: 700px;">
+          <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+            <span class="badge badge-primary">SHADOWING HUB • CORODOMO METHOD</span>
+            <span class="badge badge-sage">Tự Động Trích Xuất Phụ Đề 100%</span>
+          </div>
+          <h1 class="font-serif" style="font-size: 28px; font-weight: 700; margin-bottom: 10px; line-height: 1.3;">
+            Luyện Shadowing Theo Video YouTube
+          </h1>
+          <p style="color: var(--muted); font-size: 14px; line-height: 1.6;">
+            Luyện nói đuổi theo âm thanh video YouTube thực tế với phiên âm quốc tế IPA xếp tầng, lặp câu thông minh và chấm điểm phát âm AI.
+          </p>
+        </div>
+
+        <!-- YouTube URL Extractor Box (Giữ nguyên cấu trúc, đổi màu Terracotta ấm) -->
+        <div style="margin-top: 24px; background: var(--secondary); border: 1px solid var(--card-border); border-radius: 20px; padding: 20px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 18px;">🔴</span>
+              <span style="font-size: 12px; font-weight: 700; color: var(--fg); text-transform: uppercase;">Dán đường dẫn video YouTube hoặc Shorts:</span>
+            </div>
+            <span class="badge badge-secondary font-mono" style="font-size: 10px;">youtube.com • youtu.be</span>
+          </div>
+
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <input
+              type="text"
+              readonly
+              value="https://www.youtube.com/watch?v=dQw4w9WgXcQ (BBC English: Giving Presentations)"
+              style="flex: 1; min-width: 260px; height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--card-border); background: var(--card); color: var(--fg); font-size: 13px; font-family: inherit;"
+            />
+            <button class="btn btn-primary" style="height: 44px; padding: 0 22px;">
+              ✨ Trích xuất & Vào phòng học
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Preset Video Library Grid (Giữ nguyên thẻ video, đổi màu sang theme ngà ấm) -->
+      <div class="card" style="padding: 28px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; border-bottom: 1px solid var(--card-border); padding-bottom: 12px;">
+          <h3 class="font-serif" style="font-size: 17px; font-weight: 700; color: var(--fg);">Kho Bài Học Tuyển Chọn (Corodomo Library)</h3>
+          <span class="badge badge-secondary">6 bài học mẫu sẵn sàng</span>
+        </div>
+
+        <div class="grid-3">
+          <!-- Lesson Card 1 -->
+          <div style="border: 1px solid var(--card-border); border-radius: 20px; overflow: hidden; background: var(--secondary); transition: transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div style="height: 110px; background: #2A2521; display: flex; align-items: center; justify-content: center; position: relative;">
+              <span style="font-size: 36px; color: #FFF; opacity: 0.8;">▶</span>
+              <span class="badge" style="position: absolute; bottom: 8px; right: 8px; font-size: 10px; background: rgba(0,0,0,0.7); color: #FFF; border: none;">205 câu</span>
+            </div>
+            <div style="padding: 16px;">
+              <span class="badge badge-primary" style="font-size: 10px; margin-bottom: 6px;">B2 Upper-Intermediate</span>
+              <h4 class="font-serif" style="font-size: 14px; font-weight: 700; margin-bottom: 4px; line-height: 1.4; color: var(--fg);">BBC The Presentation: Delivering with Impact</h4>
+              <p style="font-size: 11px; color: var(--muted); margin-bottom: 12px;">Kênh: BBC Learning English</p>
+              <button class="btn btn-primary" style="width: 100%; padding: 8px; font-size: 12px; border-radius: 10px;" onclick="switchShadowSubView('studio')">
+                Vào phòng luyện Shadowing ➔
+              </button>
+            </div>
+          </div>
+
+          <!-- Lesson Card 2 -->
+          <div style="border: 1px solid var(--card-border); border-radius: 20px; overflow: hidden; background: var(--secondary); transition: transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div style="height: 110px; background: #2A2521; display: flex; align-items: center; justify-content: center; position: relative;">
+              <span style="font-size: 36px; color: #FFF; opacity: 0.8;">▶</span>
+              <span class="badge" style="position: absolute; bottom: 8px; right: 8px; font-size: 10px; background: rgba(0,0,0,0.7); color: #FFF; border: none;">142 câu</span>
+            </div>
+            <div style="padding: 16px;">
+              <span class="badge badge-sage" style="font-size: 10px; margin-bottom: 6px;">C1 Advanced</span>
+              <h4 class="font-serif" style="font-size: 14px; font-weight: 700; margin-bottom: 4px; line-height: 1.4; color: var(--fg);">TED: How to Speak so that People Want to Listen</h4>
+              <p style="font-size: 11px; color: var(--muted); margin-bottom: 12px;">Kênh: TED Talks Official</p>
+              <button class="btn btn-outline" style="width: 100%; padding: 8px; font-size: 12px; border-radius: 10px;" onclick="switchShadowSubView('studio')">
+                Vào phòng luyện Shadowing ➔
+              </button>
+            </div>
+          </div>
+
+          <!-- Lesson Card 3 -->
+          <div style="border: 1px solid var(--card-border); border-radius: 20px; overflow: hidden; background: var(--secondary); transition: transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div style="height: 110px; background: #2A2521; display: flex; align-items: center; justify-content: center; position: relative;">
+              <span style="font-size: 36px; color: #FFF; opacity: 0.8;">▶</span>
+              <span class="badge" style="position: absolute; bottom: 8px; right: 8px; font-size: 10px; background: rgba(0,0,0,0.7); color: #FFF; border: none;">88 câu</span>
+            </div>
+            <div style="padding: 16px;">
+              <span class="badge badge-amber" style="font-size: 10px; margin-bottom: 6px;">B1 Intermediate</span>
+              <h4 class="font-serif" style="font-size: 14px; font-weight: 700; margin-bottom: 4px; line-height: 1.4; color: var(--fg);">Oxford English: Daily Conversational Fluency</h4>
+              <p style="font-size: 11px; color: var(--muted); margin-bottom: 12px;">Kênh: Oxford Online English</p>
+              <button class="btn btn-outline" style="width: 100%; padding: 8px; font-size: 12px; border-radius: 10px;" onclick="switchShadowSubView('studio')">
+                Vào phòng luyện Shadowing ➔
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUB-VIEW B: REAL SHADOWING STUDIO (Giữ nguyên bố cục video player + thanh IPA xếp tầng + timeline bên phải) -->
+    <div id="shadow-subview-studio" style="display: none;">
+      <!-- Studio Top Nav -->
+      <div class="card" style="padding: 14px 22px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; border-radius: 20px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button class="btn btn-outline" style="padding: 6px 12px; font-size: 11px; border-radius: 10px;" onclick="switchShadowSubView('hub')">
+            ◀ Quay lại Hub
+          </button>
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <h3 class="font-serif" style="font-size: 15px; font-weight: 700; color: var(--fg);">BBC The Presentation: Delivering with Impact</h3>
+              <span class="badge badge-primary font-mono" style="font-size: 10px;">B2</span>
+            </div>
+            <span style="font-size: 11px; color: var(--muted);">Câu #14 / 205 • Đoạn 01:24 - 01:29</span>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 6px;">
+          <button class="tab-btn active" style="padding: 5px 12px; font-size: 11px;">🎙️ Chế độ Shadowing (Nói đuổi)</button>
+          <button class="tab-btn" style="padding: 5px 12px; font-size: 11px;">⚖️ Chấm điểm Phát âm</button>
+        </div>
+      </div>
+
+      <!-- Studio Main Layout: 7 Cols Player & Subtitles, 5 Cols Script Timeline -->
+      <div class="grid-2" style="grid-template-columns: 1.4fr 1fr;">
+        <!-- Left: YouTube Screen & Phonetic Subtitle Player -->
+        <div style="display: flex; flex-direction: column; gap: 18px;">
+          <!-- Simulated 16:9 Video Canvas -->
+          <div class="card" style="padding: 0; overflow: hidden; position: relative; background: #000; border-radius: 24px; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow);">
+            <div style="text-align: center; color: #FFF;">
+              <div style="width: 56px; height: 56px; border-radius: 50%; background: var(--primary); display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; cursor: pointer; box-shadow: 0 4px 20px rgba(194, 94, 56, 0.4);">
+                <span style="font-size: 22px; margin-left: 4px;">▶</span>
+              </div>
+              <span style="font-size: 12px; font-family: 'JetBrains Mono', monospace; opacity: 0.8;">YouTube Player (01:26 / 04:15)</span>
+            </div>
+
+            <!-- Video Overlay Control Pill Bar -->
+            <div style="position: absolute; bottom: 12px; left: 16px; right: 16px; background: rgba(24, 22, 20, 0.85); backdrop-filter: blur(10px); border-radius: 14px; padding: 8px 14px; display: flex; justify-content: space-between; align-items: center; color: #FFF; font-size: 11px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <button style="background: none; border: none; color: #FFF; cursor: pointer; font-size: 13px;">⏮</button>
+                <button style="background: none; border: none; color: #FFF; cursor: pointer; font-size: 13px;">🔁 Lặp câu</button>
+                <button style="background: none; border: none; color: #FFF; cursor: pointer; font-size: 13px;">⏭</button>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="opacity: 0.7;">Tốc độ:</span>
+                <span class="badge" style="background: rgba(255,255,255,0.15); color: #FFF; border: none; font-size: 10px;">0.9x</span>
+                <span class="badge" style="background: var(--primary); color: #FFF; border: none; font-size: 10px;">1.0x</span>
+                <span class="badge" style="background: rgba(255,255,255,0.15); color: #FFF; border: none; font-size: 10px;">1.25x</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Active Phonetic IPA Subtitle Strip (Cốt lõi của Corodomo) -->
+          <div class="card" style="padding: 24px;">
+            <!-- Vietnamese Translation Subtitle -->
+            <div style="font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 6px;">
+              BẢN DỊCH TIẾNG VIỆT:
+            </div>
+            <div class="font-serif" style="font-size: 15px; color: var(--fg); margin-bottom: 16px; line-height: 1.5;">
+              "Bây giờ, chúng ta hãy nhìn vào slide kế tiếp để thấy biểu đồ tăng trưởng doanh số của quý vừa qua."
+            </div>
+
+            <!-- English Master Sentence with Syllable IPA Tokens -->
+            <div style="background: var(--secondary); border: 1px solid var(--card-border); border-radius: 18px; padding: 18px; margin-bottom: 16px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <span style="font-size: 11px; font-weight: 700; color: var(--primary); text-transform: uppercase;">
+                  Phụ đề tiếng Anh & Phiên âm IPA xếp tầng:
+                </span>
+                <span class="badge badge-secondary font-mono" style="font-size: 10px;">Bấm từng từ để tra từ điển</span>
+              </div>
+
+              <!-- Word + IPA Stack (Y hệt tính năng Corodomo thực tế) -->
+              <div style="display: flex; flex-wrap: wrap; gap: 8px; line-height: 1.8;">
+                <div style="text-align: center; background: var(--card); padding: 4px 8px; border-radius: 10px; border: 1px solid var(--card-border); cursor: pointer;" title="Bấm để xem từ điển">
+                  <div style="font-weight: 700; font-size: 14px; color: var(--fg);">Now,</div>
+                  <div class="font-mono" style="font-size: 10px; color: var(--muted);">/naʊ/</div>
+                </div>
+                <div style="text-align: center; background: var(--card); padding: 4px 8px; border-radius: 10px; border: 1px solid var(--card-border); cursor: pointer;">
+                  <div style="font-weight: 700; font-size: 14px; color: var(--fg);">let's</div>
+                  <div class="font-mono" style="font-size: 10px; color: var(--muted);">/lɛts/</div>
+                </div>
+                <div style="text-align: center; background: var(--card); padding: 4px 8px; border-radius: 10px; border: 1px solid var(--card-border); cursor: pointer;">
+                  <div style="font-weight: 700; font-size: 14px; color: var(--fg);">take</div>
+                  <div class="font-mono" style="font-size: 10px; color: var(--muted);">/teɪk/</div>
+                </div>
+                <div style="text-align: center; background: var(--card); padding: 4px 8px; border-radius: 10px; border: 1px solid var(--card-border); cursor: pointer;">
+                  <div style="font-weight: 700; font-size: 14px; color: var(--fg);">a</div>
+                  <div class="font-mono" style="font-size: 10px; color: var(--muted);">/ə/</div>
+                </div>
+                <div style="text-align: center; background: var(--card); padding: 4px 8px; border-radius: 10px; border: 1px solid var(--card-border); cursor: pointer;">
+                  <div style="font-weight: 700; font-size: 14px; color: var(--fg);">look</div>
+                  <div class="font-mono" style="font-size: 10px; color: var(--muted);">/lʊk/</div>
+                </div>
+                <div style="text-align: center; background: var(--card); padding: 4px 8px; border-radius: 10px; border: 1px solid var(--card-border); cursor: pointer;">
+                  <div style="font-weight: 700; font-size: 14px; color: var(--fg);">at</div>
+                  <div class="font-mono" style="font-size: 10px; color: var(--muted);">/æt/</div>
+                </div>
+                <div style="text-align: center; background: var(--card); padding: 4px 8px; border-radius: 10px; border: 1px solid var(--card-border); cursor: pointer;">
+                  <div style="font-weight: 700; font-size: 14px; color: var(--fg);">the</div>
+                  <div class="font-mono" style="font-size: 10px; color: var(--muted);">/ðə/</div>
+                </div>
+                <div style="text-align: center; background: rgba(194, 94, 56, 0.08); padding: 4px 8px; border-radius: 10px; border: 1px solid var(--primary); cursor: pointer;">
+                  <div style="font-weight: 700; font-size: 14px; color: var(--primary);">next slide</div>
+                  <div class="font-mono" style="font-size: 10px; color: var(--primary);">/nɛkst slaɪd/</div>
+                </div>
+                <div style="text-align: center; background: var(--card); padding: 4px 8px; border-radius: 10px; border: 1px solid var(--card-border); cursor: pointer;">
+                  <div style="font-weight: 700; font-size: 14px; color: var(--fg);">to see</div>
+                  <div class="font-mono" style="font-size: 10px; color: var(--muted);">/tuː siː/</div>
+                </div>
+                <div style="text-align: center; background: var(--card); padding: 4px 8px; border-radius: 10px; border: 1px solid var(--card-border); cursor: pointer;">
+                  <div style="font-weight: 700; font-size: 14px; color: var(--fg);">the sales</div>
+                  <div class="font-mono" style="font-size: 10px; color: var(--muted);">/ðə seɪlz/</div>
+                </div>
+                <div style="text-align: center; background: rgba(194, 94, 56, 0.08); padding: 4px 8px; border-radius: 10px; border: 1px solid var(--primary); cursor: pointer;">
+                  <div style="font-weight: 700; font-size: 14px; color: var(--primary);">growth trend.</div>
+                  <div class="font-mono" style="font-size: 10px; color: var(--primary);">/ɡroʊθ trɛnd/</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Shadowing Microphone Trigger Action -->
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <button class="btn btn-outline" style="padding: 8px 14px; font-size: 12px; border-radius: 10px;">
+                  🔁 Phát lại câu này [R]
+                </button>
+                <button class="btn btn-outline" style="padding: 8px 14px; font-size: 12px; border-radius: 10px;">
+                  👁️ Ẩn/Hiện Video [V]
+                </button>
+              </div>
+
+              <button class="btn btn-primary" style="padding: 10px 22px; font-size: 13px; border-radius: 12px;">
+                🎙️ Bật Micro & Nói Đuổi [Space]
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Script Timeline (Danh sách 205 câu với timestamp) -->
+        <div class="card" style="padding: 24px; display: flex; flex-direction: column; max-height: 620px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--card-border); padding-bottom: 12px; margin-bottom: 14px;">
+            <h4 class="font-serif" style="font-size: 15px; font-weight: 700; color: var(--fg);">Biên Bản Phụ Đề Đoạn (205 câu)</h4>
+            <span class="badge badge-sage font-mono">Đang ở câu #14</span>
+          </div>
+
+          <div style="overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px;">
+            <!-- Sentence Segment 13 -->
+            <div style="padding: 10px 14px; border-radius: 14px; background: var(--card); border: 1px solid var(--card-border); font-size: 12px; cursor: pointer;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                <span class="font-mono" style="font-size: 10px; color: var(--muted);">01:18 - 01:23</span>
+                <span class="badge" style="font-size: 9px;">#13</span>
+              </div>
+              <p style="color: var(--muted);">"Welcome everyone, today we'll walk through our quarterly results."</p>
+            </div>
+
+            <!-- Sentence Segment 14 (ACTIVE - HIGHLIGHTED IN TERRACOTTA WARMTH) -->
+            <div style="padding: 12px 14px; border-radius: 14px; background: rgba(194, 94, 56, 0.08); border: 2px solid var(--primary); font-size: 12px; cursor: pointer;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                <span class="font-mono" style="font-size: 10px; color: var(--primary); font-weight: 700;">01:24 - 01:29</span>
+                <span class="badge badge-primary" style="font-size: 9px;">Đang luyện (#14)</span>
+              </div>
+              <p style="color: var(--fg); font-weight: 600;">"Now, let's take a look at the next slide to see the sales growth trend."</p>
+              <span class="font-mono" style="font-size: 10px; color: var(--sage); display: block; margin-top: 4px;">✓ Điểm phát âm: 94/100</span>
+            </div>
+
+            <!-- Sentence Segment 15 -->
+            <div style="padding: 10px 14px; border-radius: 14px; background: var(--card); border: 1px solid var(--card-border); font-size: 12px; cursor: pointer;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                <span class="font-mono" style="font-size: 10px; color: var(--muted);">01:30 - 01:36</span>
+                <span class="badge" style="font-size: 9px;">#15</span>
+              </div>
+              <p style="color: var(--muted);">"As you can clearly see, our online revenue expanded by twelve percent."</p>
+            </div>
+
+            <!-- Sentence Segment 16 -->
+            <div style="padding: 10px 14px; border-radius: 14px; background: var(--card); border: 1px solid var(--card-border); font-size: 12px; cursor: pointer;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                <span class="font-mono" style="font-size: 10px; color: var(--muted);">01:37 - 01:42</span>
+                <span class="badge" style="font-size: 9px;">#16</span>
+              </div>
+              <p style="color: var(--muted);">"This was primarily driven by our mobile checkout enhancements."</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ========================================================================= -->
+  <!-- VIEW 5: ADVANCED ARENA LIVE SESSION -->
+  <!-- ========================================================================= -->
+  <div id="view-advanced-arena" class="view-content">
+    <div class="card" style="padding: 32px; margin-bottom: 24px; position: relative; overflow: hidden;">
+      <div style="position: absolute; right: -20px; bottom: -20px; font-size: 140px; opacity: 0.035; font-family: 'Lora', serif;">⚔️</div>
+      <div style="max-width: 700px;">
+        <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+          <span class="badge badge-primary">ĐẤU TRƯỜNG TRANH BIỆN & ÁP LỰC DỒN DẬP</span>
+          <span class="badge badge-amber font-mono">⚡ Blitz: 8.0s Limit</span>
+          <span class="badge badge-sage">Toulmin Model Check</span>
+        </div>
+        <h1 class="font-serif" style="font-size: 28px; font-weight: 700; margin-bottom: 10px; line-height: 1.3;">
+          Advanced Arena Live Session
+        </h1>
+        <p style="color: var(--muted); font-size: 14px; line-height: 1.6;">
+          Đối kháng trực tiếp với AI Examiner trong các tình huống tranh luận căng thẳng. Phân tích logic lập luận, phát hiện ngụy biện và kiểm soát nhịp thở.
+        </p>
+      </div>
+
+      <div style="margin-top: 24px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--card-border); padding-top: 16px; flex-wrap: wrap; gap: 12px;">
+        <div style="font-size: 12px; color: var(--muted);">
+          Chuyên đề: <strong style="color: var(--fg);">AI & Tự Động Hoá Trong Doanh Nghiệp</strong>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <span class="badge badge-amber font-mono">Blitz Countdown: 5.4s</span>
+          <span class="badge badge-sage font-mono">Composure: 92% (S-Grade)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toulmin Argumentation Checklist HUD Strip -->
+    <div class="card" style="padding: 16px 24px; margin-bottom: 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;">
+      <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+        <span style="font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase;">Toulmin Checklist:</span>
+        <span class="badge badge-sage">✓ Claim (Luận điểm)</span>
+        <span class="badge badge-sage">✓ Data (Dẫn chứng thực tế)</span>
+        <span class="badge badge-sage">✓ Warrant (Lý lẽ kết nối)</span>
+        <span class="badge badge-secondary font-mono" style="border-style: dashed;">○ Rebuttal (Phản bác luận điểm đối phương)</span>
+      </div>
+      <div class="font-mono" style="font-size: 12px; color: var(--muted);">
+        Điểm lập luận: <strong style="color: var(--primary); font-size: 14px;">75%</strong>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-bottom: 24px;">
+      <!-- Dialogue Script Canvas -->
+      <div class="card" style="padding: 28px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--card-border); padding-bottom: 12px; margin-bottom: 18px;">
+          <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--muted);">Biên bản đối thoại (Script):</span>
+          <span class="badge badge-secondary font-mono">Lượt 3 / 6</span>
+        </div>
+
+        <!-- AI Opponent Turn -->
+        <div style="margin-bottom: 20px; padding: 18px; background: var(--secondary); border-radius: 20px;">
+          <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; margin-bottom: 6px;">
+            <span style="color: var(--primary);">AI Examiner (Quan điểm đối lập):</span>
+            <span class="font-mono" style="color: var(--muted);">10:14:02</span>
+          </div>
+          <p class="font-serif" style="font-size: 15px; line-height: 1.6; color: var(--fg);">
+            “While your proposal to automate customer service might reduce labor expenses, doesn’t it fundamentally undermine brand empathy and alienate high-value clients?”
+          </p>
+        </div>
+
+        <!-- User Response -->
+        <div style="padding: 18px; background: var(--sage-bg); border: 1px solid rgba(77, 106, 86, 0.25); border-radius: 20px;">
+          <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; margin-bottom: 6px;">
+            <span style="color: var(--sage);">Bạn (Candidate):</span>
+            <span class="font-mono" style="color: var(--sage);">Độ trễ: 1.4s (Xuất sắc)</span>
+          </div>
+          <p class="font-mono" style="font-size: 14px; line-height: 1.6; color: var(--fg);">
+            “I see your concern regarding client alienation; however, automating repetitive tier-one inquiries actually liberates our senior consultants to dedicate more time to high-value relationships.”
+          </p>
+        </div>
+      </div>
+
+      <!-- Live Composure & Bridging Analytics -->
+      <div class="card" style="padding: 28px; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--card-border); padding-bottom: 12px; margin-bottom: 20px;">
+            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--muted);">Chỉ số kiểm soát áp lực:</span>
+            <span class="badge badge-sage">Hands-Free Live OS</span>
+          </div>
+
+          <div class="grid-2" style="gap: 16px; margin-bottom: 24px;">
+            <div style="background: var(--secondary); padding: 20px; border-radius: 18px; text-align: center;">
+              <div style="font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase;">Tốc độ nói (WPM)</div>
+              <div class="font-mono" style="font-size: 28px; font-weight: 700; color: var(--fg); margin-top: 4px;">146</div>
+              <div style="font-size: 11px; color: var(--sage); margin-top: 2px;">Điềm tĩnh & Kiểm soát</div>
+            </div>
+            <div style="background: var(--secondary); padding: 20px; border-radius: 18px; text-align: center;">
+              <div style="font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase;">Độ trễ TTFW</div>
+              <div class="font-mono" style="font-size: 28px; font-weight: 700; color: var(--primary); margin-top: 4px;">1.4s</div>
+              <div style="font-size: 11px; color: var(--sage); margin-top: 2px;">Vượt chỉ tiêu Blitz (8s)</div>
+            </div>
+          </div>
+
+          <div style="background: var(--secondary); border-left: 3px solid var(--sage); padding: 16px 20px; border-radius: 0 16px 16px 0; font-size: 13px; line-height: 1.5;">
+            <strong style="color: var(--sage);">Bridging Technique Detected:</strong> Bạn đã sử dụng xuất sắc kỹ thuật công nhận và chuyển hướng <em>("I see your concern... however...")</em> giúp giữ vững thế chủ động trong tranh luận.
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 12px; margin-top: 24px;">
+          <button class="btn btn-outline" style="flex: 1;">Xem gợi ý đối kháng [H]</button>
+          <button class="btn btn-primary" style="flex: 1.5;">Nói lượt tiếp theo ➔</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function switchTab(tabId) {
+    document.querySelectorAll('.view-content').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+
+    const target = document.getElementById('view-' + tabId);
+    if (target) target.classList.add('active');
+
+    const btn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(tabId));
+    if (btn) btn.classList.add('active');
+  }
+
+  function switchShadowSubView(mode) {
+    const hub = document.getElementById('shadow-subview-hub');
+    const studio = document.getElementById('shadow-subview-studio');
+    const btnHub = document.getElementById('btn-shadow-hub');
+    const btnStudio = document.getElementById('btn-shadow-studio');
+
+    if (mode === 'studio') {
+      hub.style.display = 'none';
+      studio.style.display = 'block';
+      btnHub.classList.remove('active');
+      btnStudio.classList.add('active');
+    } else {
+      hub.style.display = 'block';
+      studio.style.display = 'none';
+      btnStudio.classList.remove('active');
+      btnHub.classList.add('active');
+    }
+  }
+
+  function toggleTheme() {
+    const isDark = document.body.classList.toggle('dark');
+    document.querySelector('.mode-btn').textContent = isDark ? '☀️ Giao diện Sáng' : '🌙 Giao diện Tối';
+  }
+
+  function simulateAudio(btn, msg) {
+    const original = btn.textContent;
+    btn.textContent = '🔊 Đang phát...';
+    btn.style.opacity = '0.7';
+    setTimeout(() => {
+      btn.textContent = original;
+      btn.style.opacity = '1';
+    }, 1200);
+  }
+</script>
+</body>
+</html>

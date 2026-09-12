@@ -72,402 +72,411 @@ export default function FoundationOverview() {
   ];
 
   return (
-    <div className="space-y-6 pb-10">
+    <div className="space-y-7 pb-12">
       {/* Hero Today Recommendation Card */}
-      <Card className="rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-background shadow-xs overflow-hidden">
-        <CardContent className="p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div className="space-y-2 max-w-xl">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/15 text-primary text-xs font-semibold">
-              <Sparkles className="size-3.5" />
-              <span>Foundation Drill System</span>
+      <div className="rounded-3xl border border-border/80 bg-card paper-shadow p-6 md:p-8">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="space-y-3 max-w-xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary border border-border/60 text-foreground/80 text-xs font-medium">
+              <span className="size-1.5 rounded-full bg-primary" />
+              <span>Phòng Luyện Phản Xạ • 22 Foundation Speaking Drills</span>
             </div>
-            <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
-              Luyện phản xạ nền tảng (22 bài tập)
+            <h1 className="text-2xl md:text-3xl font-serif font-bold tracking-tight text-foreground leading-snug">
+              Luyện phản xạ nền tảng (22 bài tập cốt lõi)
             </h1>
-            <p className="text-sm text-muted-foreground leading-relaxed">{todayHint}</p>
+            <p className="text-sm text-muted-foreground leading-relaxed font-sans">{todayHint}</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 shrink-0 w-full md:w-auto">
             <Link href="/foundation/practice?mode=daily" className="w-full sm:w-auto">
-              <Button size="lg" className="w-full gap-2 font-semibold shadow-md shadow-primary/25 rounded-2xl h-11 px-5">
+              <Button size="lg" className="w-full gap-2 font-semibold rounded-2xl h-11 px-5 btn-spring shadow-xs bg-primary text-primary-foreground">
                 <Clock className="size-4" />
                 <span>Daily 10' Drill</span>
               </Button>
             </Link>
             <Link href="/foundation/practice" className="w-full sm:w-auto">
-              <Button size="lg" variant="secondary" className="w-full gap-2 rounded-2xl h-11 px-4">
+              <Button size="lg" variant="outline" className="w-full gap-2 rounded-2xl h-11 px-4 border-border/80 bg-background hover:bg-secondary/60 text-foreground paper-shadow-sm font-semibold">
                 <Play className="size-4" />
                 <span>Luyện tự do</span>
               </Button>
             </Link>
             <Link href="/foundation/baseline" className="w-full sm:w-auto">
-              <Button size="lg" variant="outline" className="w-full gap-2 rounded-2xl h-11 px-4">
+              <Button size="lg" variant="outline" className="w-full gap-2 rounded-2xl h-11 px-4 border-border/80 bg-background hover:bg-secondary/60 text-foreground paper-shadow-sm font-semibold">
                 <Target className="size-4" />
                 <span>Kiểm tra Baseline</span>
               </Button>
             </Link>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Featured Core Systems Grid: SB, VN -> EN, Repair Lab, Response Latency, Error Bank & Shadowing */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {/* Sentence Builder Spotlight Card */}
-        <Card className="rounded-3xl border-2 border-primary/40 bg-gradient-to-br from-card via-card to-primary/10 shadow-sm p-5 space-y-3.5 relative overflow-hidden flex flex-col justify-between">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="size-10 rounded-2xl bg-gradient-to-tr from-primary to-indigo-600 text-primary-foreground flex items-center justify-center shadow-md shadow-primary/20">
-                <Sparkles className="size-5" />
+      <div>
+        <h3 className="text-base font-serif font-bold text-foreground mb-3 flex items-center gap-2">
+          <span>Phòng Luyện Nền Tảng Chuyên Sâu (Reflex Laboratories)</span>
+        </h3>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* Sentence Builder Spotlight Card */}
+          <Card className="rounded-3xl border border-border/80 bg-card paper-shadow-sm hover:paper-shadow-hover transition-all p-5 space-y-3.5 relative overflow-hidden flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="size-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border border-primary/20">
+                  <Sparkles className="size-5" />
+                </div>
+                <Badge variant="secondary" className="text-[10px] font-mono rounded-full px-2">
+                  Level A-B-C
+                </Badge>
+              </div>
+
+              <div className="space-y-1">
+                <h2 className="text-base font-serif font-bold text-foreground">
+                  Sentence Builder
+                </h2>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Khôi phục phản xạ tạo câu có kiểm soát từ cấu trúc câu căn bản.
+                </p>
               </div>
             </div>
 
-            <div className="space-y-1">
-              <h2 className="text-base font-bold text-foreground">
-                Sentence Builder
-              </h2>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Khôi phục phản xạ tạo câu có kiểm soát (Level A → B → C).
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-2 border-t border-border/40">
-            <div className="text-[11px]">
-              <span className="text-muted-foreground">Khôi phục: </span>
-              <span className="font-mono font-bold text-primary">{profile.sentenceRetrieval}/100</span>
-            </div>
-
-            <Link href="/foundation/sentence-builder">
-              <Button size="sm" className="rounded-xl font-bold text-xs gap-1 shadow-sm btn-spring h-8 px-3">
-                <span>Vào luyện</span>
-                <ArrowRight className="size-3" />
-              </Button>
-            </Link>
-          </div>
-        </Card>
-
-        {/* Vietnamese -> English Speaking Spotlight Card */}
-        <Card className="rounded-3xl border-2 border-emerald-500/40 bg-gradient-to-br from-card via-card to-emerald-500/10 shadow-sm p-5 space-y-3.5 relative overflow-hidden flex flex-col justify-between">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="size-10 rounded-2xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
-                <Target className="size-5" />
+            <div className="flex items-center justify-between pt-2.5 border-t border-border/60">
+              <div className="text-[11px]">
+                <span className="text-muted-foreground">Khôi phục: </span>
+                <span className="font-mono font-bold text-primary">{profile.sentenceRetrieval}/100</span>
               </div>
-              <Badge className="text-[10px] font-mono font-bold bg-emerald-600 text-white">
-                Func 2
-              </Badge>
+
+              <Link href="/foundation/sentence-builder">
+                <Button size="sm" className="rounded-xl font-semibold text-xs gap-1.5 btn-spring h-8 px-3.5 bg-primary text-primary-foreground shadow-xs">
+                  <span>Vào luyện</span>
+                  <ArrowRight className="size-3" />
+                </Button>
+              </Link>
             </div>
+          </Card>
 
-            <div className="space-y-1">
-              <h2 className="text-base font-bold text-foreground">
-                VN → EN Speaking
-              </h2>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Truy xuất trực tiếp từ ý niệm tiếng Việt sang câu nói tiếng Anh.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-2 border-t border-border/40">
-            <div className="text-[11px]">
-              <span className="text-muted-foreground">Tốc độ: </span>
-              <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{profile.responseSpeed}/100</span>
-            </div>
-
-            <Link href="/foundation/vn-to-en">
-              <Button size="sm" className="rounded-xl font-bold text-xs gap-1 shadow-sm btn-spring h-8 px-3 bg-emerald-600 hover:bg-emerald-700 text-white">
-                <span>Vào luyện</span>
-                <ArrowRight className="size-3" />
-              </Button>
-            </Link>
-          </div>
-        </Card>
-
-        {/* Spoken Repair Lab Spotlight Card */}
-        <Card className="rounded-3xl border-2 border-amber-500/40 bg-gradient-to-br from-card via-card to-amber-500/10 shadow-sm p-5 space-y-3.5 relative overflow-hidden flex flex-col justify-between">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="size-10 rounded-2xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
-                <RotateCcw className="size-5" />
+          {/* Vietnamese -> English Speaking Spotlight Card */}
+          <Card className="rounded-3xl border border-border/80 bg-card paper-shadow-sm hover:paper-shadow-hover transition-all p-5 space-y-3.5 relative overflow-hidden flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="size-10 rounded-2xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 flex items-center justify-center border border-emerald-500/20">
+                  <Target className="size-5" />
+                </div>
+                <Badge variant="secondary" className="text-[10px] font-mono rounded-full px-2">
+                  Reflex Flow
+                </Badge>
               </div>
-              <Badge className="text-[10px] font-mono font-bold bg-amber-600 text-white">
-                Func 3
-              </Badge>
-            </div>
 
-            <div className="space-y-1">
-              <h2 className="text-base font-bold text-foreground">
-                Repair Lab
-              </h2>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Chu trình Correct → Say Again: Sửa lỗi thực tế từ Error Bank.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-2 border-t border-border/40">
-            <div className="text-[11px]">
-              <span className="text-muted-foreground">Phục hồi: </span>
-              <span className="font-mono font-bold text-amber-600 dark:text-amber-400">92%</span>
-            </div>
-
-            <Link href="/foundation/retry-lab">
-              <Button size="sm" className="rounded-xl font-bold text-xs gap-1 shadow-sm btn-spring h-8 px-3 bg-amber-600 hover:bg-amber-700 text-white">
-                <span>Sửa lỗi</span>
-                <ArrowRight className="size-3" />
-              </Button>
-            </Link>
-          </div>
-        </Card>
-
-        {/* Response Latency Training Spotlight Card */}
-        <Card className="rounded-3xl border-2 border-orange-500/40 bg-gradient-to-br from-card via-card to-orange-500/10 shadow-sm p-5 space-y-3.5 relative overflow-hidden flex flex-col justify-between">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="size-10 rounded-2xl bg-orange-500/20 text-orange-600 dark:text-orange-400 flex items-center justify-center font-bold">
-                <Zap className="size-5 fill-current" />
+              <div className="space-y-1">
+                <h2 className="text-base font-serif font-bold text-foreground">
+                  VN → EN Speaking
+                </h2>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Truy xuất trực tiếp từ ý niệm tiếng Việt sang phản xạ câu nói tiếng Anh.
+                </p>
               </div>
-              <Badge className="text-[10px] font-mono font-bold bg-orange-600 text-white">
-                Func 4
-              </Badge>
             </div>
 
-            <div className="space-y-1">
-              <h2 className="text-base font-bold text-foreground">
-                Speed Gym
-              </h2>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Rèn luyện tốc độ phản xạ và loại bỏ độ trễ đóng băng khi nói.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-2 border-t border-border/40">
-            <div className="text-[11px]">
-              <span className="text-muted-foreground">Phản xạ: </span>
-              <span className="font-mono font-bold text-orange-600 dark:text-orange-400">2.4s</span>
-            </div>
-
-            <Link href="/foundation/latency">
-              <Button size="sm" className="rounded-xl font-bold text-xs gap-1 shadow-sm btn-spring h-8 px-3 bg-orange-600 hover:bg-orange-700 text-white">
-                <span>Tăng tốc</span>
-                <ArrowRight className="size-3" />
-              </Button>
-            </Link>
-          </div>
-        </Card>
-
-        {/* Personal Error Bank Spotlight Card */}
-        <Card className="rounded-3xl border-2 border-indigo-500/40 bg-gradient-to-br from-card via-card to-indigo-500/10 shadow-sm p-5 space-y-3.5 relative overflow-hidden flex flex-col justify-between">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="size-10 rounded-2xl bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
-                <Brain className="size-5" />
+            <div className="flex items-center justify-between pt-2.5 border-t border-border/60">
+              <div className="text-[11px]">
+                <span className="text-muted-foreground">Tốc độ: </span>
+                <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">{profile.responseSpeed}/100</span>
               </div>
-              <Badge className="text-[10px] font-mono font-bold bg-indigo-600 text-white">
-                Func 5
-              </Badge>
+
+              <Link href="/foundation/vn-to-en">
+                <Button size="sm" className="rounded-xl font-semibold text-xs gap-1.5 btn-spring h-8 px-3.5 bg-primary text-primary-foreground shadow-xs">
+                  <span>Vào luyện</span>
+                  <ArrowRight className="size-3" />
+                </Button>
+              </Link>
             </div>
+          </Card>
 
-            <div className="space-y-1">
-              <h2 className="text-base font-bold text-foreground">
-                Error Bank
-              </h2>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Bộ nhớ học tập dài hạn phân tích mẫu lỗi và ôn tập ngắt quãng.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-2 border-t border-border/40">
-            <div className="text-[11px]">
-              <span className="text-muted-foreground">Bộ nhớ: </span>
-              <span className="font-mono font-bold text-indigo-500">Longitudinal</span>
-            </div>
-
-            <Link href="/foundation/error-bank">
-              <Button size="sm" className="rounded-xl font-bold text-xs gap-1 shadow-sm btn-spring h-8 px-3 bg-indigo-600 hover:bg-indigo-700 text-white">
-                <span>Xem kho lỗi</span>
-                <ArrowRight className="size-3" />
-              </Button>
-            </Link>
-          </div>
-        </Card>
-
-        {/* Chunk Automaticity Studio Spotlight Card */}
-        <Card className="rounded-3xl border-2 border-purple-500/40 bg-gradient-to-br from-card via-card to-purple-500/10 shadow-sm p-5 space-y-3.5 relative overflow-hidden flex flex-col justify-between">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="size-10 rounded-2xl bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold">
-                <Layers className="size-5" />
+          {/* Spoken Repair Lab Spotlight Card */}
+          <Card className="rounded-3xl border border-border/80 bg-card paper-shadow-sm hover:paper-shadow-hover transition-all p-5 space-y-3.5 relative overflow-hidden flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="size-10 rounded-2xl bg-amber-500/10 text-amber-700 dark:text-amber-400 flex items-center justify-center border border-amber-500/20">
+                  <RotateCcw className="size-5" />
+                </div>
+                <Badge variant="secondary" className="text-[10px] font-mono rounded-full px-2">
+                  Error Bank
+                </Badge>
               </div>
-              <Badge className="text-[10px] font-mono font-bold bg-purple-600 text-white">
-                Func 6
-              </Badge>
-            </div>
 
-            <div className="space-y-1">
-              <h2 className="text-base font-bold text-foreground">
-                Chunk Studio
-              </h2>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Lắp ráp câu khẩu ngữ từ các khối có sẵn (Speech Chain Builder).
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-2 border-t border-border/40">
-            <div className="text-[11px]">
-              <span className="text-muted-foreground">Khối câu: </span>
-              <span className="font-mono font-bold text-purple-600 dark:text-purple-400">Automatic</span>
-            </div>
-
-            <Link href="/foundation/chunks">
-              <Button size="sm" className="rounded-xl font-bold text-xs gap-1 shadow-sm btn-spring h-8 px-3 bg-purple-600 hover:bg-purple-700 text-white">
-                <span>Ghép khối</span>
-                <ArrowRight className="size-3" />
-              </Button>
-            </Link>
-          </div>
-        </Card>
-
-        {/* Survival Speaking Studio Spotlight Card */}
-        <Card className="rounded-3xl border-2 border-rose-500/40 bg-gradient-to-br from-card via-card to-rose-500/10 shadow-sm p-5 space-y-3.5 relative overflow-hidden flex flex-col justify-between">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="size-10 rounded-2xl bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center font-bold">
-                <ShieldAlert className="size-5" />
+              <div className="space-y-1">
+                <h2 className="text-base font-serif font-bold text-foreground">
+                  Repair Lab
+                </h2>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Chu trình Correct → Say Again: Tự sửa lỗi thực tế từ Error Bank cá nhân.
+                </p>
               </div>
-              <Badge className="text-[10px] font-mono font-bold bg-rose-600 text-white">
-                Func 7
-              </Badge>
             </div>
 
-            <div className="space-y-1">
-              <h2 className="text-base font-bold text-foreground">
-                Survival Speaking
-              </h2>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Diễn giải vòng khi quên từ & xử lý sự cố giao tiếp thực tế.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-2 border-t border-border/40">
-            <div className="text-[11px]">
-              <span className="text-muted-foreground">Phản xạ: </span>
-              <span className="font-mono font-bold text-rose-600 dark:text-rose-400">Survival</span>
-            </div>
-
-            <Link href="/foundation/survival">
-              <Button size="sm" className="rounded-xl font-bold text-xs gap-1 shadow-sm btn-spring h-8 px-3 bg-rose-600 hover:bg-rose-700 text-white">
-                <span>Vào ứng biến</span>
-                <ArrowRight className="size-3" />
-              </Button>
-            </Link>
-          </div>
-        </Card>
-
-        {/* Spoken Vocabulary Studio Spotlight Card */}
-        <Card className="rounded-3xl border-2 border-teal-500/40 bg-gradient-to-br from-card via-card to-teal-500/10 shadow-sm p-5 space-y-3.5 relative overflow-hidden flex flex-col justify-between">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="size-10 rounded-2xl bg-teal-500/20 text-teal-600 dark:text-teal-400 flex items-center justify-center font-bold">
-                <BookOpen className="size-5" />
+            <div className="flex items-center justify-between pt-2.5 border-t border-border/60">
+              <div className="text-[11px]">
+                <span className="text-muted-foreground">Tự sửa lỗi: </span>
+                <span className="font-mono font-bold text-amber-700 dark:text-amber-400">92%</span>
               </div>
-              <Badge className="text-[10px] font-mono font-bold bg-teal-600 text-white">
-                Func 8
-              </Badge>
+
+              <Link href="/foundation/retry-lab">
+                <Button size="sm" className="rounded-xl font-semibold text-xs gap-1.5 btn-spring h-8 px-3.5 bg-primary text-primary-foreground shadow-xs">
+                  <span>Sửa lỗi</span>
+                  <ArrowRight className="size-3" />
+                </Button>
+              </Link>
             </div>
+          </Card>
 
-            <div className="space-y-1">
-              <h2 className="text-base font-bold text-foreground">
-                Spoken Vocabulary
-              </h2>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Quy trình 2 bước: Phát âm từ đơn → Đọc câu trong ngữ cảnh.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-2 border-t border-border/40">
-            <div className="text-[11px]">
-              <span className="text-muted-foreground">Từ vựng: </span>
-              <span className="font-mono font-bold text-teal-600 dark:text-teal-400">In Context</span>
-            </div>
-
-            <Link href="/foundation/vocabulary">
-              <Button size="sm" className="rounded-xl font-bold text-xs gap-1 shadow-sm btn-spring h-8 px-3 bg-teal-600 hover:bg-teal-700 text-white">
-                <span>Học từ vựng</span>
-                <ArrowRight className="size-3" />
-              </Button>
-            </Link>
-          </div>
-        </Card>
-
-        {/* Shadowing Studio Spotlight Card */}
-        <Card className="rounded-3xl border border-border/80 bg-card hover:border-indigo-500/40 transition-all p-5 space-y-3.5 relative overflow-hidden flex flex-col justify-between">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="size-10 rounded-2xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
-                <Video className="size-5" />
+          {/* Response Latency Training Spotlight Card */}
+          <Card className="rounded-3xl border border-border/80 bg-card paper-shadow-sm hover:paper-shadow-hover transition-all p-5 space-y-3.5 relative overflow-hidden flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="size-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border border-primary/20">
+                  <Zap className="size-5 fill-current" />
+                </div>
+                <Badge variant="secondary" className="text-[10px] font-mono rounded-full px-2">
+                  TTFW Gym
+                </Badge>
               </div>
-              <Badge variant="secondary" className="text-[10px] font-mono">
-                Studio
-              </Badge>
+
+              <div className="space-y-1">
+                <h2 className="text-base font-serif font-bold text-foreground">
+                  Speed Gym
+                </h2>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Rèn luyện tốc độ phản xạ và loại bỏ độ trễ đóng băng trước khi mở lời.
+                </p>
+              </div>
             </div>
 
-            <div className="space-y-1">
-              <h2 className="text-base font-bold text-foreground">
-                Shadowing Studio
-              </h2>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Luyện nhại âm theo nhịp thở Thought Groups và chấm điểm 4-D.
-              </p>
-            </div>
-          </div>
+            <div className="flex items-center justify-between pt-2.5 border-t border-border/60">
+              <div className="text-[11px]">
+                <span className="text-muted-foreground">Phản xạ: </span>
+                <span className="font-mono font-bold text-primary">2.4s</span>
+              </div>
 
-          <div className="flex items-center justify-between pt-2 border-t border-border/40">
-            <div className="text-[11px]">
-              <span className="text-muted-foreground">Trôi chảy: </span>
-              <span className="font-mono font-bold text-indigo-500">{profile.fluency}/100</span>
+              <Link href="/foundation/latency">
+                <Button size="sm" className="rounded-xl font-semibold text-xs gap-1.5 btn-spring h-8 px-3.5 bg-primary text-primary-foreground shadow-xs">
+                  <span>Tăng tốc</span>
+                  <ArrowRight className="size-3" />
+                </Button>
+              </Link>
+            </div>
+          </Card>
+
+          {/* Personal Error Bank Spotlight Card */}
+          <Card className="rounded-3xl border border-border/80 bg-card paper-shadow-sm hover:paper-shadow-hover transition-all p-5 space-y-3.5 relative overflow-hidden flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="size-10 rounded-2xl bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 flex items-center justify-center border border-indigo-500/20">
+                  <Brain className="size-5" />
+                </div>
+                <Badge variant="secondary" className="text-[10px] font-mono rounded-full px-2">
+                  Memory Bank
+                </Badge>
+              </div>
+
+              <div className="space-y-1">
+                <h2 className="text-base font-serif font-bold text-foreground">
+                  Error Bank
+                </h2>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Bộ nhớ học tập dài hạn phân tích mẫu lỗi và kích hoạt ôn tập ngắt quãng.
+                </p>
+              </div>
             </div>
 
-            <Link href="/foundation/shadowing">
-              <Button variant="secondary" size="sm" className="rounded-xl font-bold text-xs gap-1 btn-spring h-8 px-3">
-                <span>Mở Studio</span>
-                <ArrowRight className="size-3" />
-              </Button>
-            </Link>
-          </div>
-        </Card>
+            <div className="flex items-center justify-between pt-2.5 border-t border-border/60">
+              <div className="text-[11px]">
+                <span className="text-muted-foreground">Bộ nhớ: </span>
+                <span className="font-mono font-bold text-indigo-700 dark:text-indigo-400">Longitudinal</span>
+              </div>
+
+              <Link href="/foundation/error-bank">
+                <Button size="sm" className="rounded-xl font-semibold text-xs gap-1.5 btn-spring h-8 px-3.5 bg-primary text-primary-foreground shadow-xs">
+                  <span>Xem kho lỗi</span>
+                  <ArrowRight className="size-3" />
+                </Button>
+              </Link>
+            </div>
+          </Card>
+
+          {/* Chunk Automaticity Studio Spotlight Card */}
+          <Card className="rounded-3xl border border-border/80 bg-card paper-shadow-sm hover:paper-shadow-hover transition-all p-5 space-y-3.5 relative overflow-hidden flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="size-10 rounded-2xl bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 flex items-center justify-center border border-indigo-500/20">
+                  <Layers className="size-5" />
+                </div>
+                <Badge variant="secondary" className="text-[10px] font-mono rounded-full px-2">
+                  Chunks
+                </Badge>
+              </div>
+
+              <div className="space-y-1">
+                <h2 className="text-base font-serif font-bold text-foreground">
+                  Chunk Studio
+                </h2>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Lắp ráp câu khẩu ngữ từ các khối cụm từ tự nhiên (Speech Chain Builder).
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2.5 border-t border-border/60">
+              <div className="text-[11px]">
+                <span className="text-muted-foreground">Khối câu: </span>
+                <span className="font-mono font-bold text-indigo-700 dark:text-indigo-400">Automatic</span>
+              </div>
+
+              <Link href="/foundation/chunks">
+                <Button size="sm" className="rounded-xl font-semibold text-xs gap-1.5 btn-spring h-8 px-3.5 bg-primary text-primary-foreground shadow-xs">
+                  <span>Ghép khối</span>
+                  <ArrowRight className="size-3" />
+                </Button>
+              </Link>
+            </div>
+          </Card>
+
+          {/* Survival Speaking Studio Spotlight Card */}
+          <Card className="rounded-3xl border border-border/80 bg-card paper-shadow-sm hover:paper-shadow-hover transition-all p-5 space-y-3.5 relative overflow-hidden flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="size-10 rounded-2xl bg-rose-500/10 text-rose-700 dark:text-rose-400 flex items-center justify-center border border-rose-500/20">
+                  <ShieldAlert className="size-5" />
+                </div>
+                <Badge variant="secondary" className="text-[10px] font-mono rounded-full px-2">
+                  Survival
+                </Badge>
+              </div>
+
+              <div className="space-y-1">
+                <h2 className="text-base font-serif font-bold text-foreground">
+                  Survival Speaking
+                </h2>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Diễn giải vòng khi quên từ & xử lý sự cố giao tiếp thực tế linh hoạt.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2.5 border-t border-border/60">
+              <div className="text-[11px]">
+                <span className="text-muted-foreground">Phản xạ: </span>
+                <span className="font-mono font-bold text-rose-700 dark:text-rose-400">Survival</span>
+              </div>
+
+              <Link href="/foundation/survival">
+                <Button size="sm" className="rounded-xl font-semibold text-xs gap-1.5 btn-spring h-8 px-3.5 bg-primary text-primary-foreground shadow-xs">
+                  <span>Ứng biến</span>
+                  <ArrowRight className="size-3" />
+                </Button>
+              </Link>
+            </div>
+          </Card>
+
+          {/* Spoken Vocabulary Studio Spotlight Card */}
+          <Card className="rounded-3xl border border-border/80 bg-card paper-shadow-sm hover:paper-shadow-hover transition-all p-5 space-y-3.5 relative overflow-hidden flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="size-10 rounded-2xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 flex items-center justify-center border border-emerald-500/20">
+                  <BookOpen className="size-5" />
+                </div>
+                <Badge variant="secondary" className="text-[10px] font-mono rounded-full px-2">
+                  In Context
+                </Badge>
+              </div>
+
+              <div className="space-y-1">
+                <h2 className="text-base font-serif font-bold text-foreground">
+                  Spoken Vocabulary
+                </h2>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Quy trình 2 bước: Kích hoạt âm vị từ đơn → Tái sử dụng trong câu ngữ cảnh.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2.5 border-t border-border/60">
+              <div className="text-[11px]">
+                <span className="text-muted-foreground">Từ vựng: </span>
+                <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">In Context</span>
+              </div>
+
+              <Link href="/foundation/vocabulary">
+                <Button size="sm" className="rounded-xl font-semibold text-xs gap-1.5 btn-spring h-8 px-3.5 bg-primary text-primary-foreground shadow-xs">
+                  <span>Học từ</span>
+                  <ArrowRight className="size-3" />
+                </Button>
+              </Link>
+            </div>
+          </Card>
+
+          {/* Shadowing Studio Spotlight Card */}
+          <Card className="rounded-3xl border border-border/80 bg-card paper-shadow-sm hover:paper-shadow-hover transition-all p-5 space-y-3.5 relative overflow-hidden flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="size-10 rounded-2xl bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 flex items-center justify-center border border-indigo-500/20">
+                  <Video className="size-5" />
+                </div>
+                <Badge variant="secondary" className="text-[10px] font-mono rounded-full px-2">
+                  Thought Groups
+                </Badge>
+              </div>
+
+              <div className="space-y-1">
+                <h2 className="text-base font-serif font-bold text-foreground">
+                  Shadowing Studio
+                </h2>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Luyện nhại âm theo nhịp thở Thought Groups và chấm điểm 4 chiều trôi chảy.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2.5 border-t border-border/60">
+              <div className="text-[11px]">
+                <span className="text-muted-foreground">Trôi chảy: </span>
+                <span className="font-mono font-bold text-indigo-700 dark:text-indigo-400">{profile.fluency}/100</span>
+              </div>
+
+              <Link href="/foundation/shadowing">
+                <Button size="sm" className="rounded-xl font-semibold text-xs gap-1.5 btn-spring h-8 px-3.5 bg-primary text-primary-foreground shadow-xs">
+                  <span>Mở Studio</span>
+                  <ArrowRight className="size-3" />
+                </Button>
+              </Link>
+            </div>
+          </Card>
+        </div>
       </div>
 
       {/* Grid: Foundation Profile & Level Progression */}
       <div className="grid md:grid-cols-2 gap-6">
         {/* Profile Card */}
-        <Card className="rounded-3xl border border-border/80 bg-card shadow-xs">
-          <CardHeader className="p-5 pb-3 border-b border-border/40">
-            <CardTitle className="text-base font-bold flex items-center gap-2">
-              <Target className="size-4 text-primary" />
+        <Card className="rounded-3xl border border-border/80 bg-card paper-shadow-sm">
+          <CardHeader className="p-5 pb-3 border-b border-border/60">
+            <CardTitle className="text-base font-serif font-bold flex items-center gap-2 text-foreground">
+              <Target className="size-4.5 text-primary" />
               <span>Chỉ số sản sinh ngôn ngữ</span>
             </CardTitle>
-            <CardDescription className="text-xs">
+            <CardDescription className="text-xs text-muted-foreground">
               Đo lường năng lực phản xạ tiếng Anh tự nhiên (0-100)
             </CardDescription>
           </CardHeader>
           <CardContent className="p-5 space-y-3.5">
-            <ProfileRow label="Sản sinh tổng thể (Overall)" v={profile.overallProduction} color="bg-primary" />
-            <ProfileRow label="Phản xạ gọi câu (Retrieval)" v={profile.sentenceRetrieval} color="bg-indigo-500" />
-            <ProfileRow label="Tốc độ phản xạ (Response Speed)" v={profile.responseSpeed} color="bg-emerald-500" />
-            <ProfileRow label="Độ trôi chảy (Fluency)" v={profile.fluency} color="bg-blue-500" />
-            <ProfileRow label="Độ tự tin (Confidence)" v={profile.confidence} color="bg-amber-500" />
-            <ProfileRow label="Mở rộng câu (Expansion)" v={profile.expansionAbility} color="bg-purple-500" />
-            <ProfileRow label="Tự sửa lỗi (Recovery)" v={profile.recoveryAbility} color="bg-teal-500" />
+            <ProfileRow label="Sản sinh tổng thể (Overall)" v={profile.overallProduction} />
+            <ProfileRow label="Phản xạ gọi câu (Retrieval)" v={profile.sentenceRetrieval} />
+            <ProfileRow label="Tốc độ phản xạ (Response Speed)" v={profile.responseSpeed} />
+            <ProfileRow label="Độ trôi chảy (Fluency)" v={profile.fluency} />
+            <ProfileRow label="Độ tự tin (Confidence)" v={profile.confidence} />
+            <ProfileRow label="Mở rộng câu (Expansion)" v={profile.expansionAbility} />
+            <ProfileRow label="Tự sửa lỗi (Recovery)" v={profile.recoveryAbility} />
 
-            <div className="pt-2 border-t border-border/40 text-xs text-muted-foreground flex items-center justify-between">
+            <div className="pt-2 border-t border-border/60 text-xs text-muted-foreground flex items-center justify-between">
               <span>Độ phụ thuộc dịch nhẩm (Translation):</span>
-              <Badge variant="outline" className="font-mono text-xs">
+              <Badge variant="outline" className="font-mono text-xs bg-secondary border-border/60 text-foreground/80">
                 {profile.translationDependency}/100 (càng thấp càng tốt)
               </Badge>
             </div>
@@ -475,13 +484,13 @@ export default function FoundationOverview() {
         </Card>
 
         {/* Level Progression 0 -> 10 */}
-        <Card className="rounded-3xl border border-border/80 bg-card shadow-xs flex flex-col justify-between">
-          <CardHeader className="p-5 pb-3 border-b border-border/40">
-            <CardTitle className="text-base font-bold flex items-center gap-2">
-              <Layers className="size-4 text-primary" />
+        <Card className="rounded-3xl border border-border/80 bg-card paper-shadow-sm flex flex-col justify-between">
+          <CardHeader className="p-5 pb-3 border-b border-border/60">
+            <CardTitle className="text-base font-serif font-bold flex items-center gap-2 text-foreground">
+              <Layers className="size-4.5 text-primary" />
               <span>Lộ trình bậc thang Level 0 → 10</span>
             </CardTitle>
-            <CardDescription className="text-xs">
+            <CardDescription className="text-xs text-muted-foreground">
               Không cần học tuyến tính — AI tự động đề xuất level theo năng lực
             </CardDescription>
           </CardHeader>
@@ -491,7 +500,7 @@ export default function FoundationOverview() {
               {levelSteps.map((step) => (
                 <div
                   key={step.lvl}
-                  className="p-2.5 rounded-xl border border-border/60 bg-muted/20 hover:bg-primary/5 transition-colors flex flex-col"
+                  className="p-2.5 rounded-xl border border-border/60 bg-secondary/40 hover:bg-primary/[0.04] transition-colors flex flex-col"
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-bold font-mono text-primary">L{step.lvl}</span>
@@ -502,11 +511,11 @@ export default function FoundationOverview() {
               ))}
             </div>
 
-            <div className="pt-2 border-t border-border/40 space-y-2">
-              <span className="text-xs font-semibold text-foreground block">Các kỹ năng cốt lõi:</span>
+            <div className="pt-2 border-t border-border/60 space-y-2">
+              <span className="text-xs font-serif font-bold text-foreground block">Các kỹ năng cốt lõi:</span>
               <div className="flex flex-wrap gap-1.5">
                 {SKILL_TAXONOMY.slice(0, 10).map((s) => (
-                  <Badge key={s.skill} variant="secondary" className="text-[11px] rounded-lg">
+                  <Badge key={s.skill} variant="secondary" className="text-[11px] rounded-lg bg-secondary border border-border/60 text-foreground/80">
                     {s.labelVi}
                   </Badge>
                 ))}
@@ -517,13 +526,13 @@ export default function FoundationOverview() {
       </div>
 
       {/* Skill Progress Grid */}
-      <Card className="rounded-3xl border border-border/80 bg-card shadow-xs">
-        <CardHeader className="p-5 pb-3 border-b border-border/40">
-          <CardTitle className="text-base font-bold flex items-center gap-2">
-            <BarChart3 className="size-4 text-primary" />
+      <Card className="rounded-3xl border border-border/80 bg-card paper-shadow-sm">
+        <CardHeader className="p-5 pb-3 border-b border-border/60">
+          <CardTitle className="text-base font-serif font-bold flex items-center gap-2 text-foreground">
+            <BarChart3 className="size-4.5 text-primary" />
             <span>Tiến trình kỹ năng thực tế</span>
           </CardTitle>
-          <CardDescription className="text-xs">
+          <CardDescription className="text-xs text-muted-foreground">
             Dữ liệu tích luỹ từ các lượt luyện tập và đánh giá của bạn
           </CardDescription>
         </CardHeader>
@@ -531,7 +540,7 @@ export default function FoundationOverview() {
           {SKILL_TAXONOMY.slice(0, 9).map((s) => {
             const { value } = getSkillProgress(s.skill);
             return (
-              <div key={s.skill} className="p-3 rounded-2xl bg-muted/20 border border-border/40 space-y-2">
+              <div key={s.skill} className="p-3.5 rounded-2xl bg-secondary/40 border border-border/60 space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-semibold text-foreground truncate">{s.labelVi}</span>
                   <span className="font-mono text-muted-foreground font-bold">{value}%</span>
@@ -546,7 +555,7 @@ export default function FoundationOverview() {
   );
 }
 
-function ProfileRow({ label, v, color }: { label: string; v: number; color?: string }) {
+function ProfileRow({ label, v }: { label: string; v: number; color?: string }) {
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-xs">

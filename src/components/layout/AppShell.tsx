@@ -98,7 +98,7 @@ export function AppShell({ children }: AppShellProps) {
       {/* Main Content Area */}
       <div className="flex flex-col flex-1 h-full min-w-0 overflow-hidden">
         {/* Top Header Bar */}
-        <header className="flex items-center justify-between h-16 px-4 md:px-6 border-b border-border/70 bg-card/60 backdrop-blur-md shrink-0 z-20">
+        <header className="flex items-center justify-between h-16 px-4 md:px-6 border-b border-border/60 bg-background/80 backdrop-blur-md shrink-0 z-20">
           {/* Mobile Menu & Page Title */}
           <div className="flex items-center gap-3">
             <div className="md:hidden">
@@ -122,7 +122,7 @@ export function AppShell({ children }: AppShellProps) {
             </div>
 
             <div className="flex flex-col">
-              <h1 className="text-base md:text-lg font-bold tracking-tight text-foreground truncate flex items-center gap-2">
+              <h1 className="text-base md:text-lg font-serif font-bold tracking-tight text-foreground truncate flex items-center gap-2">
                 {currentItem.label}
               </h1>
               <span className="text-xs text-muted-foreground hidden sm:inline-block">
@@ -139,7 +139,7 @@ export function AppShell({ children }: AppShellProps) {
                 <Button
                   size="sm"
                   variant="default"
-                  className="gap-2 font-medium shadow-sm shadow-primary/25 rounded-full px-3.5 h-9 btn-spring"
+                  className="gap-2 font-medium shadow-xs rounded-full px-3.5 h-9 btn-spring"
                 >
                   <Mic className="size-4 animate-pulse" />
                   <span className="hidden sm:inline">Phòng luyện nói</span>
@@ -155,12 +155,12 @@ export function AppShell({ children }: AppShellProps) {
               variant="outline"
               size="sm"
               onClick={() => setIsKeybindingsOpen(true)}
-              className="rounded-full h-9 px-2.5 gap-1.5 text-muted-foreground hover:text-foreground border-border/80 btn-spring shadow-2xs"
+              className="rounded-full h-9 px-2.5 gap-1.5 text-muted-foreground hover:text-foreground border-border/70 hover:bg-secondary/60 btn-spring"
               title="Phím tắt toàn hệ thống (Bấm ?)"
               aria-label="Phím tắt toàn hệ thống (Bấm ?)"
             >
               <Keyboard className="size-4" />
-              <kbd className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-muted border border-border/60 text-foreground">
+              <kbd className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-muted/80 border border-border/60 text-foreground">
                 ?
               </kbd>
             </Button>
@@ -170,10 +170,10 @@ export function AppShell({ children }: AppShellProps) {
               variant="outline"
               size="icon"
               onClick={toggleTheme}
-              className="rounded-full size-9 text-muted-foreground hover:text-foreground btn-spring"
+              className="rounded-full size-9 text-muted-foreground hover:text-foreground border-border/70 hover:bg-secondary/60 btn-spring"
               aria-label="Chuyển đổi giao diện Sáng / Tối"
             >
-              {isDark ? <Sun className="size-4 text-amber-400" /> : <Moon className="size-4" />}
+              {isDark ? <Sun className="size-4 text-amber-500" /> : <Moon className="size-4" />}
             </Button>
           </div>
         </header>

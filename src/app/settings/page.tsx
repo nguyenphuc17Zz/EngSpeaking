@@ -25,14 +25,12 @@ import {
   Zap,
   Radio,
   ArrowRightLeft,
-  Layers,
-  Repeat,
-  Flame,
   Mic,
   MicOff,
   Trash2,
   Volume2,
-  MessageSquare,
+  Headphones,
+  SlidersHorizontal,
 } from "lucide-react";
 import Link from "next/link";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
@@ -173,37 +171,33 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6 pb-12 max-w-4xl mx-auto">
-      {/* Header Banner */}
-      <Card className="rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-background shadow-xs overflow-hidden">
+      {/* Header Banner - Warm Editorial Luxury */}
+      <Card className="rounded-3xl border border-border/80 bg-card/90 paper-shadow overflow-hidden">
         <CardContent className="p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="space-y-2 max-w-xl">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/15 text-primary text-xs font-semibold">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-terracotta/10 text-terracotta border border-terracotta/20 text-xs font-semibold">
               <Settings2 className="size-3.5" />
-              <span>AI Provider & Engine Configuration</span>
+              <span>System Architecture & Sound Lab</span>
             </div>
-            <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
-              Cài đặt & Cấu hình Mô hình
+            <h1 className="font-serif text-2xl md:text-3xl font-bold tracking-tight text-foreground">
+              Cấu hình Hệ thống & Phòng thu Âm thanh
             </h1>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Quản lý API Key, kiểm tra độ trễ (ping test), chọn động cơ chính và tùy chỉnh model riêng biệt cho từng bài tập Foundation.
+              Quản lý khoá API, tinh chỉnh bộ khuếch đại micro phòng thu (DSP), chọn chất giọng phát âm bản xứ và điều phối mô hình AI cho từng bài luyện phản xạ.
             </p>
           </div>
         </CardContent>
       </Card>
 
       {/* ==================== ACTIVE ENGINE STATUS BANNER ==================== */}
-      <Card
-        className={`rounded-3xl border-2 p-5 shadow-xs transition-all ${
-          isGeminiActive
-            ? "border-primary/50 bg-gradient-to-r from-primary/15 via-card to-primary/5"
-            : "border-orange-500/50 bg-gradient-to-r from-orange-500/15 via-card to-orange-500/5"
-        }`}
-      >
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
+      <div className="rounded-3xl border border-border/80 bg-card/90 paper-shadow p-5 md:p-6 transition-all">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+          <div className="flex items-center gap-4">
             <div
-              className={`size-12 rounded-2xl flex items-center justify-center shadow-xs ${
-                isGeminiActive ? "bg-primary text-primary-foreground" : "bg-orange-500 text-white"
+              className={`size-12 rounded-2xl flex items-center justify-center shadow-xs shrink-0 ${
+                isGeminiActive
+                  ? "bg-terracotta text-white"
+                  : "bg-ink text-parchment dark:bg-parchment dark:text-ink"
               }`}
             >
               {isGeminiActive ? <Sparkles className="size-6" /> : <Cpu className="size-6" />}
@@ -214,22 +208,22 @@ export default function SettingsPage() {
                   Động cơ AI chính:
                 </span>
                 <Badge
-                  className={`text-xs font-mono font-bold gap-1 px-2.5 py-0.5 ${
+                  className={`text-xs font-mono font-semibold gap-1.5 px-2.5 py-0.5 ${
                     isGeminiActive
-                      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
-                      : "bg-orange-500/20 text-orange-600 dark:text-orange-400 border border-orange-500/30"
+                      ? "bg-sage/15 text-sage border border-sage/30"
+                      : "bg-terracotta/15 text-terracotta border border-terracotta/30"
                   }`}
                 >
-                  <CheckCircle2 className="size-3.5 text-emerald-500" />
+                  <CheckCircle2 className="size-3.5 text-sage" />
                   <span>ĐANG ÁP DỤNG: {isGeminiActive ? "GOOGLE GEMINI" : "GROQ AI"}</span>
                 </Badge>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-base md:text-lg font-bold text-foreground font-mono">
+                <span className="text-base md:text-lg font-bold font-mono text-foreground">
                   {activeModel}
                 </span>
                 <span className="text-xs text-muted-foreground hidden md:inline">
-                  • Đang cấp quyền xử lý ngôn ngữ cho toàn bộ ứng dụng
+                  • Cung cấp trí tuệ ngôn ngữ cho toàn bộ ứng dụng
                 </span>
               </div>
             </div>
@@ -239,29 +233,27 @@ export default function SettingsPage() {
             size="sm"
             variant="outline"
             onClick={handleToggleActiveProvider}
-            className={`h-9 px-3.5 rounded-xl text-xs font-semibold gap-2 shrink-0 btn-spring ${
-              isGeminiActive
-                ? "border-orange-500/40 text-orange-600 dark:text-orange-400 hover:bg-orange-500/10"
-                : "border-primary/40 text-primary hover:bg-primary/10"
-            }`}
+            className="h-9 px-4 rounded-xl text-xs font-semibold gap-2 shrink-0 border-border/80 hover:bg-muted/50 btn-spring"
           >
-            <ArrowRightLeft className="size-3.5" />
+            <ArrowRightLeft className="size-3.5 text-terracotta" />
             <span>Chuyển sang {isGeminiActive ? "Groq (Llama 3.3)" : "Gemini (3.7 Flash)"}</span>
           </Button>
         </div>
-      </Card>
+      </div>
 
       {/* Direct API Key Management & Independent Model Selection */}
       <ApiKeyManager onKeyUpdated={fetchProviders} />
 
       {/* AI Mode & Orchestration Policy */}
-      <Card className="rounded-3xl border border-border/80 bg-card shadow-xs">
+      <Card className="rounded-3xl border border-border/80 bg-card/90 paper-shadow overflow-hidden">
         <CardHeader className="p-5 pb-3 border-b border-border/40">
           <CardTitle className="text-sm font-bold flex items-center gap-2">
-            <Sliders className="size-4 text-primary" />
+            <span className="flex size-7 items-center justify-center rounded-xl bg-terracotta/10 text-terracotta">
+              <Sliders className="size-4" />
+            </span>
             <span>Chế độ điều phối AI (Orchestrator Policy)</span>
           </CardTitle>
-          <CardDescription className="text-xs">
+          <CardDescription className="text-xs text-muted-foreground">
             Auto: Hệ thống tự tối ưu latency & chi phí. Manual: Tôn trọng cấu hình thủ công của bạn
           </CardDescription>
         </CardHeader>
@@ -274,8 +266,8 @@ export default function SettingsPage() {
                 value={settings.aiProfile.mode}
                 onValueChange={(v: string | null) => v && settings.setAIProfile({ mode: v as "auto" | "manual" })}
               >
-                <SelectTrigger className="rounded-xl h-9 text-xs">
-                  <span>{settings.aiProfile.mode === "auto" ? "Tự động (Auto)" : "Thủ công (Manual)"}</span>
+                <SelectTrigger className="rounded-xl h-10 text-xs border-border/80">
+                  <SelectValue placeholder="Chọn chế độ" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="auto">Tự động (Auto)</SelectItem>
@@ -290,8 +282,8 @@ export default function SettingsPage() {
                 value={settings.aiProfile.qualityPreference}
                 onValueChange={(v: string | null) => v && settings.setAIProfile({ qualityPreference: v as never })}
               >
-                <SelectTrigger className="rounded-xl h-9 text-xs">
-                  <span>{settings.aiProfile.qualityPreference}</span>
+                <SelectTrigger className="rounded-xl h-10 text-xs border-border/80">
+                  <SelectValue placeholder="Chọn chất lượng" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="economy">Economy (Tiết kiệm)</SelectItem>
@@ -307,8 +299,8 @@ export default function SettingsPage() {
                 value={settings.aiProfile.latencyPreference}
                 onValueChange={(v: string | null) => v && settings.setAIProfile({ latencyPreference: v as never })}
               >
-                <SelectTrigger className="rounded-xl h-9 text-xs">
-                  <span>{settings.aiProfile.latencyPreference}</span>
+                <SelectTrigger className="rounded-xl h-10 text-xs border-border/80">
+                  <SelectValue placeholder="Chọn độ trễ" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="fast">Fast (Nhanh nhất)</SelectItem>
@@ -324,8 +316,8 @@ export default function SettingsPage() {
                 value={settings.aiProfile.fallbackEnabled ? "on" : "off"}
                 onValueChange={(v: string | null) => v && settings.setAIProfile({ fallbackEnabled: v === "on" })}
               >
-                <SelectTrigger className="rounded-xl h-9 text-xs">
-                  <span>{settings.aiProfile.fallbackEnabled ? "BẬT (ON)" : "TẮT (OFF)"}</span>
+                <SelectTrigger className="rounded-xl h-10 text-xs border-border/80">
+                  <SelectValue placeholder="Dự phòng" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="off">TẮT — Báo lỗi rõ</SelectItem>
@@ -338,18 +330,18 @@ export default function SettingsPage() {
       </Card>
 
       {/* 🎙️ Dedicated Speech-to-Text Section */}
-      <Card className="rounded-3xl border border-border/80 bg-card shadow-xs overflow-hidden">
+      <Card className="rounded-3xl border border-border/80 bg-card/90 paper-shadow overflow-hidden">
         <CardHeader className="p-5 pb-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle className="text-base font-bold flex items-center gap-2.5">
-              <span className="flex size-7 items-center justify-center rounded-xl bg-blue-500/10 text-blue-500">
-                <Mic className="size-4" />
+              <span className="flex size-8 items-center justify-center rounded-xl bg-terracotta/10 text-terracotta">
+                <Mic className="size-4.5" />
               </span>
               <span>🎙️ Nhận dạng giọng nói (Speech-to-Text)</span>
             </CardTitle>
             <div className="flex items-center gap-1.5">
-              <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-xs font-semibold px-2.5 py-1 gap-1.5 font-mono">
-                <CheckCircle2 className="size-3.5 text-emerald-500" />
+              <Badge className="bg-sage/15 text-sage border border-sage/30 text-xs font-semibold px-2.5 py-1 gap-1.5 font-mono">
+                <CheckCircle2 className="size-3.5 text-sage" />
                 <span>Đang áp dụng: {sttProviderDisplay}</span>
               </Badge>
             </div>
@@ -361,11 +353,13 @@ export default function SettingsPage() {
 
         <CardContent className="p-5 pt-2 space-y-4">
           {/* Summary Callout Banner */}
-          <div className="rounded-2xl bg-blue-500/10 border border-blue-500/20 p-3.5 text-xs text-foreground flex items-center gap-2.5">
-            <Zap className="size-4 shrink-0 text-blue-500" />
+          <div className="rounded-2xl bg-parchment/80 dark:bg-card/80 border border-border/70 p-4 text-xs text-foreground flex items-center gap-3">
+            <div className="size-8 rounded-xl bg-terracotta/10 text-terracotta flex items-center justify-center shrink-0">
+              <Zap className="size-4" />
+            </div>
             <div className="leading-relaxed">
               <span>Hệ thống đang sử dụng </span>
-              <strong className="text-blue-600 dark:text-blue-400 font-semibold">{sttProviderDisplay}</strong>
+              <strong className="text-terracotta font-semibold">{sttProviderDisplay}</strong>
               <span> để nhận dạng giọng nói tiếng Anh của bạn trong tất cả bài luyện nói, shadowing và đối thoại AI.</span>
             </div>
           </div>
@@ -380,24 +374,24 @@ export default function SettingsPage() {
           />
 
           {/* Voice Amplification & DSP Normalization Controls */}
-          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+          <div className="rounded-2xl border border-border/80 bg-muted/20 p-4 space-y-3.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className="flex size-6 items-center justify-center rounded-lg bg-primary/20 text-primary">
+                <span className="flex size-6 items-center justify-center rounded-lg bg-terracotta/15 text-terracotta">
                   <Volume2 className="size-3.5" />
                 </span>
                 <span className="text-xs font-bold text-foreground">
                   Khuếch đại giọng nói & Chuẩn hóa âm lượng (DSP Voice Booster)
                 </span>
               </div>
-              <Badge variant="outline" className="text-[10px] font-mono border-primary/30 text-primary">
+              <Badge variant="outline" className="text-[10px] font-mono border-border/80 text-muted-foreground">
                 Auto Normalization + Soft Limiter
               </Badge>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
               {/* Auto Normalization Toggle */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-card border border-border/70">
+              <div className="flex items-center justify-between p-3.5 rounded-xl bg-card border border-border/70">
                 <div className="space-y-0.5 pr-2">
                   <Label className="text-xs font-semibold cursor-pointer" htmlFor="auto-normalize-switch">
                     Tự động chuẩn hóa âm lượng
@@ -413,15 +407,15 @@ export default function SettingsPage() {
                   onChange={(e) =>
                     settings.setAudioEnhancement({ autoNormalize: e.target.checked })
                   }
-                  className="size-4 rounded accent-primary cursor-pointer"
+                  className="size-4 rounded accent-terracotta cursor-pointer"
                 />
               </div>
 
               {/* Mic Gain Slider */}
-              <div className="space-y-1.5 p-3 rounded-xl bg-card border border-border/70">
+              <div className="space-y-1.5 p-3.5 rounded-xl bg-card border border-border/70">
                 <div className="flex items-center justify-between text-xs">
                   <Label className="text-xs font-semibold">Độ nhạy Micro (Gain Boost)</Label>
-                  <span className="font-mono font-bold text-primary">
+                  <span className="font-mono font-bold text-terracotta">
                     {(settings.audioEnhancement?.micGain ?? 1.5).toFixed(1)}x (+{(20 * Math.log10(settings.audioEnhancement?.micGain ?? 1.5)).toFixed(1)} dB)
                   </span>
                 </div>
@@ -434,7 +428,7 @@ export default function SettingsPage() {
                   onChange={(e) =>
                     settings.setAudioEnhancement({ micGain: parseFloat(e.target.value) })
                   }
-                  className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                  className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-terracotta"
                 />
                 <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
                   <span>1.0x (Gốc)</span>
@@ -447,11 +441,11 @@ export default function SettingsPage() {
           </div>
 
           {/* Live Mic Test Panel */}
-          <div className="rounded-2xl border border-border/60 bg-muted/30 p-4 space-y-3">
+          <div className="rounded-2xl border border-border/80 bg-card p-4 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
-                  <Radio className="size-3.5 text-primary" />
+                  <Radio className="size-3.5 text-terracotta" />
                   <span>Thử nghiệm Microphone & Nhận diện ({isServerSTT ? "Audio Recording & AI Processing" : "Real-time Streaming"})</span>
                 </Label>
                 {isMicListening ? (
@@ -460,7 +454,7 @@ export default function SettingsPage() {
                     <span>Đang lắng nghe...</span>
                   </Badge>
                 ) : isTranscribing ? (
-                  <Badge className="bg-primary/20 text-primary border border-primary/30 text-[10px] h-5 px-2 font-mono gap-1">
+                  <Badge className="bg-terracotta/15 text-terracotta border border-terracotta/30 text-[10px] h-5 px-2 font-mono gap-1">
                     <Loader2 className="size-2.5 animate-spin" />
                     <span>Đang xử lý Whisper...</span>
                   </Badge>
@@ -471,7 +465,7 @@ export default function SettingsPage() {
                 )}
 
                 {sttDurationMs !== null && (
-                  <Badge variant="secondary" className="text-[10px] h-5 px-2 font-mono text-emerald-600 dark:text-emerald-400">
+                  <Badge variant="secondary" className="text-[10px] h-5 px-2 font-mono text-sage">
                     ⚡ {sttDurationMs}ms
                   </Badge>
                 )}
@@ -489,7 +483,7 @@ export default function SettingsPage() {
                       setSttDurationMs(null);
                       setLastAmpInfo(null);
                     }}
-                    className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground rounded-lg"
+                    className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground rounded-xl"
                   >
                     <Trash2 className="size-3 mr-1" />
                     <span>Xoá kết quả</span>
@@ -501,7 +495,11 @@ export default function SettingsPage() {
                   variant={isMicListening ? "destructive" : "default"}
                   disabled={isTranscribing}
                   onClick={handleToggleMicTest}
-                  className="h-8 px-3 rounded-xl text-xs font-semibold gap-1.5"
+                  className={`h-9 px-4 rounded-xl text-xs font-semibold gap-1.5 shadow-xs btn-spring ${
+                    isMicListening
+                      ? ""
+                      : "bg-terracotta hover:bg-terracotta/90 text-white"
+                  }`}
                 >
                   {isTranscribing ? (
                     <>
@@ -524,19 +522,19 @@ export default function SettingsPage() {
             </div>
 
             {/* Transcript Result Box */}
-            <div className="min-h-[56px] rounded-xl border border-input/60 bg-background/80 p-3 text-xs">
+            <div className="min-h-[60px] rounded-xl border border-border/70 bg-parchment/60 dark:bg-muted/30 p-3.5 text-xs font-mono">
               {isTranscribing ? (
-                <div className="flex items-center gap-2 text-muted-foreground py-2 font-mono text-xs">
-                  <Loader2 className="size-4 animate-spin text-primary" />
+                <div className="flex items-center gap-2 text-muted-foreground py-2 text-xs">
+                  <Loader2 className="size-4 animate-spin text-terracotta" />
                   <span>Model AI đang giải mã âm thanh và chuyển đổi sang văn bản tiếng Anh...</span>
                 </div>
               ) : isServerSTT ? (
                 serverTranscript ? (
                   <p className="leading-relaxed">
-                    <span className="text-foreground font-medium">{serverTranscript}</span>
+                    <span className="text-foreground font-semibold font-sans">{serverTranscript}</span>
                   </p>
                 ) : (
-                  <p className="text-muted-foreground italic">
+                  <p className="text-muted-foreground italic font-sans">
                     {isMicListening
                       ? "Đang ghi âm giọng nói của bạn... Hãy nói một câu tiếng Anh rồi bấm 'Dừng nói & Nhận dạng'!"
                       : "Bấm 'Bắt đầu nói thử' để thu âm microphone và nhận diện chính xác bằng Whisper ONNX / Groq."}
@@ -544,13 +542,13 @@ export default function SettingsPage() {
                 )
               ) : speechTest.transcript || speechTest.interimTranscript ? (
                 <p className="leading-relaxed">
-                  <span className="text-foreground font-medium">{speechTest.transcript}</span>
+                  <span className="text-foreground font-semibold font-sans">{speechTest.transcript}</span>
                   {speechTest.interimTranscript && (
-                    <span className="text-muted-foreground italic"> {speechTest.interimTranscript}</span>
+                    <span className="text-muted-foreground italic font-sans"> {speechTest.interimTranscript}</span>
                   )}
                 </p>
               ) : (
-                <p className="text-muted-foreground italic">
+                <p className="text-muted-foreground italic font-sans">
                   {isMicListening
                     ? "Hãy nói một câu tiếng Anh bất kỳ (ví dụ: 'Hello, I want to practice English speaking today')..."
                     : "Bấm 'Bắt đầu nói thử' để kiểm tra kết nối microphone và độ nhạy nhận diện giọng nói tiếng Anh."}
@@ -560,8 +558,8 @@ export default function SettingsPage() {
               {/* Amplification Gain & Peak Metrics Readout */}
               {lastAmpInfo && (
                 <div className="mt-2.5 pt-2 border-t border-border/50 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground font-mono">
-                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
-                    <CheckCircle2 className="size-3 text-emerald-500" />
+                  <span className="text-sage font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="size-3 text-sage" />
                     <span>Đã khuếch đại: +{lastAmpInfo.appliedGainDb} dB ({lastAmpInfo.appliedGainFactor}x)</span>
                   </span>
                   <span>•</span>
@@ -583,18 +581,18 @@ export default function SettingsPage() {
       </Card>
 
       {/* 🔊 Dedicated Text-to-Speech (TTS) Section */}
-      <Card className="rounded-3xl border border-border/80 bg-card shadow-xs overflow-hidden">
+      <Card className="rounded-3xl border border-border/80 bg-card/90 paper-shadow overflow-hidden">
         <CardHeader className="p-5 pb-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle className="text-base font-bold flex items-center gap-2.5">
-              <span className="flex size-7 items-center justify-center rounded-xl bg-purple-500/10 text-purple-500">
-                <Volume2 className="size-4" />
+              <span className="flex size-8 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                <Volume2 className="size-4.5" />
               </span>
               <span>🔊 Giọng đọc AI & Phát âm mẫu (Text-to-Speech)</span>
             </CardTitle>
             <div className="flex items-center gap-1.5">
-              <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-xs font-semibold px-2.5 py-1 gap-1.5 font-mono">
-                <CheckCircle2 className="size-3.5 text-emerald-500" />
+              <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 text-xs font-semibold px-2.5 py-1 gap-1.5 font-mono">
+                <CheckCircle2 className="size-3.5 text-amber-600" />
                 <span>Đang áp dụng: {ttsProviderDisplay} ({ttsVoiceDisplay})</span>
               </Badge>
             </div>
@@ -606,13 +604,15 @@ export default function SettingsPage() {
 
         <CardContent className="p-5 pt-2 space-y-4">
           {/* Summary Callout Banner */}
-          <div className="rounded-2xl bg-purple-500/10 border border-purple-500/20 p-3.5 text-xs text-foreground flex items-center gap-2.5">
-            <Zap className="size-4 shrink-0 text-purple-500" />
+          <div className="rounded-2xl bg-parchment/80 dark:bg-card/80 border border-border/70 p-4 text-xs text-foreground flex items-center gap-3">
+            <div className="size-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+              <Headphones className="size-4" />
+            </div>
             <div className="leading-relaxed">
               <span>Hệ thống đang phát âm bằng </span>
-              <strong className="text-purple-600 dark:text-purple-400 font-semibold">{ttsProviderDisplay}</strong>
+              <strong className="text-amber-700 dark:text-amber-400 font-semibold">{ttsProviderDisplay}</strong>
               {settings.tts.model !== "auto" && (
-                <span> với giọng <code className="px-1.5 py-0.5 rounded-md bg-purple-500/15 font-mono text-[11px] text-purple-700 dark:text-purple-300 font-semibold">{settings.tts.model}</code></span>
+                <span> với giọng <code className="px-1.5 py-0.5 rounded-md bg-amber-500/15 font-mono text-[11px] text-amber-800 dark:text-amber-300 font-semibold">{settings.tts.model}</code></span>
               )}
               <span> ở tốc độ <strong>{previewSpeed}x</strong>. Đã sẵn sàng phục vụ các bài học phát âm và shadowing!</span>
             </div>
@@ -628,10 +628,10 @@ export default function SettingsPage() {
           />
 
           {/* Live Voice Preview Interactive Panel */}
-          <div className="rounded-2xl border border-border/60 bg-muted/30 p-4 space-y-3">
+          <div className="rounded-2xl border border-border/80 bg-card p-4 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
-                <Radio className="size-3.5 text-purple-500" />
+                <Radio className="size-3.5 text-amber-600 dark:text-amber-400" />
                 <span>Thử nghiệm Giọng đọc & Tốc độ phát âm (Voice Preview)</span>
               </Label>
               <div className="flex items-center gap-1.5">
@@ -643,7 +643,11 @@ export default function SettingsPage() {
                     variant={previewSpeed === s ? "default" : "outline"}
                     size="sm"
                     onClick={() => setPreviewSpeed(s)}
-                    className="h-7 px-2.5 text-[11px] rounded-lg font-mono font-semibold"
+                    className={`h-7 px-2.5 text-[11px] rounded-lg font-mono font-semibold ${
+                      previewSpeed === s
+                        ? "bg-terracotta text-white"
+                        : "border-border/80 hover:bg-muted/50"
+                    }`}
                   >
                     {s}x
                   </Button>
@@ -657,14 +661,18 @@ export default function SettingsPage() {
                 value={previewText}
                 onChange={(e) => setPreviewText(e.target.value)}
                 placeholder="Nhập câu tiếng Anh để nghe thử..."
-                className="flex-1 h-9 rounded-xl border border-input/80 bg-background/90 px-3 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/40"
+                className="flex-1 h-10 rounded-xl border border-border/80 bg-background/90 px-3.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-terracotta/30"
               />
               <Button
                 type="button"
                 size="sm"
                 variant={ttsPlayer.isSpeaking || isPreviewingVoice ? "destructive" : "default"}
                 onClick={handlePreviewVoice}
-                className="h-9 px-4 rounded-xl text-xs font-semibold gap-2 shrink-0 btn-spring bg-purple-600 hover:bg-purple-700 text-white"
+                className={`h-10 px-4 rounded-xl text-xs font-semibold gap-2 shrink-0 btn-spring shadow-xs ${
+                  ttsPlayer.isSpeaking || isPreviewingVoice
+                    ? ""
+                    : "bg-terracotta hover:bg-terracotta/90 text-white"
+                }`}
               >
                 {ttsPlayer.isSpeaking || isPreviewingVoice ? (
                   <>
@@ -685,9 +693,9 @@ export default function SettingsPage() {
 
       {/* ==================== Granular Foundation Task Model Selectors ==================== */}
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h3 className="text-sm font-bold text-foreground">Cấu hình chi tiết từng tác vụ (Dynamic Models)</h3>
+            <h3 className="font-serif text-lg font-bold text-foreground">Cấu hình chi tiết từng tác vụ (Dynamic Models)</h3>
             <p className="text-xs text-muted-foreground">
               Tùy chỉnh model riêng biệt cho từng bài tập Foundation hoặc dùng các nút gán nhanh bên phải
             </p>
@@ -702,9 +710,9 @@ export default function SettingsPage() {
                 settings.applyProviderToAll("gemini", "gemini-3.7-flash");
                 toast.success("Đã đồng bộ toàn bộ tác vụ", "Tất cả bài tập hiện sử dụng Gemini 3.7 Flash.");
               }}
-              className="h-8 rounded-xl text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/10 btn-spring"
+              className="h-8 rounded-xl text-xs gap-1.5 border-border/80 text-foreground hover:bg-muted/50 btn-spring"
             >
-              <Sparkles className="size-3" />
+              <Sparkles className="size-3 text-terracotta" />
               <span>Gán hết Gemini 3.7 Flash</span>
             </Button>
             <Button
@@ -714,9 +722,9 @@ export default function SettingsPage() {
                 settings.applyProviderToAll("groq", "llama-3.3-70b-versatile");
                 toast.success("Đã đồng bộ toàn bộ tác vụ", "Tất cả bài tập hiện sử dụng Groq Llama 3.3.");
               }}
-              className="h-8 rounded-xl text-xs gap-1.5 border-orange-500/30 text-orange-600 dark:text-orange-400 hover:bg-orange-500/10 btn-spring"
+              className="h-8 rounded-xl text-xs gap-1.5 border-border/80 text-foreground hover:bg-muted/50 btn-spring"
             >
-              <Cpu className="size-3" />
+              <Cpu className="size-3 text-amber-600" />
               <span>Gán hết Groq Llama 3.3</span>
             </Button>
           </div>
@@ -792,30 +800,50 @@ export default function SettingsPage() {
       </div>
 
       {/* Observability & Tools */}
-      <Card className="rounded-3xl border border-border/80 bg-muted/20 shadow-xs">
+      <Card className="rounded-3xl border border-border/80 bg-card/90 paper-shadow">
         <CardHeader className="p-5 pb-3">
           <CardTitle className="text-sm font-bold flex items-center gap-2">
-            <BarChart3 className="size-4 text-primary" />
-            <span>Công cụ quản trị & Debug</span>
+            <span className="flex size-6 items-center justify-center rounded-lg bg-terracotta/10 text-terracotta">
+              <BarChart3 className="size-3.5" />
+            </span>
+            <span>Công cụ kiểm thử & Quan sát (Observability)</span>
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-5 pt-0 flex flex-wrap gap-2">
+        <CardContent className="p-5 pt-0 flex flex-wrap gap-2.5">
           <Link href="/usage">
-            <Button variant="outline" size="sm" className="rounded-xl text-xs">
+            <Button variant="outline" size="sm" className="rounded-xl text-xs border-border/80 hover:bg-muted/50 h-8">
               Usage & Token Dashboard
             </Button>
           </Link>
           <Link href="/debug/ai">
-            <Button variant="outline" size="sm" className="gap-1.5 rounded-xl text-xs">
-              <Bug className="size-3.5" />
+            <Button variant="outline" size="sm" className="gap-1.5 rounded-xl text-xs border-border/80 hover:bg-muted/50 h-8">
+              <Bug className="size-3.5 text-terracotta" />
               <span>AI Debug View</span>
             </Button>
           </Link>
           <Link href="/lab/model-compare">
-            <Button variant="outline" size="sm" className="rounded-xl text-xs">
+            <Button variant="outline" size="sm" className="rounded-xl text-xs border-border/80 hover:bg-muted/50 h-8">
               Model Compare Lab
             </Button>
           </Link>
+        </CardContent>
+      </Card>
+
+      {/* Privacy & Security Guarantee Banner */}
+      <Card className="rounded-3xl border border-sage/30 bg-sage/5 paper-shadow">
+        <CardContent className="p-5 flex items-start gap-4">
+          <div className="size-10 rounded-2xl bg-sage/15 text-sage flex items-center justify-center shrink-0">
+            <ShieldCheck className="size-5" />
+          </div>
+          <div className="space-y-1 text-xs leading-relaxed">
+            <h4 className="font-bold text-foreground flex items-center gap-2">
+              <span>Cam kết Bảo mật & Xử lý Âm thanh Cục bộ</span>
+              <Badge variant="outline" className="text-[10px] font-mono border-sage/40 text-sage">100% Client-Side Private</Badge>
+            </h4>
+            <p className="text-muted-foreground">
+              Khoá API của bạn được mã hoá và lưu trực tiếp trong trình duyệt cá nhân (Local Storage), tuyệt đối không lưu trữ trái phép trên bất kỳ máy chủ bên thứ ba nào. Tệp âm thanh thu thử từ micro chỉ được đệm tạm thời trên bộ nhớ RAM để xử lý chuyển văn bản và tự động xoá ngay khi kết thúc phiên.
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>

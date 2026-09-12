@@ -908,9 +908,9 @@ export default function CorodomoShadowingStudioPage() {
               </Link>
               <div>
                 <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground flex items-center gap-2">
-                  <Film className="size-6 text-emerald-500" />
+                  <Film className="size-6 text-primary" />
                   <span>Shadowing Hub</span>
-                  <Badge variant="outline" className="text-xs font-mono border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
+                  <Badge variant="outline" className="text-xs font-mono border-primary/40 text-primary">
                     Corodomo Style
                   </Badge>
                 </h1>
@@ -924,7 +924,7 @@ export default function CorodomoShadowingStudioPage() {
             {activeLesson && (
               <Button
                 onClick={() => setCurrentView("studio")}
-                className="h-9 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5 shadow-sm shrink-0"
+                className="h-9 px-4 rounded-xl text-xs sm:text-sm font-bold bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5 shadow-sm shrink-0"
               >
                 <Play className="size-3.5 fill-current" />
                 <span>Tiếp tục bài đang học</span>
@@ -933,7 +933,7 @@ export default function CorodomoShadowingStudioPage() {
           </div>
 
           {/* ── HERO SECTION: PROMINENT YOUTUBE LINK EXTRACTOR ── */}
-          <div className="shrink-0 min-h-fit w-full p-6 sm:p-8 rounded-3xl bg-card border-2 border-emerald-500/60 shadow-xl space-y-5 relative bg-gradient-to-br from-card via-card to-emerald-500/10">
+          <div className="shrink-0 min-h-fit w-full p-6 sm:p-8 rounded-3xl bg-card border border-border/80 ring-1 ring-primary/20 shadow-xl space-y-5 relative bg-gradient-to-br from-card via-card to-primary/5">
             {/* Top Badge & Title */}
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3.5">
               <div className="flex items-center gap-3">
@@ -956,7 +956,7 @@ export default function CorodomoShadowingStudioPage() {
               </div>
 
               <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
-                <Sparkles className="size-3.5 text-emerald-500" />
+                <Sparkles className="size-3.5 text-primary" />
                 <span>Hỗ trợ mọi link video & Shorts</span>
               </div>
             </div>
@@ -979,7 +979,7 @@ export default function CorodomoShadowingStudioPage() {
                     onChange={(e) => setCustomUrlInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleLoadCustomYouTubeUrl()}
                     placeholder="Dán link: https://www.youtube.com/watch?v=... hoặc youtu.be/..."
-                    className="h-13 pl-11 pr-20 text-sm sm:text-base font-medium bg-background rounded-2xl border-2 border-emerald-500/60 focus-visible:border-emerald-500 focus-visible:ring-4 focus-visible:ring-emerald-500/15 shadow-sm text-foreground placeholder:text-muted-foreground/60"
+                    className="h-13 pl-11 pr-20 text-sm sm:text-base font-medium bg-background rounded-2xl border-2 border-primary/40 focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/15 shadow-sm text-foreground placeholder:text-muted-foreground/60"
                   />
 
                   <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
@@ -994,7 +994,7 @@ export default function CorodomoShadowingStudioPage() {
                     ) : (
                       <button
                         onClick={() => handlePasteClipboard(false)}
-                        className="text-xs font-bold px-3 py-1.5 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30 transition-all flex items-center gap-1"
+                        className="text-xs font-bold px-3 py-1.5 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 transition-all flex items-center gap-1"
                         title="Dán nhanh từ bộ nhớ tạm"
                       >
                         <Copy className="size-3" />
@@ -1007,7 +1007,7 @@ export default function CorodomoShadowingStudioPage() {
                 <Button
                   onClick={() => handleLoadCustomYouTubeUrl()}
                   disabled={isLoadingCustomUrl || !customUrlInput.trim()}
-                  className="h-13 px-7 rounded-2xl font-black text-sm bg-emerald-600 hover:bg-emerald-500 text-white shrink-0 gap-2 shadow-lg shadow-emerald-600/25 transition-all"
+                  className="h-13 px-7 rounded-2xl font-black text-sm bg-primary hover:bg-primary/90 text-primary-foreground shrink-0 gap-2 shadow-lg shadow-primary/25 transition-all"
                 >
                   {isLoadingCustomUrl ? (
                     <>
@@ -1036,7 +1036,7 @@ export default function CorodomoShadowingStudioPage() {
                   <span className="text-muted-foreground text-[11px]">Hoặc thử nhanh bài mẫu:</span>
                   <button
                     onClick={() => handleSelectLesson(CORODOMO_VIDEO_PRESETS[0])}
-                    className="font-bold text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1"
+                    className="font-bold text-[11px] text-primary hover:underline inline-flex items-center gap-1"
                   >
                     <Play className="size-2.5 fill-current" />
                     <span>BBC Office English (205 câu)</span>
@@ -1050,7 +1050,7 @@ export default function CorodomoShadowingStudioPage() {
           <div className="shrink-0 space-y-3 pt-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <History className="size-4 text-emerald-500" />
+                <History className="size-4 text-primary" />
                 <h3 className="text-base font-extrabold text-foreground">Lịch sử video gần đây</h3>
                 <Badge variant="secondary" className="text-xs font-mono h-5">
                   {watchHistory.length}
@@ -1082,7 +1082,7 @@ export default function CorodomoShadowingStudioPage() {
                   <div
                     key={item.id}
                     onClick={() => handleSelectHistoryItem(item)}
-                    className="p-3.5 rounded-2xl border border-border/80 bg-card hover:border-emerald-500/50 hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between space-y-3"
+                    className="p-3.5 rounded-2xl border border-border/80 bg-card hover:border-primary/50 hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between space-y-3"
                   >
                     {/* Thumbnail + Duration */}
                     <div className="aspect-video rounded-xl overflow-hidden bg-black relative shrink-0">
@@ -1095,12 +1095,12 @@ export default function CorodomoShadowingStudioPage() {
                         {item.duration}
                       </Badge>
                       {item.cefrLevel && (
-                        <Badge className="absolute top-1.5 left-1.5 text-[9px] font-mono px-1.5 py-0 bg-emerald-600 text-white">
+                        <Badge className="absolute top-1.5 left-1.5 text-[9px] font-mono px-1.5 py-0 bg-primary text-primary-foreground">
                           {item.cefrLevel}
                         </Badge>
                       )}
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <div className="size-10 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg">
+                        <div className="size-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg">
                           <Play className="size-4 fill-current ml-0.5" />
                         </div>
                       </div>
@@ -1108,7 +1108,7 @@ export default function CorodomoShadowingStudioPage() {
 
                     {/* Metadata */}
                     <div className="space-y-1.5 flex-1 min-w-0">
-                      <h4 className="font-extrabold text-xs sm:text-sm text-foreground line-clamp-2 leading-snug group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                      <h4 className="font-extrabold text-xs sm:text-sm text-foreground line-clamp-2 leading-snug group-hover:text-primary transition-colors">
                         {item.title}
                       </h4>
                       <p className="text-[11px] text-muted-foreground truncate">{item.channel}</p>
@@ -1120,14 +1120,14 @@ export default function CorodomoShadowingStudioPage() {
                             Tiến độ: {item.completedSegments}/{item.totalSegments} câu
                           </span>
                           {item.averageScore !== undefined && (
-                            <span className="text-emerald-600 dark:text-emerald-400 font-mono">
+                            <span className="text-primary font-mono">
                               ⭐ {item.averageScore}%
                             </span>
                           )}
                         </div>
                         <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-emerald-500 rounded-full"
+                            className="h-full bg-primary rounded-full"
                             style={{
                               width: `${Math.round(
                                 (item.completedSegments / (item.totalSegments || 1)) * 100
@@ -1161,7 +1161,7 @@ export default function CorodomoShadowingStudioPage() {
           <div className="shrink-0 space-y-4 pt-2">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <Library className="size-4 text-emerald-500" />
+                <Library className="size-4 text-primary" />
                 <h3 className="text-base font-extrabold text-foreground">Kho Video Bài Học</h3>
                 <Badge variant="secondary" className="text-xs font-mono h-5">
                   {filteredLibrary.length}
@@ -1173,7 +1173,7 @@ export default function CorodomoShadowingStudioPage() {
                 <Button
                   size="sm"
                   onClick={() => setShowAddVideoModal(true)}
-                  className="h-8 px-3 text-xs font-bold gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm shrink-0"
+                  className="h-8 px-3 text-xs font-bold gap-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm shrink-0"
                 >
                   <PlusCircle className="size-3.5" />
                   <span>Thêm video YouTube</span>
@@ -1223,7 +1223,7 @@ export default function CorodomoShadowingStudioPage() {
                     className={cn(
                       "px-3 py-1 rounded-full text-xs font-bold transition-all shrink-0",
                       isActive
-                        ? "bg-emerald-600 text-white shadow-sm"
+                        ? "bg-primary text-primary-foreground shadow-sm"
                         : "bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/60"
                     )}
                   >
@@ -1259,7 +1259,7 @@ export default function CorodomoShadowingStudioPage() {
                   <Button
                     size="sm"
                     onClick={handleResetDefaults}
-                    className="h-8 text-xs rounded-xl mt-2 bg-emerald-600 hover:bg-emerald-500 text-white gap-1"
+                    className="h-8 text-xs rounded-xl mt-2 bg-primary hover:bg-primary/90 text-primary-foreground gap-1"
                   >
                     <RotateCcw className="size-3" />
                     <span>Khôi phục bài mẫu</span>
@@ -1272,7 +1272,7 @@ export default function CorodomoShadowingStudioPage() {
                   <div
                     key={item.id}
                     onClick={() => handleSelectLesson(item)}
-                    className="p-3.5 rounded-2xl border border-border/80 bg-card hover:border-emerald-500/50 hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between space-y-3"
+                    className="p-3.5 rounded-2xl border border-border/80 bg-card hover:border-primary/50 hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between space-y-3"
                   >
                     {/* Thumbnail */}
                     <div className="aspect-video rounded-xl overflow-hidden bg-black relative shrink-0">
@@ -1284,7 +1284,7 @@ export default function CorodomoShadowingStudioPage() {
                       <Badge className="absolute bottom-1.5 right-1.5 text-[9px] font-mono px-1.5 py-0 bg-black/80 text-white">
                         {item.duration}
                       </Badge>
-                      <Badge className="absolute top-1.5 left-1.5 text-[9px] font-mono px-1.5 py-0 bg-emerald-600 text-white">
+                      <Badge className="absolute top-1.5 left-1.5 text-[9px] font-mono px-1.5 py-0 bg-primary text-primary-foreground">
                         {item.cefrLevel || "B1"}
                       </Badge>
                       {item.isCustom && (
@@ -1293,7 +1293,7 @@ export default function CorodomoShadowingStudioPage() {
                         </Badge>
                       )}
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <div className="size-10 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg">
+                        <div className="size-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg">
                           <Play className="size-4 fill-current ml-0.5" />
                         </div>
                       </div>
@@ -1301,11 +1301,11 @@ export default function CorodomoShadowingStudioPage() {
 
                     {/* Info */}
                     <div className="space-y-1 flex-1 min-w-0">
-                      <h4 className="font-extrabold text-xs sm:text-sm text-foreground line-clamp-2 leading-snug group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                      <h4 className="font-extrabold text-xs sm:text-sm text-foreground line-clamp-2 leading-snug group-hover:text-primary transition-colors">
                         {item.title}
                       </h4>
                       <p className="text-[11px] text-muted-foreground truncate">{item.channel}</p>
-                      <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                      <p className="text-[11px] text-primary font-medium">
                         {item.segments.length} câu luyện tập
                       </p>
                     </div>
@@ -1318,7 +1318,7 @@ export default function CorodomoShadowingStudioPage() {
                           e.stopPropagation();
                           handleSelectLesson(item);
                         }}
-                        className="h-7 px-2.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white gap-1"
+                        className="h-7 px-2.5 rounded-lg text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground gap-1"
                       >
                         <Play className="size-3 fill-current" />
                         <span>Học</span>
@@ -1327,7 +1327,7 @@ export default function CorodomoShadowingStudioPage() {
                       <div className="flex items-center gap-1">
                         <button
                           onClick={(e) => handleOpenEditModal(item, e)}
-                          className="size-7 rounded-lg text-muted-foreground hover:text-emerald-600 hover:bg-emerald-500/10 flex items-center justify-center transition-colors"
+                          className="size-7 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 flex items-center justify-center transition-colors"
                           title="Sửa thông tin video"
                         >
                           <Pencil className="size-3.5" />
@@ -1359,7 +1359,7 @@ export default function CorodomoShadowingStudioPage() {
               >
                 <div className="flex items-center justify-between border-b border-border/60 pb-3">
                   <div className="flex items-center gap-2">
-                    <Pencil className="size-4 text-emerald-500" />
+                    <Pencil className="size-4 text-primary" />
                     <h3 className="font-extrabold text-sm sm:text-base text-foreground">
                       Chỉnh sửa thông tin bài học
                     </h3>
@@ -1404,7 +1404,7 @@ export default function CorodomoShadowingStudioPage() {
                           className={cn(
                             "px-3 py-1 rounded-lg text-xs font-bold transition-colors",
                             editCefr === lvl
-                              ? "bg-emerald-600 text-white"
+                              ? "bg-primary text-primary-foreground"
                               : "bg-muted/60 text-muted-foreground hover:text-foreground"
                           )}
                         >
@@ -1427,7 +1427,7 @@ export default function CorodomoShadowingStudioPage() {
                   <Button
                     size="sm"
                     onClick={handleSaveEdit}
-                    className="rounded-xl text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+                    className="rounded-xl text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-bold"
                   >
                     Lưu thay đổi
                   </Button>
@@ -1472,7 +1472,7 @@ export default function CorodomoShadowingStudioPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setShowAddVideoModal(true)}
-                className="h-8 px-2.5 rounded-xl text-xs font-bold gap-1.5 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 shrink-0 hidden sm:flex"
+                className="h-8 px-2.5 rounded-xl text-xs font-bold gap-1.5 border-primary/40 text-primary hover:bg-primary/10 shrink-0 hidden sm:flex"
                 title="Dán link nạp video YouTube mới"
               >
                 <PlusCircle className="size-3.5" />
@@ -1487,7 +1487,7 @@ export default function CorodomoShadowingStudioPage() {
                 className={cn(
                   "px-3 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5",
                   activeMode === "shadowing"
-                    ? "bg-emerald-500 text-white shadow-sm"
+                    ? "bg-primary text-primary-foreground shadow-xs"
                     : "bg-muted/40 text-muted-foreground hover:text-foreground border border-border/60"
                 )}
               >
@@ -1499,7 +1499,7 @@ export default function CorodomoShadowingStudioPage() {
                 className={cn(
                   "px-3 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5",
                   activeMode === "pronounce"
-                    ? "bg-emerald-500 text-white shadow-sm"
+                    ? "bg-primary text-primary-foreground shadow-xs"
                     : "bg-muted/40 text-muted-foreground hover:text-foreground border border-border/60"
                 )}
               >
@@ -1532,10 +1532,10 @@ export default function CorodomoShadowingStudioPage() {
                           className="inline-flex flex-col items-center cursor-pointer group px-1 py-0.5 rounded transition-all hover:bg-white/10"
                           title={`Click để tra từ: "${token.cleanWord}"`}
                         >
-                          <span className="text-[10px] sm:text-[11px] font-mono text-emerald-400 font-semibold leading-none mb-0.5 select-none tracking-tight">
+                          <span className="text-[10px] sm:text-[11px] font-mono text-amber-300 font-semibold leading-none mb-0.5 select-none tracking-tight">
                             {token.ipa || "—"}
                           </span>
-                          <span className="text-sm sm:text-base font-bold text-white group-hover:text-emerald-300 transition-colors leading-tight">
+                          <span className="text-sm sm:text-base font-bold text-white group-hover:text-amber-200 transition-colors leading-tight">
                             {token.word}
                           </span>
                         </div>
@@ -1559,7 +1559,7 @@ export default function CorodomoShadowingStudioPage() {
                       className={cn(
                         "px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1",
                         showSubtitle
-                          ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40"
+                          ? "bg-primary/10 text-primary border border-primary/40"
                           : "bg-muted/40 text-muted-foreground border border-border/60"
                       )}
                     >
@@ -1572,7 +1572,7 @@ export default function CorodomoShadowingStudioPage() {
                       className={cn(
                         "px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1",
                         showTranslation
-                          ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40"
+                          ? "bg-primary/10 text-primary border border-primary/40"
                           : "bg-muted/40 text-muted-foreground border border-border/60"
                       )}
                     >
@@ -1616,7 +1616,7 @@ export default function CorodomoShadowingStudioPage() {
                       className={cn(
                         "size-7 p-0 rounded-lg transition-all",
                         isLooping
-                          ? "bg-emerald-500 text-white"
+                          ? "bg-primary text-primary-foreground"
                           : "text-muted-foreground border-border/60 hover:text-foreground"
                       )}
                       title="Lặp lại câu này"
@@ -1651,7 +1651,7 @@ export default function CorodomoShadowingStudioPage() {
                         syncProgressToHistory();
                         setCurrentView("hub");
                       }}
-                      className="h-7 px-2.5 rounded-lg text-xs font-bold gap-1 text-emerald-600 dark:text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/10"
+                      className="h-7 px-2.5 rounded-lg text-xs font-bold gap-1 text-primary border-primary/40 hover:bg-primary/10"
                     >
                       <Film className="size-3" />
                       <span className="hidden md:inline">Đổi video</span>
@@ -1729,7 +1729,7 @@ export default function CorodomoShadowingStudioPage() {
                         className={cn(
                           "p-3 rounded-2xl border transition-all cursor-pointer select-text flex items-start gap-2.5",
                           isActive
-                            ? "bg-emerald-500/10 border-emerald-500/50 shadow-xs ring-1 ring-emerald-500/30"
+                            ? "bg-primary/10 border-primary/50 shadow-xs ring-1 ring-primary/30"
                             : "bg-card hover:bg-muted/30 border-border/60"
                         )}
                       >
@@ -1737,7 +1737,7 @@ export default function CorodomoShadowingStudioPage() {
                           className={cn(
                             "size-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 transition-colors",
                             isActive
-                              ? "bg-emerald-500 text-white"
+                              ? "bg-primary text-primary-foreground"
                               : "bg-muted text-muted-foreground hover:bg-muted/80"
                           )}
                         >
@@ -1836,13 +1836,13 @@ export default function CorodomoShadowingStudioPage() {
                     <span className="text-muted-foreground">
                       Đã hoàn thành {completedCount}/{activeLesson.segments.length}
                     </span>
-                    <span className="text-emerald-600 dark:text-emerald-400 font-mono">
+                    <span className="text-primary font-mono">
                       {progressPercent}%
                     </span>
                   </div>
                   <div className="h-2 w-full bg-muted/50 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                      className="h-full bg-primary rounded-full transition-all duration-300"
                       style={{ width: `${progressPercent}%` }}
                     />
                   </div>
@@ -1875,7 +1875,7 @@ export default function CorodomoShadowingStudioPage() {
                             className={cn(
                               "p-2.5 rounded-xl border transition-all cursor-pointer text-left",
                               isCur
-                                ? "bg-emerald-500/10 border-emerald-500/40 shadow-2xs"
+                                ? "bg-primary/10 border-primary/40 shadow-2xs"
                                 : "hover:bg-muted/20 border-border/40"
                             )}
                           >
@@ -1935,7 +1935,7 @@ export default function CorodomoShadowingStudioPage() {
                           className={cn(
                             "size-7 rounded-full text-xs font-mono font-bold transition-all flex items-center justify-center",
                             isCur
-                              ? "bg-emerald-500 text-white shadow-xs"
+                              ? "bg-primary text-primary-foreground shadow-xs"
                               : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
                           )}
                         >
@@ -2023,7 +2023,7 @@ export default function CorodomoShadowingStudioPage() {
                             onClick={(e) => handleWordClick(token.cleanWord, e)}
                             className="inline-flex flex-col items-center cursor-pointer group px-0.5 rounded transition-all hover:bg-muted/40"
                           >
-                            <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold leading-none mb-0.5 select-none">
+                            <span className="text-[10px] font-mono text-primary font-semibold leading-none mb-0.5 select-none">
                               {token.ipa || "—"}
                             </span>
                             <span
@@ -2079,7 +2079,7 @@ export default function CorodomoShadowingStudioPage() {
                       "h-11 px-6 rounded-2xl font-black text-xs sm:text-sm flex-2 flex items-center justify-center gap-2 text-white shadow-md transition-all",
                       recordingStatus === "recording"
                         ? "bg-rose-500 hover:bg-rose-600 animate-pulse ring-4 ring-rose-500/25"
-                        : "bg-emerald-600 hover:bg-emerald-500"
+                        : "bg-primary hover:bg-primary/90 text-primary-foreground"
                     )}
                   >
                     {recordingStatus === "evaluating" ? (
@@ -2207,7 +2207,7 @@ export default function CorodomoShadowingStudioPage() {
           onClick={() => setShowAddVideoModal(false)}
         >
           <div
-            className="w-full max-w-lg bg-card border-2 border-emerald-500/50 rounded-3xl p-5 sm:p-7 shadow-2xl space-y-4"
+            className="w-full max-w-lg bg-card border border-border/80 ring-1 ring-primary/25 rounded-3xl p-5 sm:p-7 shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -2240,7 +2240,7 @@ export default function CorodomoShadowingStudioPage() {
                 <button
                   type="button"
                   onClick={() => handlePasteClipboard(true)}
-                  className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold hover:underline flex items-center gap-1"
+                  className="text-[11px] text-primary font-bold hover:underline flex items-center gap-1"
                 >
                   <Copy className="size-3" />
                   <span>Dán từ clipboard</span>
@@ -2256,7 +2256,7 @@ export default function CorodomoShadowingStudioPage() {
                   onChange={(e) => setModalUrlInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleLoadCustomYouTubeUrl(modalUrlInput)}
                   placeholder="https://www.youtube.com/watch?v=... hoặc youtu.be/..."
-                  className="h-11 pl-9 pr-8 text-xs sm:text-sm rounded-xl border-emerald-500/50 focus-visible:border-emerald-500"
+                  className="h-11 pl-9 pr-8 text-xs sm:text-sm rounded-xl border-border/80 focus-visible:border-primary"
                   autoFocus
                 />
                 {modalUrlInput && (
@@ -2271,7 +2271,7 @@ export default function CorodomoShadowingStudioPage() {
 
               <div className="p-3 rounded-2xl bg-muted/40 border border-border/60 space-y-1 text-[11px] text-muted-foreground">
                 <p className="font-semibold text-foreground/80 flex items-center gap-1">
-                  <Sparkles className="size-3 text-emerald-500" />
+                  <Sparkles className="size-3 text-primary" />
                   <span>Tính năng tự động:</span>
                 </p>
                 <p>• Bóc tách 100% transcript và căn chỉnh thời gian chuẩn xác.</p>
@@ -2294,7 +2294,7 @@ export default function CorodomoShadowingStudioPage() {
                 size="sm"
                 onClick={() => handleLoadCustomYouTubeUrl(modalUrlInput)}
                 disabled={isLoadingCustomUrl || !modalUrlInput.trim()}
-                className="rounded-xl text-xs h-9 bg-emerald-600 hover:bg-emerald-500 text-white font-bold gap-1.5 shadow-md shadow-emerald-600/25"
+                className="rounded-xl text-xs h-9 bg-primary hover:bg-primary/90 text-primary-foreground font-bold gap-1.5 shadow-md shadow-primary/25"
               >
                 {isLoadingCustomUrl ? (
                   <>

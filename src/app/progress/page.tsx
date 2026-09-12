@@ -80,26 +80,26 @@ export default function ProgressOverviewPage() {
   ];
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-7 pb-12">
       {/* Hero Header */}
-      <Card className="rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-background shadow-xs overflow-hidden">
-        <CardContent className="p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div className="space-y-2 max-w-xl">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/15 text-primary text-xs font-semibold">
-              <TrendingUp className="size-3.5" />
-              <span>Speaking Progress & Long-Term Intelligence</span>
+      <div className="rounded-3xl border border-border/80 bg-card paper-shadow p-6 md:p-8">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="space-y-3 max-w-xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary border border-border/60 text-foreground/80 text-xs font-medium">
+              <span className="size-1.5 rounded-full bg-primary" />
+              <span>Tiến Độ Dài Hạn • Speaking Journey & Intelligence</span>
             </div>
-            <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
+            <h1 className="text-2xl md:text-3xl font-serif font-bold tracking-tight text-foreground leading-snug">
               Tiến độ & Xu hướng dài hạn
             </h1>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Theo dõi sự cải thiện của tốc độ phản xạ và độ trôi chảy theo thời gian. Sự tiến bộ được bảo toàn ngay cả khi bạn có một buổi luyện tập khó.
+            <p className="text-sm text-muted-foreground leading-relaxed font-sans">
+              Theo dõi sự cải thiện của tốc độ phản xạ và độ trôi chảy theo thời gian. Sự tiến bộ được tích luỹ và bảo toàn ngay cả khi bạn có một buổi luyện tập nhiều thử thách.
             </p>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
             <Select value={range} onValueChange={(v: string | null) => v && setRange(v)}>
-              <SelectTrigger className="w-[130px] rounded-xl h-11 text-xs">
+              <SelectTrigger className="w-full sm:w-[140px] rounded-2xl h-11 text-xs border-border/80 bg-background hover:bg-secondary/60 font-semibold paper-shadow-sm">
                 <span>
                   {range === "7d"
                     ? "7 ngày qua"
@@ -110,7 +110,7 @@ export default function ProgressOverviewPage() {
                     : "Toàn bộ"}
                 </span>
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="rounded-2xl border-border/80 bg-card paper-shadow">
                 <SelectItem value="7d">7 ngày qua</SelectItem>
                 <SelectItem value="30d">30 ngày qua</SelectItem>
                 <SelectItem value="90d">90 ngày qua</SelectItem>
@@ -118,107 +118,125 @@ export default function ProgressOverviewPage() {
               </SelectContent>
             </Select>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* KPI Overview Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="rounded-2xl border-border/80 bg-card p-4 shadow-xs">
-          <div className="flex items-center gap-3">
-            <div className="size-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+        <Card className="rounded-3xl border border-border/80 bg-card p-5 paper-shadow-sm hover:paper-shadow-hover transition-all">
+          <div className="flex items-start gap-3.5">
+            <div className="size-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0">
               <Target className="size-5" />
             </div>
-            <div>
-              <div className="text-xl font-bold font-mono">
-                {overview?.avgScore ? Math.round(overview.avgScore) : 68}/100
+            <div className="min-w-0">
+              <div className="text-xs text-muted-foreground font-medium truncate">Điểm phản xạ TB</div>
+              <div className="text-xl md:text-2xl font-bold font-mono text-foreground mt-0.5">
+                {overview?.avgScore ? Math.round(overview.avgScore) : 68}
+                <span className="text-xs text-muted-foreground font-normal">/100</span>
               </div>
-              <div className="text-xs text-muted-foreground">Điểm phản xạ trung bình</div>
+              <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium block truncate mt-1">
+                ↑ +6% so với tháng trước
+              </span>
             </div>
           </div>
         </Card>
 
-        <Card className="rounded-2xl border-border/80 bg-card p-4 shadow-xs">
-          <div className="flex items-center gap-3">
-            <div className="size-10 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center">
+        <Card className="rounded-3xl border border-border/80 bg-card p-5 paper-shadow-sm hover:paper-shadow-hover transition-all">
+          <div className="flex items-start gap-3.5">
+            <div className="size-10 rounded-2xl bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 flex items-center justify-center border border-indigo-500/20 shrink-0">
               <Calendar className="size-5" />
             </div>
-            <div>
-              <div className="text-xl font-bold font-mono">{overview?.totalSessions || 12}</div>
-              <div className="text-xs text-muted-foreground">Tổng số phiên đã hoàn thành</div>
+            <div className="min-w-0">
+              <div className="text-xs text-muted-foreground font-medium truncate">Tổng phiên hoàn thành</div>
+              <div className="text-xl md:text-2xl font-bold font-mono text-foreground mt-0.5">
+                {overview?.totalSessions || 12}
+              </div>
+              <span className="text-[11px] text-muted-foreground block truncate mt-1">
+                142 phút nói thực tế
+              </span>
             </div>
           </div>
         </Card>
 
-        <Card className="rounded-2xl border-border/80 bg-card p-4 shadow-xs">
-          <div className="flex items-center gap-3">
-            <div className="size-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
+        <Card className="rounded-3xl border border-border/80 bg-card p-5 paper-shadow-sm hover:paper-shadow-hover transition-all">
+          <div className="flex items-start gap-3.5">
+            <div className="size-10 rounded-2xl bg-amber-500/10 text-amber-700 dark:text-amber-400 flex items-center justify-center border border-amber-500/20 shrink-0">
               <Award className="size-5" />
             </div>
-            <div>
-              <div className="text-xl font-bold font-mono">3 / 5</div>
-              <div className="text-xs text-muted-foreground">Cột mốc đã mở khoá</div>
+            <div className="min-w-0">
+              <div className="text-xs text-muted-foreground font-medium truncate">Cột mốc đã mở khoá</div>
+              <div className="text-xl md:text-2xl font-bold font-mono text-amber-700 dark:text-amber-400 mt-0.5">
+                3 / 5
+              </div>
+              <span className="text-[11px] text-muted-foreground block truncate mt-1">
+                Sắp mở: 1-Min Flow
+              </span>
             </div>
           </div>
         </Card>
 
-        <Card className="rounded-2xl border-border/80 bg-card p-4 shadow-xs">
-          <div className="flex items-center gap-3">
-            <div className="size-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+        <Card className="rounded-3xl border border-border/80 bg-card p-5 paper-shadow-sm hover:paper-shadow-hover transition-all">
+          <div className="flex items-start gap-3.5">
+            <div className="size-10 rounded-2xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 flex items-center justify-center border border-emerald-500/20 shrink-0">
               <Zap className="size-5" />
             </div>
-            <div>
-              <div className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                Improving
+            <div className="min-w-0">
+              <div className="text-xs text-muted-foreground font-medium truncate">Xu hướng phát triển</div>
+              <div className="text-xl md:text-2xl font-serif font-bold text-emerald-700 dark:text-emerald-400 mt-0.5 truncate">
+                Tăng trưởng
               </div>
-              <div className="text-xs text-muted-foreground">Xu hướng phát triển</div>
+              <span className="text-[11px] text-muted-foreground block truncate mt-1">
+                Độ ổn định phản xạ cao
+              </span>
             </div>
           </div>
         </Card>
       </div>
 
       {/* Progress Line Chart */}
-      <Card className="rounded-3xl border border-border/80 bg-card shadow-xs">
-        <CardHeader className="p-5 pb-3 border-b border-border/40 flex flex-row items-center justify-between">
+      <Card className="rounded-3xl border border-border/80 bg-card paper-shadow-sm">
+        <CardHeader className="p-6 pb-4 border-b border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <CardTitle className="text-sm font-bold flex items-center gap-2">
-              <BarChart3 className="size-4 text-primary" />
-              <span>Biểu đồ tiến bộ (Speaking Trend)</span>
+            <CardTitle className="text-base font-serif font-bold flex items-center gap-2 text-foreground">
+              <BarChart3 className="size-4.5 text-primary" />
+              <span>Biểu đồ tiến bộ thực chất (Speaking Trend)</span>
             </CardTitle>
-            <CardDescription className="text-xs">
-              Đường làm mịn (Smoothed Trend) thể hiện sự tiến bộ thực chất loại bỏ biến động nhất thời
+            <CardDescription className="text-xs text-muted-foreground mt-0.5">
+              Đường làm mịn (Smoothed Trend) thể hiện sự tiến bộ thực chất loại bỏ biến động nhất thời giữa các phiên tập khó
             </CardDescription>
           </div>
 
-          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none font-medium">
             <input
               type="checkbox"
               checked={showRaw}
               onChange={(e) => setShowRaw(e.target.checked)}
-              className="rounded"
+              className="rounded accent-primary"
             />
             <span>Hiện điểm từng phiên (Raw)</span>
           </label>
         </CardHeader>
 
-        <CardContent className="p-5">
+        <CardContent className="p-6">
           <div className="h-[280px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorOverall" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.3} />
+                    <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.25} />
                     <stop offset="95%" stopColor="var(--primary)" stopOpacity={0.0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+                <CartesianGrid strokeDasharray="3 3" opacity={0.12} />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
                 <Tooltip
                   contentStyle={{
-                    borderRadius: "12px",
+                    borderRadius: "16px",
                     backgroundColor: "var(--card)",
                     borderColor: "var(--border)",
                     fontSize: "12px",
+                    boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)",
                   }}
                 />
                 <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }} />
@@ -226,7 +244,7 @@ export default function ProgressOverviewPage() {
                   type="monotone"
                   dataKey="smoothed"
                   stroke="var(--primary)"
-                  strokeWidth={2.5}
+                  strokeWidth={2.8}
                   fillOpacity={1}
                   fill="url(#colorOverall)"
                   name="Tiến bộ thực chất (Smoothed)"
@@ -248,38 +266,50 @@ export default function ProgressOverviewPage() {
       </Card>
 
       {/* Speaking Journey Milestones */}
-      <Card className="rounded-3xl border border-border/80 bg-card shadow-xs">
-        <CardHeader className="p-5 pb-3 border-b border-border/40">
-          <CardTitle className="text-sm font-bold flex items-center gap-2">
-            <Award className="size-4 text-primary" />
+      <Card className="rounded-3xl border border-border/80 bg-card paper-shadow-sm">
+        <CardHeader className="p-6 pb-4 border-b border-border/60">
+          <CardTitle className="text-base font-serif font-bold flex items-center gap-2 text-foreground">
+            <Award className="size-4.5 text-primary" />
             <span>Hành trình phản xạ (Speaking Milestones)</span>
           </CardTitle>
-          <CardDescription className="text-xs">
-            Các mốc năng lực quan trọng đã được ghi nhận
+          <CardDescription className="text-xs text-muted-foreground mt-0.5">
+            Các mốc năng lực quan trọng đã được hệ thống ghi nhận trong quá trình luyện tập
           </CardDescription>
         </CardHeader>
-        <CardContent className="p-5 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <CardContent className="p-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
           {milestonesList.map((m, i) => (
             <div
               key={i}
-              className={`p-3.5 rounded-2xl border flex items-start gap-3 transition-all ${
+              className={`p-4 rounded-2xl border flex items-start gap-3.5 transition-all paper-shadow-sm ${
                 m.achieved
-                  ? "border-emerald-500/30 bg-emerald-500/5 text-foreground"
-                  : "border-border/60 bg-muted/20 opacity-60"
+                  ? "border-emerald-500/30 bg-emerald-500/[0.04] text-foreground"
+                  : "border-border/60 bg-secondary/30 opacity-70"
               }`}
             >
               <div
-                className={`size-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
-                  m.achieved ? "bg-emerald-500 text-white" : "bg-muted text-muted-foreground"
+                className={`size-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                  m.achieved
+                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30"
+                    : "bg-secondary text-muted-foreground border border-border/50"
                 }`}
               >
                 <CheckCircle2 className="size-4" />
               </div>
-              <div className="space-y-0.5">
-                <span className="text-xs font-bold block">{m.title}</span>
-                <span className="text-[11px] text-muted-foreground leading-tight block">
+              <div className="space-y-1 min-w-0">
+                <span className="text-xs font-serif font-bold block truncate">{m.title}</span>
+                <span className="text-[11px] text-muted-foreground leading-relaxed block">
                   {m.desc}
                 </span>
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] font-mono rounded-full px-2 py-0 mt-1 border ${
+                    m.achieved
+                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                      : "border-border/60 text-muted-foreground"
+                  }`}
+                >
+                  {m.achieved ? "Đã mở khoá" : "Đang tiến hành"}
+                </Badge>
               </div>
             </div>
           ))}

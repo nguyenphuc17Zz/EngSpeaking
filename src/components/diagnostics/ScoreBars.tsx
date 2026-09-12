@@ -20,26 +20,47 @@ const DIMENSION_CONFIG: Record<
 
 export function ScoreBars({ dimensions }: { dimensions: SpeakingDimensions }) {
   return (
-    <div className="space-y-3.5">
+    <div className="space-y-3">
       {(Object.keys(DIMENSION_CONFIG) as Array<keyof SpeakingDimensions>).map((k) => {
         const v = dimensions[k];
         const isNA = k === "pronunciation" && v === -1;
         const config = DIMENSION_CONFIG[k];
+        const isLow = !isNA && v < 65;
 
         return (
-          <div key={k} className="p-3 rounded-2xl bg-muted/20 border border-border/40 space-y-1.5">
+          <div
+            key={k}
+            className={cn(
+              "p-3.5 rounded-2xl border transition-all space-y-2",
+              isLow
+                ? "bg-primary/[0.03] border-primary/30"
+                : "bg-secondary/40 border-border/60 hover:bg-secondary/70"
+            )}
+          >
             <div className="flex items-center justify-between text-xs">
               <div className="flex items-center gap-1.5 truncate">
-                <span className="font-semibold text-foreground">{config.labelVi}</span>
-                <span className="text-[11px] text-muted-foreground hidden sm:inline">({config.label})</span>
+                <span className="font-medium text-foreground">{config.labelVi}</span>
+                <span className="text-[11px] text-muted-foreground hidden sm:inline font-serif italic">
+                  ({config.label})
+                </span>
+                {isLow && (
+                  <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded-md bg-primary/10 text-primary">
+                    Điểm nghẽn
+                  </span>
+                )}
               </div>
-              <span className="font-mono font-bold text-foreground">
+              <span
+                className={cn(
+                  "font-mono font-bold text-xs",
+                  isLow ? "text-primary" : "text-foreground"
+                )}
+              >
                 {isNA ? "Chưa có audio" : `${v}/100`}
               </span>
             </div>
 
             {isNA ? (
-              <div className="h-2 rounded-full bg-muted flex items-center justify-center text-[10px] text-muted-foreground">
+              <div className="h-2 rounded-full bg-secondary/80 flex items-center justify-center text-[10px] text-muted-foreground font-sans">
                 Phát âm chỉ khả dụng khi bật audio STT server
               </div>
             ) : (

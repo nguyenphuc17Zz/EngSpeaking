@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { Mic, Volume2, Sparkles, AlertCircle, Loader2 } from "lucide-react";
+import { Mic, Volume2, AlertCircle, Loader2, Compass } from "lucide-react";
 
 export type VoiceOrbStatus =
   | "idle"
@@ -33,13 +33,13 @@ export function VoiceOrb({
   const sizeClasses = {
     sm: "size-20",
     md: "size-36",
-    lg: "size-48",
+    lg: "size-44",
   };
 
   const iconSizes = {
     sm: "size-6",
-    md: "size-10",
-    lg: "size-14",
+    md: "size-9",
+    lg: "size-12",
   };
 
   const getStatusConfig = () => {
@@ -47,111 +47,138 @@ export function VoiceOrb({
       case "listening":
       case "recording":
         return {
-          glow: "from-emerald-500/80 via-teal-500/60 to-cyan-500/80 animate-orb-listening",
-          shadow: "shadow-emerald-500/40",
+          bg: "bg-card border-2 border-chart-2 text-chart-2",
+          shadow: "paper-shadow",
+          ring: "ring-6 ring-chart-2/15",
+          waveColor: "border-chart-2/30",
           icon: Mic,
-          text: "Đang lắng nghe...",
-          textColor: "text-emerald-500 font-semibold",
-          ringColor: "border-emerald-500/40 animate-ping",
+          title: "Đang lắng nghe...",
+          subtitle: "Hãy tự tin nói tự nhiên theo ý bạn",
+          statusColor: "text-chart-2",
         };
       case "thinking":
       case "transcribing":
       case "starting":
         return {
-          glow: "from-amber-500/80 via-indigo-500/70 to-purple-600/80 animate-orb-thinking",
-          shadow: "shadow-indigo-500/40",
+          bg: "bg-card border-2 border-amber-600/70 text-amber-700 dark:text-amber-400",
+          shadow: "paper-shadow",
+          ring: "ring-6 ring-amber-500/15",
+          waveColor: "border-amber-500/30",
           icon: Loader2,
-          text: "AI đang suy nghĩ...",
-          textColor: "text-amber-500 font-semibold",
-          ringColor: "border-amber-500/30 animate-spin",
+          title: "Gia sư đang lắng nghe & suy ngẫm...",
+          subtitle: "Đang phân tích phản xạ và ý tứ câu nói",
+          statusColor: "text-amber-700 dark:text-amber-400",
         };
       case "speaking":
         return {
-          glow: "from-primary via-indigo-500/80 to-purple-500/80 animate-orb-glow",
-          shadow: "shadow-primary/40",
+          bg: "bg-primary border-2 border-primary text-primary-foreground",
+          shadow: "shadow-md shadow-primary/25",
+          ring: "ring-6 ring-primary/20",
+          waveColor: "border-primary/40",
           icon: Volume2,
-          text: "AI đang nói...",
-          textColor: "text-primary font-semibold",
-          ringColor: "border-primary/40 animate-pulse",
+          title: "AI đang nói...",
+          subtitle: "Lắng nghe ngữ điệu và nhịp ngắt câu",
+          statusColor: "text-primary",
         };
       case "error":
         return {
-          glow: "from-rose-500/80 via-red-500/60 to-pink-500/80",
-          shadow: "shadow-rose-500/40",
+          bg: "bg-card border-2 border-destructive text-destructive",
+          shadow: "paper-shadow",
+          ring: "ring-6 ring-destructive/15",
+          waveColor: "border-destructive/30",
           icon: AlertCircle,
-          text: "Có lỗi xảy ra",
-          textColor: "text-destructive font-semibold",
-          ringColor: "border-destructive/30",
+          title: "Đã xảy ra gián đoạn",
+          subtitle: "Nhấn để thử kết nối lại micro",
+          statusColor: "text-destructive",
         };
       default:
         return {
-          glow: "from-primary/70 via-indigo-600/50 to-primary/80 animate-orb-glow",
-          shadow: "shadow-primary/25",
-          icon: Sparkles,
-          text: "Nhấn để nói",
-          textColor: "text-muted-foreground",
-          ringColor: "border-primary/20",
+          bg: "bg-card border-2 border-border/90 text-foreground/80 hover:border-primary hover:text-primary",
+          shadow: "paper-shadow-sm hover:paper-shadow",
+          ring: "ring-4 ring-border/40",
+          waveColor: "border-border/40",
+          icon: Mic,
+          title: "Sẵn sàng luyện nói",
+          subtitle: "Nhấn vào micro để cất lời",
+          statusColor: "text-muted-foreground",
         };
     }
   };
 
   const config = getStatusConfig();
   const Icon = config.icon;
+  const isInteracting = status === "listening" || status === "recording" || status === "speaking";
 
   return (
-    <div className={cn("flex flex-col items-center justify-center gap-4", className)}>
+    <div className={cn("flex flex-col items-center justify-center gap-5", className)}>
       <div className="relative flex items-center justify-center">
-        {/* Outer Ripple Wave Effect */}
-        {(status === "listening" || status === "recording" || status === "speaking") && (
-          <div
-            className={cn(
-              "absolute inset-0 rounded-full border-2 opacity-50",
-              config.ringColor
-            )}
-            style={{ margin: "-16px" }}
-          />
+        {/* Organic Acoustic Soundwave Ripple */}
+        {isInteracting && (
+          <>
+            <div
+              className={cn(
+                "absolute inset-0 rounded-full border animate-acoustic-wave pointer-events-none",
+                config.waveColor
+              )}
+              style={{ margin: "-18px" }}
+            />
+            <div
+              className={cn(
+                "absolute inset-0 rounded-full border animate-acoustic-wave pointer-events-none",
+                config.waveColor
+              )}
+              style={{ margin: "-34px", animationDelay: "0.8s" }}
+            />
+          </>
         )}
 
-        {/* Second Outer Pulse */}
-        {(status === "listening" || status === "recording") && (
-          <div
-            className="absolute inset-0 rounded-full border border-emerald-500/20 animate-ping opacity-30"
-            style={{ margin: "-32px", animationDuration: "2.5s" }}
-          />
-        )}
-
-        {/* Main Glowing Orb */}
+        {/* Central Acoustic Breathing Circle */}
         <div
           onClick={onClick}
           className={cn(
-            "relative flex items-center justify-center rounded-full bg-gradient-to-tr transition-all duration-500 shadow-2xl cursor-pointer select-none",
+            "relative flex items-center justify-center rounded-full transition-all duration-300 cursor-pointer select-none",
             sizeClasses[size],
-            config.glow,
+            config.bg,
             config.shadow,
-            onClick && "hover:scale-105 active:scale-95"
+            config.ring,
+            isInteracting && "animate-acoustic-breathe",
+            onClick && "btn-spring"
           )}
         >
-          {/* Inner ambient light overlay */}
-          <div className="absolute inset-2 rounded-full bg-gradient-to-br from-white/30 via-transparent to-black/30 backdrop-blur-xs" />
+          {/* Gentle tactile inner ring */}
+          <div className="absolute inset-1.5 rounded-full border border-current/10 pointer-events-none" />
 
           {/* Center Icon */}
           <Icon
             className={cn(
-              "relative z-10 text-white drop-shadow-md transition-transform",
+              "relative z-10 transition-transform drop-shadow-2xs",
               iconSizes[size],
-              status === "thinking" || status === "transcribing" || status === "starting"
-                ? "animate-spin"
-                : ""
+              (status === "thinking" || status === "transcribing" || status === "starting") &&
+                "animate-spin"
             )}
           />
         </div>
       </div>
 
-      {/* Status Text / Helper */}
-      <div className="flex flex-col items-center text-center gap-0.5">
-        <span className={cn("text-sm transition-colors", config.textColor)}>
-          {helperText || config.text}
-        </span>
+      {/* Living Audio Equalizer Bars */}
+      {isInteracting && (
+        <div className="flex items-center justify-center gap-1.5 h-6 -my-2" aria-label="Sóng âm thanh giọng nói">
+          <span className={cn("w-1 rounded-full bg-current animate-eq-1", config.statusColor)} />
+          <span className={cn("w-1.5 rounded-full bg-current animate-eq-2", config.statusColor)} />
+          <span className={cn("w-1.5 rounded-full bg-current animate-eq-3", config.statusColor)} />
+          <span className={cn("w-1.5 rounded-full bg-current animate-eq-4", config.statusColor)} />
+          <span className={cn("w-1 rounded-full bg-current animate-eq-5", config.statusColor)} />
+        </div>
+      )}
+
+      {/* Editorial Status & Helper Subtitle */}
+      <div className="flex flex-col items-center text-center gap-1 max-w-sm px-4">
+        <h3 className="text-base md:text-lg font-serif font-bold tracking-tight text-foreground transition-colors">
+          {helperText || config.title}
+        </h3>
+        <p className="text-xs text-muted-foreground font-sans leading-relaxed">
+          {config.subtitle}
+        </p>
       </div>
     </div>
   );
