@@ -1,6 +1,7 @@
 "use client";
 
 import { sanitizeTextForTTS } from "./browser";
+import { useSettingsStore } from "@/stores/settings-store";
 
 // Cache in-memory: key -> object URL
 const audioBlobCache = new Map<string, string>();
@@ -69,6 +70,9 @@ export async function getOrFetchAudioUrl(
   const clean = sanitizeTextForTTS(text);
   if (!clean) throw new Error("Empty text");
 
+  const globalSpeed = typeof window !== "undefined" ? useSettingsStore.getState().ttsSpeed ?? 1.0 : 1.0;
+  const resolvedSpeed = speed ?? globalSpeed;
+
   const isKokoroVoice = Boolean(
     voice && (voice.startsWith("af_") || voice.startsWith("am_") || voice.startsWith("bf_") || voice.startsWith("bm_"))
   );
@@ -87,7 +91,7 @@ export async function getOrFetchAudioUrl(
       ? defaultVoice
       : voice;
 
-  const key = getCacheKey(clean, resolvedVoice, speed, inferredProvider);
+  const key = getCacheKey(clean, resolvedVoice, resolvedSpeed, inferredProvider);
   const cachedUrl = audioBlobCache.get(key);
   if (cachedUrl) {
     return cachedUrl;
@@ -98,7 +102,7 @@ export async function getOrFetchAudioUrl(
     text: clean,
     voice: resolvedVoice,
     provider: inferredProvider,
-    speed: (speed || 1.0).toString(),
+    speed: (resolvedSpeed || 1.0).toString(),
   });
 
   const res = await fetch(`/api/ai/speak?${params.toString()}`, {
@@ -123,12 +127,15 @@ export function playEdgeAudio(options: PlayAudioOptions): Promise<void> {
     try {
       stopEdgeAudio();
 
-      const url = await getOrFetchAudioUrl(options.text, options.voice, options.speed, options.provider);
+      const globalSpeed = typeof window !== "undefined" ? useSettingsStore.getState().ttsSpeed ?? 1.0 : 1.0;
+      const targetSpeed = options.speed ?? globalSpeed;
+
+      const url = await getOrFetchAudioUrl(options.text, options.voice, targetSpeed, options.provider);
       const audio = new Audio(url);
       currentAudio = audio;
 
-      if (options.speed && options.speed !== 1) {
-        audio.playbackRate = options.speed;
+      if (targetSpeed && targetSpeed !== 1) {
+        audio.playbackRate = targetSpeed;
       }
 
       audio.onended = () => {

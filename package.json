@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "download:kokoro": "node scripts/download-kokoro.mjs",
-    "download:whisper": "node scripts/download-whisper.mjs"
+    "download:whisper": "node scripts/download-whisper.mjs",
+    "download:dictionary": "node scripts/download-dictionary.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

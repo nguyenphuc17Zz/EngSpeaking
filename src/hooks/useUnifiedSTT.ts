@@ -70,11 +70,13 @@ export function useUnifiedSTT(options?: UnifiedSTTOptions) {
   }, [getProvider, browserSpeech, audioRecorder]);
 
   const stopListening = useCallback(async (): Promise<{ text: string; blob?: Blob }> => {
+    // Unconditionally stop Web Speech API first
+    browserSpeech.stopListening();
+
     const provider = getProvider();
     const model = getModel();
 
     if (provider === "browser") {
-      browserSpeech.stopListening();
       // Wait slightly for browser final chunk
       await new Promise((r) => setTimeout(r, 250));
       const finalResult = browserSpeech.fullTranscript.trim() || browserSpeech.transcript.trim();

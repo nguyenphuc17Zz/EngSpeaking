@@ -104,9 +104,12 @@ export default function SentenceBuilderPage() {
   const unifiedSTTRef = useRef(unifiedSTT);
   unifiedSTTRef.current = unifiedSTT;
 
-  // Reset base sentence listen state when task changes
+  // Reset base sentence listen state and stop mic when task changes
   useEffect(() => {
     setHasListenedBaseSentence(false);
+    if (unifiedSTTRef.current.isListening) {
+      unifiedSTTRef.current.stopListening().catch(() => {});
+    }
   }, [currentTask?.id]);
 
   // Initialize or Select Mode
@@ -434,9 +437,6 @@ export default function SentenceBuilderPage() {
 
             <div className="flex items-center gap-2">
               <GlobalAiSelector size="sm" />
-              <Badge variant="outline" className="text-xs font-mono border-primary/30 text-primary hidden sm:inline-flex">
-                Nâng phản xạ từ Thụ động → Tự động
-              </Badge>
             </div>
           </div>
 
@@ -444,9 +444,6 @@ export default function SentenceBuilderPage() {
             <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
               Sentence Builder & Controlled Speaking
             </h1>
-            <p className="text-xs md:text-sm text-muted-foreground leading-relaxed">
-              Khai mở phản xạ nói tức thì từ kiến thức từ vựng/ngữ pháp sẵn có. Luyện tập theo cơ chế thích ứng đa tầng (Level A → C).
-            </p>
           </div>
 
           {/* Quick Mastery Snapshot */}
@@ -504,9 +501,6 @@ export default function SentenceBuilderPage() {
             <h2 className="text-xs font-bold text-foreground uppercase tracking-wider">
               Chọn phòng tập phản xạ:
             </h2>
-            <span className="text-[11px] text-muted-foreground font-mono">
-              Chu kỳ thích ứng tự động (Adaptive Ladder)
-            </span>
           </div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
@@ -523,7 +517,7 @@ export default function SentenceBuilderPage() {
                 <p className="text-xs text-muted-foreground mt-0.5">4 câu phản xạ nhanh khởi động ngày mới.</p>
               </div>
               <Badge variant="secondary" className="text-[10px] font-mono">
-                4 tasks • Bật phản xạ
+                4 tasks
               </Badge>
             </Card>
 
@@ -543,7 +537,7 @@ export default function SentenceBuilderPage() {
                 <p className="text-xs text-muted-foreground mt-0.5">10 câu chuẩn: Khởi động → Tăng tốc → Sửa lỗi.</p>
               </div>
               <Badge variant="outline" className="text-[10px] font-mono text-primary border-primary/40">
-                10 tasks • Thích ứng toàn diện
+                10 tasks
               </Badge>
             </Card>
 
@@ -560,7 +554,7 @@ export default function SentenceBuilderPage() {
                 <p className="text-xs text-muted-foreground mt-0.5">20 câu nâng cao, đa dạng cấu trúc phức.</p>
               </div>
               <Badge variant="secondary" className="text-[10px] font-mono">
-                20 tasks • Đào sâu ngữ cảnh
+                20 tasks
               </Badge>
             </Card>
 
@@ -577,7 +571,7 @@ export default function SentenceBuilderPage() {
                 <p className="text-xs text-muted-foreground mt-0.5">Quét Error Bank và drill vào mẫu câu yếu nhất.</p>
               </div>
               <Badge variant="secondary" className="text-[10px] font-mono text-amber-600 dark:text-amber-400">
-                Micro-Drill • Sửa dứt điểm
+                Targeted Drill
               </Badge>
             </Card>
           </div>

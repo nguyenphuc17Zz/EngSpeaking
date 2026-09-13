@@ -52,7 +52,7 @@ export async function generateTextWithRouting(opts: {
   let modelId = opts.model;
   // Strict per user choice: "auto" resolves deterministically, but no fallback on failure §36
   if (providerId === "auto" || modelId === "auto") {
-    const resolved = resolveAutoModelServer("conversation");
+    const resolved = resolveAutoModelServer("conversation", providerId !== "auto" ? providerId : undefined);
     if (providerId === "auto") providerId = resolved.providerId;
     if (modelId === "auto") modelId = resolved.modelId;
   }
@@ -82,7 +82,8 @@ export async function generateOpeningPrompt(opts: { provider: string; model: str
 
 function cleanJson(text: string): unknown {
   const trimmed = text.trim();
-  const withoutFence = trimmed
+  const withoutThink = trimmed.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  const withoutFence = withoutThink
     .replace(/^```json\s*/i, "")
     .replace(/^```\s*/i, "")
     .replace(/\s*```$/i, "");

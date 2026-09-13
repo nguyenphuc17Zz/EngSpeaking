@@ -1,11 +1,20 @@
-// High-Speed In-Memory Spoken Lexicon Database Service (Function 8)
-// Zero-latency <1ms prefix search, random sampling by CEFR, and rich SpokenWordItem synthesis with realistic examples
-
-import { MASTER_LEXICON_REGISTRY, type RawLexiconEntry } from "./data/cefr-lexicon-data";
+import OXFORD_5000_ENTRIES from "./data/oxford-5000.json";
 import type { SpokenWordItem } from "@/types/vocabulary-context";
+
+export interface RawLexiconEntry {
+  w: string; // word
+  p: string; // pos
+  l: "A1" | "A2" | "B1" | "B2" | "C1"; // cefr
+  i: string; // ipa
+  m: string; // meaning vi
+  s: number; // stress index (1-based)
+  c?: string[]; // collocations
+  a?: string; // audio url
+}
 
 // Map indexed by lowercase word
 const wordMap = new Map<string, RawLexiconEntry>();
+const allEntries: RawLexiconEntry[] = [];
 const levelBuckets: Record<string, RawLexiconEntry[]> = {
   A1: [],
   A2: [],
@@ -14,12 +23,30 @@ const levelBuckets: Record<string, RawLexiconEntry[]> = {
   C1: [],
 };
 
-// Initialize indexes
-for (const item of MASTER_LEXICON_REGISTRY) {
+// Initialize indexes from full Oxford 5000 dataset (4,958 entries, 0ms instant lookup)
+for (const item of OXFORD_5000_ENTRIES) {
   const lower = item.w.toLowerCase();
-  wordMap.set(lower, item);
-  if (levelBuckets[item.l]) {
-    levelBuckets[item.l].push(item);
+  if (!wordMap.has(lower)) {
+    const level = (["A1", "A2", "B1", "B2", "C1"].includes(item.l) ? item.l : "B1") as
+      | "A1"
+      | "A2"
+      | "B1"
+      | "B2"
+      | "C1";
+    const raw: RawLexiconEntry = {
+      w: item.w,
+      p: item.p || "word",
+      l: level,
+      i: item.i || `/${item.w}/`,
+      m: item.m || item.w,
+      s: typeof item.s === "number" ? item.s : 1,
+      c: [`use ${item.w}`, `practice ${item.w}`],
+    };
+    wordMap.set(lower, raw);
+    allEntries.push(raw);
+    if (levelBuckets[level]) {
+      levelBuckets[level].push(raw);
+    }
   }
 }
 
@@ -34,119 +61,78 @@ function generateRealisticSentences(raw: RawLexiconEntry): {
   const col1 = raw.c?.[0] || raw.w;
   const col2 = raw.c?.[1] || raw.w;
 
-  if (raw.w === "decision") {
-    return {
-      s1En: "We need to make a final decision before the deadline tomorrow.",
-      s1Vi: "Chúng ta cần đưa ra quyết định cuối cùng trước hạn chót ngày mai.",
-      s2En: "The committee finally reached a decision after a three-hour meeting.",
-      s2Vi: "Hội đồng cuối cùng đã đi đến một quyết định sau cuộc họp kéo dài 3 tiếng.",
-      link1: "need to -> need-tuh | make a -> may-kuh",
-      link2: "reached a -> reach-tuh",
-    };
-  }
-
-  if (raw.w === "schedule") {
-    return {
-      s1En: "Let me check my schedule and get back to you this afternoon.",
-      s1Vi: "Để tôi kiểm tra lịch trình và phản hồi bạn vào chiều nay.",
-      s2En: "We managed to finish the project two days ahead of schedule.",
-      s2Vi: "Chúng tôi đã hoàn thành dự án sớm hơn 2 ngày so với tiến độ.",
-      link1: "check my -> check-my | get back to -> get-back-tuh",
-      link2: "ahead of -> a-head-uv",
-    };
-  }
-
-  if (raw.w === "comfortable") {
-    return {
-      s1En: "I feel much more comfortable speaking English in meetings now.",
-      s1Vi: "Bây giờ tôi cảm thấy thoải mái hơn nhiều khi nói tiếng Anh trong các cuộc họp.",
-      s2En: "Please make yourself comfortable while waiting for the manager.",
-      s2Vi: "Xin cứ tự nhiên trong lúc chờ người quản lý.",
-      link1: "feel much -> feel-much | in meetings -> in-mee-dings",
-      link2: "make yourself -> make-yer-self",
-    };
-  }
-
-  if (raw.w === "negotiate") {
-    return {
-      s1En: "We managed to negotiate a better deal with our main supplier.",
-      s1Vi: "Chúng tôi đã đàm phán thành công một thỏa thuận tốt hơn với nhà cung cấp chính.",
-      s2En: "It is always possible to negotiate flexible payment terms.",
-      s2Vi: "Chúng ta luôn có thể thương lượng các điều khoản thanh toán linh hoạt.",
-      link1: "managed to -> ma-nij-tuh | better deal -> beh-der-deal",
-      link2: "always possible -> al-wayz-pos-si-ble",
-    };
-  }
-
-  if (raw.w === "colleague") {
-    return {
-      s1En: "My colleague helped me prepare the presentation for the client.",
-      s1Vi: "Đồng nghiệp của tôi đã giúp tôi chuẩn bị bài thuyết trình cho khách hàng.",
-      s2En: "She is a trusted colleague whom I have worked with for years.",
-      s2Vi: "Cô ấy là một đồng nghiệp đáng tin cậy mà tôi đã làm việc cùng nhiều năm.",
-      link1: "helped me -> help-mee | for the -> fer-thuh",
-      link2: "worked with -> work-twith",
-    };
-  }
-
-  if (raw.w === "priority") {
-    return {
-      s1En: "Improving customer satisfaction is our top priority this year.",
-      s1Vi: "Nâng cao sự hài lòng của khách hàng là ưu tiên hàng đầu của chúng tôi trong năm nay.",
-      s2En: "You should set clear priorities before starting your workday.",
-      s2Vi: "Bạn nên thiết lập các mức ưu tiên rõ ràng trước khi bắt đầu ngày làm việc.",
-      link1: "top priority -> top-prai-or-i-ty",
-      link2: "set clear -> set-clear",
-    };
-  }
-
-  // Dynamic template based on Part of Speech
+  // Natural Dynamic Templates based on Part of Speech & Syntax
   if (raw.p === "verb") {
     return {
-      s1En: `In our daily work, we always try to ${col1} effectively.`,
-      s1Vi: `Trong công việc hàng ngày, chúng tôi luôn cố gắng ${raw.m} một cách hiệu quả.`,
-      s2En: `You should ${col2} whenever you have an opportunity.`,
-      s2Vi: `Bạn nên ${raw.m} bất cứ khi nào bạn có cơ hội.`,
-      link1: `try to -> try-tuh`,
+      s1En: `To improve workplace productivity, our team always aims to ${col1}.`,
+      s1Vi: `Để nâng cao năng suất làm việc, nhóm chúng tôi luôn hướng tới việc ${raw.m}.`,
+      s2En: `You should actively ${col2} whenever you spot a good opportunity.`,
+      s2Vi: `Bạn nên chủ động ${raw.m} bất cứ khi nào bạn nhận thấy một cơ hội tốt.`,
+      link1: `aims to -> aymz-tuh`,
       link2: `whenever you -> when-eh-ver-yoo`,
     };
   }
 
   if (raw.p === "adj") {
     return {
-      s1En: `This solution is very ${raw.w} for our team in this situation.`,
-      s1Vi: `Giải pháp này rất ${raw.m} cho đội ngũ của chúng tôi trong tình huống này.`,
-      s2En: `It is important to keep things ${raw.w} during communication.`,
-      s2Vi: `Điều quan trọng là giữ mọi thứ ${raw.m} trong quá trình giao tiếp.`,
-      link1: `is very -> iz-veh-ree`,
-      link2: `important to -> im-por-tant-tuh`,
+      s1En: `Adopting this new approach proved to be exceptionally ${raw.w} for our project.`,
+      s1Vi: `Áp dụng cách tiếp cận mới này đã chứng tỏ là đặc biệt ${raw.m} cho dự án của chúng tôi.`,
+      s2En: `It is essential to stay ${raw.w} and focused when communicating with international clients.`,
+      s2Vi: `Điều cần thiết là giữ sự ${raw.m} và tập trung khi giao tiếp với các khách hàng quốc tế.`,
+      link1: `proved to -> proovd-tuh`,
+      link2: `essential to -> eh-sen-shul-tuh`,
+    };
+  }
+
+  // Nouns / Prepositions / Adverbs
+  const isVerbCollocation = /^(take|make|have|do|get|set|give|reach|build|face|meet|seize|drive)\b/i.test(col1);
+
+  if (isVerbCollocation) {
+    return {
+      s1En: `In order to succeed in modern business, you should always ${col1}.`,
+      s1Vi: `Để thành công trong kinh doanh hiện đại, bạn nên luôn ${raw.m}.`,
+      s2En: `Our director encouraged all team members to ${col2} before final evaluation.`,
+      s2Vi: `Giám đốc của chúng tôi đã khuyến khích tất cả thành viên trong nhóm ${raw.m} trước đợt đánh giá cuối cùng.`,
+      link1: `order to -> or-der-tuh`,
+      link2: `encouraged all -> en-ker-ijd-awl`,
     };
   }
 
   return {
-    s1En: `Having a clear understanding of ${col1} is essential for success.`,
-    s1Vi: `Có sự hiểu biết rõ ràng về ${raw.m} là điều cốt yếu để thành công.`,
-    s2En: `We focused heavily on ${col2} during our team discussion today.`,
-    s2Vi: `Chúng tôi đã tập trung rất nhiều vào ${raw.m} trong buổi thảo luận nhóm hôm nay.`,
-    link1: `is essential -> iz-eh-sen-shul`,
-    link2: `focused on -> fo-kust-on`,
+    s1En: `In modern professional settings, having a solid grasp of ${col1} makes a measurable impact.`,
+    s1Vi: `Trong môi trường chuyên nghiệp hiện đại, việc nắm vững ${raw.m} tạo ra tác động rõ rệt.`,
+    s2En: `The team spent considerable time discussing ${col2} during the strategy review.`,
+    s2Vi: `Nhóm đã dành nhiều thời gian thảo luận về ${raw.m} trong buổi đánh giá chiến lược.`,
+    link1: `grasp of -> grasp-uv`,
+    link2: `spent considerable -> spent-kuhn-sid-er-uh-buhl`,
   };
 }
 
 export function synthesizeSpokenWordItem(raw: RawLexiconEntry): SpokenWordItem {
-  const collocations = (raw.c || []).map((col, idx) => ({
-    phrase: col,
-    meaningVi: `cụm từ "${col}"`,
-    exampleSentence: `In daily conversation, we frequently say "${col}".`,
-    collocationType: (idx === 0 ? "verb_noun" : "adj_noun") as "verb_noun" | "adj_noun",
-    pmiStrength: "high" as const,
-  }));
+  const collocations = (raw.c || []).map((col, idx) => {
+    let exampleSentence = `In professional discussions, using "${col}" helps articulate ideas clearly.`;
+    if (/^(take|make|have|do|get|set|give|reach|build|face|meet|seize|drive)\b/i.test(col)) {
+      exampleSentence = `You should always ${col} whenever the right opportunity arises.`;
+    } else if (/^[a-z]+ly\b/i.test(col)) {
+      exampleSentence = `Our team decided to ${col} to ensure optimal outcomes.`;
+    } else {
+      exampleSentence = `Developing a strong ${col} is crucial for long-term career growth.`;
+    }
+
+    return {
+      phrase: col,
+      meaningVi: `cụm từ "${col}"`,
+      exampleSentence,
+      collocationType: (idx === 0 ? "verb_noun" : "adj_noun") as "verb_noun" | "adj_noun",
+      pmiStrength: "high" as const,
+    };
+  });
 
   if (collocations.length === 0) {
     collocations.push({
       phrase: `use ${raw.w}`,
       meaningVi: `sử dụng ${raw.w}`,
-      exampleSentence: `You can use "${raw.w}" in conversation.`,
+      exampleSentence: `You can use "${raw.w}" naturally in your daily spoken English.`,
       collocationType: "verb_noun",
       pmiStrength: "high",
     });
@@ -215,15 +201,37 @@ export function lookupLexiconWord(word: string): SpokenWordItem | null {
 }
 
 /**
- * Fast random selection by CEFR Level (<1ms)
+ * Fast random selection by CEFR Level & Part of Speech (<1ms)
  */
 export function getRandomLexiconWord(options: {
   cefrLevel?: string;
+  partOfSpeech?: string;
   currentWordId?: string;
 } = {}): SpokenWordItem {
-  let pool = MASTER_LEXICON_REGISTRY;
-  if (options.cefrLevel && levelBuckets[options.cefrLevel]?.length > 0) {
-    pool = levelBuckets[options.cefrLevel];
+  let pool = allEntries;
+
+  // 1. Filter by CEFR Level if specified and not "all"
+  if (options.cefrLevel && options.cefrLevel !== "all") {
+    const levelKey = options.cefrLevel.toUpperCase();
+    if (levelBuckets[levelKey]?.length > 0) {
+      pool = levelBuckets[levelKey];
+    }
+  }
+
+  // 2. Filter by Part of Speech if specified and not "all"
+  if (options.partOfSpeech && options.partOfSpeech !== "all") {
+    const posQuery = options.partOfSpeech.toLowerCase();
+    const posFiltered = pool.filter((item) => {
+      const p = item.p?.toLowerCase() || "";
+      if (posQuery === "verb") return (p.startsWith("verb") || /\bverb\b/.test(p)) && !p.includes("adverb");
+      if (posQuery === "noun") return p.startsWith("noun") || /\bnoun\b/.test(p);
+      if (posQuery === "adjective" || posQuery === "adj") return p.startsWith("adj") || p.includes("adjective");
+      if (posQuery === "adverb" || posQuery === "adv") return p.startsWith("adv") || p.includes("adverb");
+      return p === posQuery;
+    });
+    if (posFiltered.length > 0) {
+      pool = posFiltered;
+    }
   }
 
   const cleanCurrent = options.currentWordId?.replace("lex_", "")?.replace("word_", "");
@@ -232,6 +240,33 @@ export function getRandomLexiconWord(options: {
 
   const randomIndex = Math.floor(Math.random() * finalPool.length);
   return synthesizeSpokenWordItem(finalPool[randomIndex]);
+}
+
+/**
+ * Quick statistics of the Oxford 5000 core database
+ */
+export function getLexiconStats(): {
+  total: number;
+  byLevel: Record<string, number>;
+  byPos: Record<string, number>;
+} {
+  const byLevel: Record<string, number> = { A1: 0, A2: 0, B1: 0, B2: 0, C1: 0 };
+  const byPos: Record<string, number> = { noun: 0, verb: 0, adjective: 0, adverb: 0 };
+
+  for (const item of allEntries) {
+    if (byLevel[item.l] !== undefined) byLevel[item.l]++;
+    const p = item.p.toLowerCase();
+    if (p.includes("adverb")) byPos.adverb++;
+    else if (p.includes("verb")) byPos.verb++;
+    else if (p.includes("noun")) byPos.noun++;
+    else if (p.includes("adj")) byPos.adjective++;
+  }
+
+  return {
+    total: allEntries.length,
+    byLevel,
+    byPos,
+  };
 }
 
 /**
@@ -249,4 +284,124 @@ export function searchLexiconPrefix(prefix: string, limit = 8): SpokenWordItem[]
     }
   }
   return results;
+}
+
+/**
+ * Free Dictionary API lookup (~80-150ms)
+ */
+export async function fetchFreeDictionaryData(word: string): Promise<{
+  phonetic?: string;
+  partOfSpeech?: string;
+  definition?: string;
+} | null> {
+  try {
+    const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`, {
+      signal: AbortSignal.timeout(2500),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) return null;
+
+    const entry = data[0];
+    const phonetic = entry.phonetic || entry.phonetics?.find((p: { text?: string }) => p.text)?.text;
+    const firstMeaning = entry.meanings?.[0];
+    const partOfSpeech = firstMeaning?.partOfSpeech;
+    const definition = firstMeaning?.definitions?.[0]?.definition;
+
+    return { phonetic, partOfSpeech, definition };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 3-Tier Instant Word Resolver:
+ * - Tier 1: Local Oxford 5000 Core Lexicon (4,958 entries, 0ms instant)
+ * - Tier 2: Local 103k English-Vietnamese Dictionary (~2-5ms)
+ * - Tier 3: Free Dictionary API & Instant Heuristic Fallback
+ */
+export async function resolveWordFast(word: string): Promise<SpokenWordItem> {
+  const clean = word.trim().toLowerCase();
+
+  // 1. Tier 1: Local Oxford 5000 Lexicon (0ms)
+  const localHit = lookupLexiconWord(clean);
+  if (localHit) return localHit;
+
+  // 2. Tier 2: Local English-Vietnamese 103k Dictionary
+  let dictMeaning = "";
+  let dictPos = "noun";
+  let dictIpa = `/${clean}/`;
+
+  try {
+    if (typeof window !== "undefined") {
+      const res = await fetch(`/api/foundation/vocabulary/dict-lookup?word=${encodeURIComponent(clean)}`, {
+        signal: AbortSignal.timeout(1500),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.found) {
+          dictMeaning = data.meaningVi;
+          dictPos = data.partOfSpeech || "noun";
+          dictIpa = data.ipa || dictIpa;
+        }
+      }
+    }
+  } catch {
+    // Ignore network or parse errors for fallback
+  }
+
+  // 3. Tier 3: Free Dictionary API fallback if meaning is not found
+  if (!dictMeaning) {
+    const dictData = await fetchFreeDictionaryData(clean);
+    if (dictData) {
+      dictIpa = dictData.phonetic || dictIpa;
+      dictPos = (dictData.partOfSpeech as any) || dictPos;
+      dictMeaning = dictData.definition || "";
+    }
+  }
+
+  const finalMeaning = dictMeaning || `Từ tiếng Anh: ${clean}`;
+
+  // 4. Synthesize instant SpokenWordItem immediately
+  return {
+    id: `word_${clean}`,
+    word: clean,
+    ipaUS: dictIpa,
+    partOfSpeech: dictPos as any,
+    cefrLevel: "B1",
+    meaningVi: finalMeaning,
+    englishDefinition: `The English term "${clean}" (${dictPos}): ${finalMeaning}`,
+    stressedSyllableIndex: 1,
+    stressExplanationVi: `Trọng âm của từ "${clean}"`,
+    endingSoundGuideVi: "Bật âm cuối rõ ràng và tự nhiên",
+    collocations: [
+      {
+        phrase: `use ${clean}`,
+        meaningVi: `sử dụng ${clean}`,
+        exampleSentence: `You can use "${clean}" in spoken English.`,
+        collocationType: "verb_noun",
+        pmiStrength: "high",
+      },
+    ],
+    contextSentences: [
+      {
+        id: "s1",
+        domain: "daily_life",
+        domainTitleVi: "Đời sống hàng ngày",
+        sentenceEn: `Let's practice pronouncing "${clean}" clearly.`,
+        sentenceVi: `Hãy cùng luyện phát âm từ "${clean}" một cách tự nhiên nhé.`,
+        targetWordHighlighted: clean,
+      },
+    ],
+    spontaneousChallenge: {
+      promptEn: `Use "${clean}" in a short spoken sentence.`,
+      promptVi: `Nói một câu ngắn có chứa từ "${clean}".`,
+      targetCollocation: clean,
+      suggestedOpeningEn: `When I use ${clean}, I...`,
+    },
+    wordMasteryScore: 0,
+    sentenceMasteryScore: 0,
+    isMastered: false,
+    practiceCount: 0,
+  };
 }

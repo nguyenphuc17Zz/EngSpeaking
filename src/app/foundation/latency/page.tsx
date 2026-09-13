@@ -99,6 +99,9 @@ export default function LatencyTrainingPage() {
     setElapsedMs(0);
     setSpeechStartTimestamp(null);
     setDetectedSpeechOnsetMs(null);
+    if (unifiedSTTRef.current.isListening) {
+      unifiedSTTRef.current.stopListening().catch(() => {});
+    }
 
     stopwatchRef.current = setInterval(() => {
       setElapsedMs(Date.now() - t0);
@@ -693,30 +696,14 @@ export default function LatencyTrainingPage() {
 
         <div className="flex items-center gap-2">
           <GlobalAiSelector size="sm" />
-          <Badge
-            variant="outline"
-            className="text-xs font-mono border-amber-500/30 text-amber-600 dark:text-amber-400"
-          >
-            Function 4 • Real AI
-          </Badge>
         </div>
       </div>
 
       {/* Hero Banner */}
-      <div className="p-6 md:p-8 rounded-3xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-card to-background shadow-sm space-y-4">
-        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-xs font-bold w-fit">
-          <Zap className="size-3.5 fill-current" />
-          <span>Spoken Retrieval Speed Gym</span>
-        </div>
-
-        <div className="max-w-2xl space-y-2">
-          <h2 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
-            Bứt phá độ trễ khẩu ngữ: Bật câu tiếng Anh ngay lập tức
-          </h2>
-          <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-            Người học thường tốn 5-7 giây suy nghĩ dịch từ tiếng Việt trước khi nói. Phòng tập tốc độ sẽ áp đặt áp lực thời gian có kiểm soát để kích hoạt vùng ngôn ngữ tự động (Automatic Retrieval).
-          </p>
-        </div>
+      <div className="p-5 sm:p-6 rounded-3xl border border-amber-500/20 bg-gradient-to-br from-amber-500/10 via-card to-background shadow-xs">
+        <h2 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
+          Luyện phản xạ tốc độ (Latency Drills)
+        </h2>
       </div>
 
       {/* Baseline Test Card */}
@@ -728,7 +715,7 @@ export default function LatencyTrainingPage() {
             </div>
             <div>
               <h3 className="text-base font-bold text-foreground">
-                Baseline Latency Test (Kiểm tra mốc phản xạ khởi đầu)
+                Baseline Latency Test (Kiểm tra mốc phản xạ)
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
                 10 câu hỏi chuẩn hóa để đo lường Median Latency và thiết lập mục tiêu cá nhân hóa.
@@ -750,7 +737,7 @@ export default function LatencyTrainingPage() {
       {/* 3 Main Drill Modes */}
       <div className="space-y-4">
         <h2 className="text-sm font-bold text-foreground uppercase tracking-wider">
-          Hoặc chọn chế độ phòng tập tốc độ:
+          Chế độ luyện tập:
         </h2>
 
         <div className="grid sm:grid-cols-3 gap-4">

@@ -30,13 +30,6 @@ import {
   type WordIpaToken,
 } from "@/lib/foundation/shadowing/ipa-dictionary";
 import {
-  getShadowingHistory,
-  saveToShadowingHistory,
-  removeFromShadowingHistory,
-  clearShadowingHistory,
-  type ShadowingHistoryItem,
-} from "@/lib/foundation/shadowing/shadowing-history.service";
-import {
   getVideoLibrary,
   addVideoToLibrary,
   updateVideoInLibrary,
@@ -73,7 +66,6 @@ import {
   Video,
   ChevronDown,
   ChevronUp,
-  History,
   Trash2,
   ExternalLink,
   Clock,
@@ -121,9 +113,6 @@ export default function CorodomoShadowingStudioPage() {
   const activeSegmentIndexRef = useRef(0);
   activeSegmentIndexRef.current = activeSegmentIndex;
 
-  // ─── History State ───────────────────────────────────────────────────
-  const [watchHistory, setWatchHistory] = useState<ShadowingHistoryItem[]>([]);
-
   // ─── Playback & Sync State ───────────────────────────────────────────
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
@@ -157,6 +146,13 @@ export default function CorodomoShadowingStudioPage() {
   const [showSubtitleAccordion, setShowSubtitleAccordion] = useState(true);
   const [elapsedSec, setElapsedSec] = useState(0);
 
+  // ─── Duplicate Link Detection State ─────────────────────────────────
+  const [duplicatePrompt, setDuplicatePrompt] = useState<{
+    isOpen: boolean;
+    lesson: CorodomoVideoLesson;
+    url: string;
+  } | null>(null);
+
   // ─── Word Lookup Popup State ─────────────────────────────────────────
   const [popupWord, setPopupWord] = useState<any | null>(null);
   const [popupAnchor, setPopupAnchor] = useState<HTMLElement | null>(null);
@@ -171,16 +167,13 @@ export default function CorodomoShadowingStudioPage() {
 
   // ─── Video Library (CRUD) State ──────────────────────────────────────
   const [videoLibrary, setVideoLibrary] = useState<SavedVideoLesson[]>([]);
-  const [libraryCefrFilter, setLibraryCefrFilter] = useState<string>("all");
   const [librarySearch, setLibrarySearch] = useState<string>("");
   const [editingLesson, setEditingLesson] = useState<SavedVideoLesson | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editChannel, setEditChannel] = useState("");
-  const [editCefr, setEditCefr] = useState("B1");
 
-  // ─── Load History & Library on Mount ─────────────────────────────────
+  // ─── Load Video Library on Mount ─────────────────────────────────────
   useEffect(() => {
-    setWatchHistory(getShadowingHistory());
     setVideoLibrary(getVideoLibrary());
   }, []);
 
@@ -189,7 +182,6 @@ export default function CorodomoShadowingStudioPage() {
     setEditingLesson(lesson);
     setEditTitle(lesson.title);
     setEditChannel(lesson.channel);
-    setEditCefr(lesson.cefrLevel || "B1");
   };
 
   const handleSaveEdit = () => {
@@ -197,7 +189,6 @@ export default function CorodomoShadowingStudioPage() {
     const updated = updateVideoInLibrary(editingLesson.id, {
       title: editTitle.trim() || editingLesson.title,
       channel: editChannel.trim() || editingLesson.channel,
-      cefrLevel: editCefr,
     });
     setVideoLibrary(updated);
     if (activeLesson.id === editingLesson.id) {
@@ -205,7 +196,6 @@ export default function CorodomoShadowingStudioPage() {
         ...prev,
         title: editTitle.trim() || prev.title,
         channel: editChannel.trim() || prev.channel,
-        cefrLevel: editCefr,
       }));
     }
     setEditingLesson(null);
@@ -226,17 +216,15 @@ export default function CorodomoShadowingStudioPage() {
   };
 
   const filteredLibrary = useMemo(() => {
+    const q = librarySearch.trim().toLowerCase();
+    if (!q) return videoLibrary;
     return videoLibrary.filter((item) => {
-      const matchesCefr =
-        libraryCefrFilter === "all" ||
-        item.cefrLevel?.toLowerCase() === libraryCefrFilter.toLowerCase();
-      const matchesQuery =
-        !librarySearch.trim() ||
-        item.title.toLowerCase().includes(librarySearch.toLowerCase()) ||
-        item.channel.toLowerCase().includes(librarySearch.toLowerCase());
-      return matchesCefr && matchesQuery;
+      return (
+        item.title.toLowerCase().includes(q) ||
+        item.channel.toLowerCase().includes(q)
+      );
     });
-  }, [videoLibrary, libraryCefrFilter, librarySearch]);
+  }, [videoLibrary, librarySearch]);
 
   const currentSegment: CorodomoSegment =
     activeLesson.segments[activeSegmentIndex] || activeLesson.segments[0];
@@ -265,16 +253,41 @@ export default function CorodomoShadowingStudioPage() {
       if (typeof window === "undefined" || currentView !== "studio") return;
 
       const createPlayer = () => {
-        const el = document.getElementById("corodomo-yt-player");
-        if (!el || !window.YT || !window.YT.Player) return;
+        // If player already exists and is healthy, just load the video directly
+        if (
+          playerRef.current &&
+          typeof playerRef.current.loadVideoById === "function" &&
+          document.getElementById("corodomo-yt-player")
+        ) {
+          try {
+            playerRef.current.loadVideoById(videoId);
+            playerRef.current.setPlaybackRate(playbackSpeed);
+            return;
+          } catch {
+            // If loadVideoById fails, fallback to recreating
+          }
+        }
 
         if (playerRef.current) {
           try {
             playerRef.current.destroy();
           } catch {}
+          playerRef.current = null;
         }
 
-        playerRef.current = new window.YT.Player("corodomo-yt-player", {
+        const container = playerContainerRef.current;
+        if (!container || !window.YT || !window.YT.Player) return;
+
+        // Ensure mount element exists inside the persistent container
+        let el = container.querySelector("#corodomo-yt-player") as HTMLElement | null;
+        if (!el) {
+          el = document.createElement("div");
+          el.id = "corodomo-yt-player";
+          el.className = "w-full h-full absolute inset-0";
+          container.appendChild(el);
+        }
+
+        playerRef.current = new window.YT.Player(el, {
           videoId,
           playerVars: {
             enablejsapi: 1,
@@ -314,6 +327,7 @@ export default function CorodomoShadowingStudioPage() {
         try {
           playerRef.current.destroy();
         } catch {}
+        playerRef.current = null;
       }
     };
   }, [currentView, activeLesson?.youtubeId, initYouTubePlayer]);
@@ -410,24 +424,6 @@ export default function CorodomoShadowingStudioPage() {
     return () => clearInterval(id);
   }, []);
 
-  // ─── Update History Progress ─────────────────────────────────────────
-  const syncProgressToHistory = useCallback(
-    (completedCount?: number, targetIndex?: number) => {
-      const cCount = completedCount ?? Object.keys(sentenceScores).length;
-      const scores = Object.values(sentenceScores);
-      const avg = scores.length
-        ? Math.round(scores.reduce((a, b) => a + b.overall, 0) / scores.length)
-        : undefined;
-      const updated = saveToShadowingHistory(
-        activeLesson,
-        cCount,
-        avg,
-        targetIndex ?? activeSegmentIndex
-      );
-      setWatchHistory(updated);
-    },
-    [activeLesson, sentenceScores, activeSegmentIndex]
-  );
 
   // ─── Player Controls ─────────────────────────────────────────────────
   const playVideo = useCallback(() => {
@@ -475,9 +471,8 @@ export default function CorodomoShadowingStudioPage() {
         }
       }
 
-      syncProgressToHistory(undefined, index);
     },
-    [activeLesson.segments, playbackSpeed, autoPauseEnabled, isLooping, pauseVideo, speechRec, syncProgressToHistory]
+    [activeLesson.segments, playbackSpeed, autoPauseEnabled, isLooping, pauseVideo, speechRec]
   );
 
   const handlePlayNative = useCallback(() => {
@@ -577,9 +572,6 @@ export default function CorodomoShadowingStudioPage() {
       };
       setSentenceScores(updatedScores);
 
-      // Persist to history
-      syncProgressToHistory(Object.keys(updatedScores).length);
-
       if (recording?.blob) {
         const audioUrl = URL.createObjectURL(recording.blob);
         setUserAudioUrl(audioUrl);
@@ -604,7 +596,6 @@ export default function CorodomoShadowingStudioPage() {
     recordingStartMs,
     currentSegment,
     sentenceScores,
-    syncProgressToHistory,
   ]);
 
   // ─── Keyboard Hotkeys (Space to Record/Play, Enter to Check/Next) ─────
@@ -709,13 +700,29 @@ export default function CorodomoShadowingStudioPage() {
   };
 
   // ─── Load Custom YouTube URL Handler ─────────────────────────────────
-  const handleLoadCustomYouTubeUrl = async (customUrl?: string) => {
+  const handleLoadCustomYouTubeUrl = async (customUrl?: string, forceReload = false) => {
     const urlToLoad = customUrl || customUrlInput;
     const videoId = extractYouTubeVideoId(urlToLoad);
 
     if (!videoId) {
       toast.error("Link YouTube không hợp lệ", "Vui lòng nhập đường dẫn hoặc ID video YouTube 11 ký tự.");
       return;
+    }
+
+    // Check for duplicate in library or presets if not forced
+    if (!forceReload) {
+      const existingLesson =
+        videoLibrary.find((v) => v.youtubeId === videoId) ||
+        CORODOMO_VIDEO_PRESETS.find((p) => p.youtubeId === videoId);
+
+      if (existingLesson && existingLesson.segments && existingLesson.segments.length > 0) {
+        setDuplicatePrompt({
+          isOpen: true,
+          lesson: existingLesson,
+          url: urlToLoad,
+        });
+        return;
+      }
     }
 
     setIsLoadingCustomUrl(true);
@@ -764,11 +771,9 @@ export default function CorodomoShadowingStudioPage() {
       setModalUrlInput("");
       setShowAddVideoModal(false);
 
-      // Save to video library (Create) & History
+      // Save to video library (Create)
       const updatedLib = addVideoToLibrary(loadedLesson);
       setVideoLibrary(updatedLib);
-      const updatedHistory = saveToShadowingHistory(loadedLesson, 0, undefined, 0);
-      setWatchHistory(updatedHistory);
       setCurrentView("studio");
 
       toast.success("Nạp video thành công!", `Đã lưu vào thư viện với ${loadedLesson.segments.length} câu phụ đề.`);
@@ -786,42 +791,9 @@ export default function CorodomoShadowingStudioPage() {
     setUserAudioUrl(null);
     setSentenceScores({});
 
-    // Save to history & Enter Studio View
-    const updatedHistory = saveToShadowingHistory(lesson, 0, undefined, startIdx);
-    setWatchHistory(updatedHistory);
+    // Enter Studio View
     setCurrentView("studio");
     toast.success("Đã mở bài học!", lesson.title);
-  };
-
-  const handleSelectHistoryItem = (item: ShadowingHistoryItem) => {
-    // If we have full lessonData preserved in history
-    if (item.lessonData && item.lessonData.segments && item.lessonData.segments.length > 0) {
-      handleSelectLesson(item.lessonData, item.lastSegmentIndex || 0);
-      return;
-    }
-
-    // Otherwise check if it matches a preset
-    const presetMatch = CORODOMO_VIDEO_PRESETS.find((p) => p.youtubeId === item.youtubeId);
-    if (presetMatch) {
-      handleSelectLesson(presetMatch, item.lastSegmentIndex || 0);
-      return;
-    }
-
-    // Fallback: Re-extract transcript via YouTube ID
-    handleLoadCustomYouTubeUrl(`https://www.youtube.com/watch?v=${item.youtubeId}`);
-  };
-
-  const handleRemoveHistoryItem = (youtubeId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const updated = removeFromShadowingHistory(youtubeId);
-    setWatchHistory(updated);
-    toast.info("Đã xóa khỏi lịch sử học tập");
-  };
-
-  const handleClearHistory = () => {
-    clearShadowingHistory();
-    setWatchHistory([]);
-    toast.info("Đã xóa toàn bộ lịch sử học tập");
   };
 
   // ─── Paste from Clipboard Helper ────────────────────────────────────
@@ -876,6 +848,654 @@ export default function CorodomoShadowingStudioPage() {
     toast.success("Đã sao chép toàn bộ lời thoại vào Clipboard!");
   };
 
+  // ─── Mode 1: Subtitle Pill & Video Controls Bar (Shadowing Left) ─────
+  const renderShadowingLeftControls = () => (
+    <>
+      {/* Subtitle Pill & Translation Area (Placed Below Video, matching Corodomo) */}
+      <div className="flex-1 min-h-[90px] flex flex-col items-center justify-center px-4 py-2 text-center select-text">
+        {showSubtitle && (
+          <div className="inline-flex flex-wrap items-end justify-center gap-x-2 gap-y-1 bg-[#1e2329] dark:bg-[#181d24] text-white px-5 py-2.5 rounded-2xl border border-white/10 shadow-md">
+            {currentSentenceTokens.map((token, i) => (
+              <div
+                key={i}
+                onClick={(e) => handleWordClick(token.cleanWord, e)}
+                className="inline-flex flex-col items-center cursor-pointer group px-1 py-0.5 rounded transition-all hover:bg-white/10"
+                title={`Click để tra từ: "${token.cleanWord}"`}
+              >
+                <span className="text-[10px] sm:text-[11px] font-mono text-amber-300 font-semibold leading-none mb-0.5 select-none tracking-tight">
+                  {token.ipa || "—"}
+                </span>
+                <span className="text-sm sm:text-base font-bold text-white group-hover:text-amber-200 transition-colors leading-tight">
+                  {token.word}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {showTranslation && currentSegment.translationVi && (
+          <p className="text-xs sm:text-sm text-foreground font-bold leading-normal mt-2 max-w-2xl">
+            {currentSegment.translationVi}
+          </p>
+        )}
+      </div>
+
+      {/* Video Controls Bar below Video */}
+      <div className="shrink-0 px-3.5 py-2 rounded-xl border border-border/60 bg-card flex items-center justify-between gap-2 shadow-2xs">
+        {/* Left: Toggles for [Phụ đề] & [Bản dịch] */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowSubtitle(!showSubtitle)}
+            className={cn(
+              "px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1",
+              showSubtitle
+                ? "bg-primary/10 text-primary border border-primary/40"
+                : "bg-muted/40 text-muted-foreground border border-border/60"
+            )}
+          >
+            <Check className={cn("size-3", showSubtitle ? "opacity-100" : "opacity-0")} />
+            <span>Phụ đề</span>
+          </button>
+
+          <button
+            onClick={() => setShowTranslation(!showTranslation)}
+            className={cn(
+              "px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1",
+              showTranslation
+                ? "bg-primary/10 text-primary border border-primary/40"
+                : "bg-muted/40 text-muted-foreground border border-border/60"
+            )}
+          >
+            <Check className={cn("size-3", showTranslation ? "opacity-100" : "opacity-0")} />
+            <span>Bản dịch</span>
+          </button>
+        </div>
+
+        {/* Center: Sentence Navigation & Loop */}
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handlePrevSegment}
+            disabled={activeSegmentIndex === 0}
+            className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
+            title="Câu trước"
+          >
+            <ChevronLeft className="size-4" />
+          </Button>
+
+          <span className="text-xs font-mono font-bold text-foreground px-1.5">
+            {activeSegmentIndex + 1} / {activeLesson.segments.length}
+          </span>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleNextSegment}
+            disabled={activeSegmentIndex === activeLesson.segments.length - 1}
+            className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
+            title="Câu sau"
+          >
+            <ChevronRight className="size-4" />
+          </Button>
+
+          <Button
+            variant={isLooping ? "default" : "outline"}
+            size="sm"
+            onClick={() => setIsLooping(!isLooping)}
+            className={cn(
+              "size-7 p-0 rounded-lg transition-all",
+              isLooping
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground border-border/60 hover:text-foreground"
+            )}
+            title="Lặp lại câu này"
+          >
+            <Repeat className="size-3.5" />
+          </Button>
+        </div>
+
+        {/* Right: Speed & Back to Hub */}
+        <div className="flex items-center gap-2">
+          <div className="hidden sm:flex items-center gap-0.5 bg-muted/50 p-0.5 rounded-lg border border-border/60">
+            {[0.75, 0.9, 1.0, 1.25].map((s) => (
+              <button
+                key={s}
+                onClick={() => handleSpeedChange(s)}
+                className={cn(
+                  "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md transition-all",
+                  playbackSpeed === s
+                    ? "bg-primary text-primary-foreground shadow-2xs"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {s}x
+              </button>
+            ))}
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentView("hub")}
+            className="h-7 px-2.5 rounded-lg text-xs font-bold gap-1 text-primary border-primary/40 hover:bg-primary/10"
+          >
+            <Film className="size-3" />
+            <span className="hidden md:inline">Đổi video</span>
+          </Button>
+        </div>
+      </div>
+    </>
+  );
+
+  // ─── Mode 1: Synchronized Subtitle Sidebar (Shadowing Right) ────────
+  const renderShadowingSidebar = () => (
+    <div className="h-full flex flex-col rounded-3xl border border-border/80 bg-card overflow-hidden shadow-xs min-h-0">
+      {/* Header: "Phụ đề" + Download + Copy */}
+      <div className="px-4 py-2.5 border-b border-border/60 bg-muted/20 flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-2">
+          <h3 className="font-extrabold text-sm text-foreground">Phụ đề</h3>
+          <Badge variant="outline" className="text-[10px] font-mono h-5 text-muted-foreground">
+            {activeLesson.segments.length} câu
+          </Badge>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleDownloadTranscript}
+            className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
+            title="Tải phụ đề về máy"
+          >
+            <Download className="size-3.5" />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleCopyTranscript}
+            className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
+            title="Sao chép toàn bộ lời thoại"
+          >
+            <Copy className="size-3.5" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Search Bar */}
+      <div className="p-2 border-b border-border/40 shrink-0">
+        <div className="relative">
+          <Search className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={transcriptSearch}
+            onChange={(e) => setTranscriptSearch(e.target.value)}
+            placeholder="Tìm kiếm câu thoại hoặc nghĩa tiếng Việt..."
+            className="h-8 pl-8 text-xs bg-muted/20 rounded-xl"
+          />
+        </div>
+      </div>
+
+      {/* Scrollable Sentence List with Real-time Auto-Scroll Highlight */}
+      <div
+        className="flex-1 min-h-0 overflow-y-auto p-2.5 space-y-2"
+        onMouseEnter={() => (isUserInteractingTimeline.current = true)}
+        onMouseLeave={() => (isUserInteractingTimeline.current = false)}
+      >
+        {filteredSegments.map((seg) => {
+          const originalIndex = activeLesson.segments.findIndex(
+            (s) => s.segment_id === seg.segment_id
+          );
+          const isActive = originalIndex === activeSegmentIndex;
+
+          return (
+            <div
+              key={seg.segment_id}
+              ref={(el) => {
+                timelineItemRefs.current[originalIndex] = el;
+              }}
+              onClick={() => seekToSegment(originalIndex, true)}
+              className={cn(
+                "p-3 rounded-2xl border transition-all cursor-pointer select-text flex items-start gap-2.5",
+                isActive
+                  ? "bg-primary/10 border-primary/50 shadow-xs ring-1 ring-primary/30"
+                  : "bg-card hover:bg-muted/30 border-border/60"
+              )}
+            >
+              <button
+                className={cn(
+                  "size-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 transition-colors",
+                  isActive
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                )}
+              >
+                {isActive && isPlayingVideo ? (
+                  <Pause className="size-3 fill-current" />
+                ) : (
+                  <Play className="size-3 fill-current ml-0.5" />
+                )}
+              </button>
+
+              <div className="min-w-0 flex-1">
+                <p
+                  className={cn(
+                    "text-xs sm:text-sm leading-snug",
+                    isActive ? "font-bold text-foreground" : "text-foreground/90 font-medium"
+                  )}
+                >
+                  {seg.text}
+                </p>
+
+                {seg.translationVi && (
+                  <p className="text-[11px] sm:text-xs text-muted-foreground mt-1 leading-normal">
+                    {seg.translationVi}
+                  </p>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  // ─── Mode 2: Toolbar, Progress & Subtitle Accordion (Pronounce Left) ─
+  const renderPronounceLeftControls = () => (
+    <>
+      {/* Toolbar */}
+      <div className="shrink-0 px-3 py-1.5 rounded-xl border border-border/60 bg-card flex items-center justify-between gap-2 shadow-2xs">
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsVideoHidden(!isVideoHidden)}
+            className="h-7 px-2 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground gap-1"
+          >
+            <Video className="size-3" />
+            <span>{isVideoHidden ? "Hiện video" : "Ẩn video"}</span>
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              toast.info(
+                "Phím tắt bàn phím",
+                "Space: Phát lại • Enter: Kiểm tra phát âm • Mũi tên: Chuyển câu"
+              )
+            }
+            className="h-7 px-2 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground gap-1"
+          >
+            <Keyboard className="size-3" />
+            <span>Phím tắt</span>
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-0.5 bg-muted/50 p-0.5 rounded-lg border border-border/60">
+          {[0.75, 1.0, 1.25].map((s) => (
+            <button
+              key={s}
+              onClick={() => handleSpeedChange(s)}
+              className={cn(
+                "text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-md transition-all",
+                playbackSpeed === s
+                  ? "bg-primary text-primary-foreground shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {s}x
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Progress Bar */}
+      <div className="shrink-0 px-3.5 py-2.5 rounded-2xl bg-card border border-border/70 space-y-1.5 shadow-2xs">
+        <div className="flex items-center justify-between text-xs font-bold">
+          <span className="text-muted-foreground">
+            Đã hoàn thành {completedCount}/{activeLesson.segments.length}
+          </span>
+          <span className="text-primary font-mono">
+            {progressPercent}%
+          </span>
+        </div>
+        <div className="h-2 w-full bg-muted/50 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-primary rounded-full transition-all duration-300"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Subtitle Accordion */}
+      <div className="flex-1 min-h-0 rounded-2xl border border-border/70 bg-card overflow-hidden flex flex-col shadow-2xs">
+        <div
+          onClick={() => setShowSubtitleAccordion(!showSubtitleAccordion)}
+          className="px-3.5 py-2.5 border-b border-border/60 bg-muted/20 flex items-center justify-between cursor-pointer"
+        >
+          <span className="text-xs font-bold text-foreground">
+            Phụ đề [{activeSegmentIndex + 1}/{activeLesson.segments.length}]
+          </span>
+          {showSubtitleAccordion ? (
+            <ChevronUp className="size-4 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="size-4 text-muted-foreground" />
+          )}
+        </div>
+
+        {showSubtitleAccordion && (
+          <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
+            {activeLesson.segments.map((seg, idx) => {
+              const isCur = idx === activeSegmentIndex;
+              return (
+                <div
+                  key={seg.segment_id}
+                  onClick={() => seekToSegment(idx, true)}
+                  className={cn(
+                    "p-2.5 rounded-xl border transition-all cursor-pointer text-left",
+                    isCur
+                      ? "bg-primary/10 border-primary/40 shadow-2xs"
+                      : "hover:bg-muted/20 border-border/40"
+                  )}
+                >
+                  <span className="text-[10px] font-mono font-bold text-muted-foreground block mb-0.5">
+                    CÂU {idx + 1}
+                  </span>
+                  <p className="text-xs font-semibold text-foreground leading-snug">
+                    {seg.text}
+                  </p>
+                  {seg.translationVi && (
+                    <p className="text-[11px] text-muted-foreground mt-0.5 italic">
+                      {seg.translationVi}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  // ─── Mode 2: Pronunciation & Scoring Panel (Pronounce Right) ─────────
+  const renderPronouncePanel = () => (
+    <div className="h-full flex flex-col rounded-3xl border border-border/80 bg-card overflow-hidden shadow-xs min-h-0">
+      <div className="px-4 py-2.5 border-b border-border/60 bg-muted/20 flex items-center justify-between shrink-0">
+        <h3 className="font-extrabold text-sm text-foreground">Luyện phát âm</h3>
+        <Badge variant="outline" className="text-xs font-mono font-bold h-6">
+          {activeSegmentIndex + 1}/{activeLesson.segments.length}
+        </Badge>
+      </div>
+
+      {/* Sentence Pagination */}
+      <div className="px-4 py-2.5 border-b border-border/50 shrink-0 flex items-center justify-between gap-2 overflow-x-auto">
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handlePrevSegment}
+            disabled={activeSegmentIndex === 0}
+            className="size-7 p-0 rounded-lg"
+          >
+            <ChevronLeft className="size-3.5" />
+          </Button>
+
+          {Array.from({ length: Math.min(10, activeLesson.segments.length) }, (_, i) => {
+            const startOffset = Math.max(
+              0,
+              Math.min(activeSegmentIndex - 4, activeLesson.segments.length - 10)
+            );
+            const sentenceNum = startOffset + i + 1;
+            const isCur = sentenceNum - 1 === activeSegmentIndex;
+
+            return (
+              <button
+                key={sentenceNum}
+                onClick={() => seekToSegment(sentenceNum - 1, true)}
+                className={cn(
+                  "size-7 rounded-full text-xs font-mono font-bold transition-all flex items-center justify-center",
+                  isCur
+                    ? "bg-primary text-primary-foreground shadow-xs"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                )}
+              >
+                {sentenceNum}
+              </button>
+            );
+          })}
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleNextSegment}
+            disabled={activeSegmentIndex === activeLesson.segments.length - 1}
+            className="size-7 p-0 rounded-lg"
+          >
+            <ChevronRight className="size-3.5" />
+          </Button>
+        </div>
+
+        <div className="hidden sm:flex items-center gap-1 text-[11px] text-muted-foreground font-medium">
+          <span>Số câu/lượt:</span>
+          <span className="font-bold text-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
+            1
+          </span>
+        </div>
+      </div>
+
+      {/* CÂU HIỆN TẠI */}
+      <div className="p-4 border-b border-border/60 bg-muted/10 space-y-3 shrink-0">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+            CÂU HIỆN TẠI
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => tts.speak(currentSegment.text)}
+              className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
+              title="Nghe Audio mẫu"
+            >
+              <Volume2 className="size-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowSubtitle(!showSubtitle)}
+              className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
+              title="Ẩn/Hiện chữ"
+            >
+              {showSubtitle ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setFontSizeLevel(
+                  fontSizeLevel === "md" ? "lg" : fontSizeLevel === "lg" ? "xl" : "md"
+                );
+              }}
+              className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
+              title="Cỡ chữ"
+            >
+              <Type className="size-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowTranslation(!showTranslation)}
+              className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
+              title="Ẩn/Hiện dịch nghĩa"
+            >
+              <Languages className="size-3.5" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Target Sentence Display with Stacked IPA */}
+        <div className="min-h-[56px] flex flex-col justify-center">
+          {showSubtitle ? (
+            <div className="flex flex-wrap items-end gap-x-2 gap-y-1">
+              {currentSentenceTokens.map((token, i) => (
+                <div
+                  key={i}
+                  onClick={(e) => handleWordClick(token.cleanWord, e)}
+                  className="inline-flex flex-col items-center cursor-pointer group px-0.5 rounded transition-all hover:bg-muted/40"
+                >
+                  <span className="text-[10px] font-mono text-primary font-semibold leading-none mb-0.5 select-none">
+                    {token.ipa || "—"}
+                  </span>
+                  <span
+                    className={cn(
+                      "font-extrabold text-foreground group-hover:text-primary transition-colors leading-tight",
+                      fontSizeLevel === "md"
+                        ? "text-base"
+                        : fontSizeLevel === "lg"
+                        ? "text-lg"
+                        : "text-xl"
+                    )}
+                  >
+                    {token.word}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-muted-foreground py-2 italic text-xs">
+              <EyeOff className="size-4" />
+              <span>Nội dung đã ẩn để bạn tập trung luyện nghe</span>
+            </div>
+          )}
+
+          {showTranslation && currentSegment.translationVi && (
+            <p className="text-xs text-muted-foreground font-medium italic mt-2">
+              {currentSegment.translationVi}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Big Action Buttons */}
+      <div className="p-4 border-b border-border/50 shrink-0 flex items-center justify-between gap-3">
+        <Button
+          variant="outline"
+          size="lg"
+          onClick={handlePlayNative}
+          className="h-11 px-4 rounded-2xl font-bold text-xs sm:text-sm border-border/80 flex-1 flex items-center justify-center gap-1.5 hover:bg-muted/50"
+        >
+          <Play className="size-4 fill-current text-muted-foreground" />
+          <span>Phát lại</span>
+          <kbd className="text-[9px] font-mono px-1 py-0.5 bg-muted rounded text-muted-foreground ml-1">
+            space
+          </kbd>
+        </Button>
+
+        <Button
+          size="lg"
+          onClick={recordingStatus === "recording" ? handleStopRecord : handleStartRecord}
+          disabled={recordingStatus === "evaluating"}
+          className={cn(
+            "h-11 px-6 rounded-2xl font-black text-xs sm:text-sm flex-2 flex items-center justify-center gap-2 text-white shadow-md transition-all",
+            recordingStatus === "recording"
+              ? "bg-rose-500 hover:bg-rose-600 animate-pulse ring-4 ring-rose-500/25"
+              : "bg-primary hover:bg-primary/90 text-primary-foreground"
+          )}
+        >
+          {recordingStatus === "evaluating" ? (
+            <>
+              <Loader2 className="size-4 animate-spin" />
+              <span>Đang chấm...</span>
+            </>
+          ) : recordingStatus === "recording" ? (
+            <>
+              <MicOff className="size-4" />
+              <span>Dừng & Chấm điểm</span>
+            </>
+          ) : (
+            <>
+              <Mic className="size-4" />
+              <span>Kiểm tra phát âm</span>
+              <kbd className="text-[9px] font-mono px-1 py-0.5 bg-white/20 rounded ml-1">
+                enter
+              </kbd>
+            </>
+          )}
+        </Button>
+
+        <Button
+          variant="outline"
+          size="lg"
+          onClick={handleNextSegment}
+          disabled={activeSegmentIndex === activeLesson.segments.length - 1}
+          className="h-11 px-4 rounded-2xl font-bold text-xs sm:text-sm border-border/80 flex-1 flex items-center justify-center gap-1 hover:bg-muted/50"
+        >
+          <span>Tiếp</span>
+          <ChevronRight className="size-4" />
+        </Button>
+      </div>
+
+      {/* 4 Score Metric Cards */}
+      <div className="flex-1 min-h-0 p-4 grid grid-cols-2 gap-3 overflow-y-auto">
+        <div className="p-3.5 rounded-2xl bg-card border border-border/70 flex flex-col justify-between shadow-2xs">
+          <span className="text-xs font-bold text-muted-foreground">Điểm phát âm</span>
+          <span
+            className={cn(
+              "text-2xl sm:text-3xl font-black font-mono mt-1",
+              score?.overall
+                ? score.overall >= 80
+                  ? "text-emerald-500"
+                  : score.overall >= 60
+                  ? "text-amber-500"
+                  : "text-rose-500"
+                : "text-rose-500/80"
+            )}
+          >
+            {score?.overall ? score.overall.toFixed(1) : "0.0"}
+          </span>
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-card border border-border/70 flex flex-col justify-between shadow-2xs">
+          <span className="text-xs font-bold text-muted-foreground">Độ chính xác</span>
+          <span
+            className={cn(
+              "text-2xl sm:text-3xl font-black font-mono mt-1",
+              score?.accuracy ? "text-emerald-500" : "text-rose-500/80"
+            )}
+          >
+            {score?.accuracy ? score.accuracy.toFixed(1) : "0.0"}
+          </span>
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-card border border-border/70 flex flex-col justify-between shadow-2xs">
+          <span className="text-xs font-bold text-muted-foreground">Độ trôi chảy</span>
+          <span
+            className={cn(
+              "text-2xl sm:text-3xl font-black font-mono mt-1",
+              score?.fluency ? "text-emerald-500" : "text-rose-500/80"
+            )}
+          >
+            {score?.fluency ? score.fluency.toFixed(1) : "0.0"}
+          </span>
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-card border border-border/70 flex flex-col justify-between shadow-2xs">
+          <span className="text-xs font-bold text-muted-foreground">Độ hoàn thiện</span>
+          <span
+            className={cn(
+              "text-2xl sm:text-3xl font-black font-mono mt-1",
+              score?.completeness ? "text-emerald-500" : "text-rose-500/80"
+            )}
+          >
+            {score?.completeness ? score.completeness.toFixed(1) : "0.0"}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div
       className={cn(
@@ -910,13 +1530,7 @@ export default function CorodomoShadowingStudioPage() {
                 <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground flex items-center gap-2">
                   <Film className="size-6 text-primary" />
                   <span>Shadowing Hub</span>
-                  <Badge variant="outline" className="text-xs font-mono border-primary/40 text-primary">
-                    Corodomo Style
-                  </Badge>
                 </h1>
-                <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-                  Luyện nói đuổi theo video YouTube với phiên âm IPA xếp tầng và chấm điểm phát âm AI
-                </p>
               </div>
             </div>
 
@@ -932,232 +1546,67 @@ export default function CorodomoShadowingStudioPage() {
             )}
           </div>
 
-          {/* ── HERO SECTION: PROMINENT YOUTUBE LINK EXTRACTOR ── */}
-          <div className="shrink-0 min-h-fit w-full p-6 sm:p-8 rounded-3xl bg-card border border-border/80 ring-1 ring-primary/20 shadow-xl space-y-5 relative bg-gradient-to-br from-card via-card to-primary/5">
-            {/* Top Badge & Title */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3.5">
-              <div className="flex items-center gap-3">
-                <div className="size-11 rounded-2xl bg-red-600 text-white flex items-center justify-center shadow-lg shadow-red-600/30 shrink-0">
-                  <YouTubeIcon className="size-6" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-base sm:text-lg font-black text-foreground">
-                      Thêm bài học mới từ YouTube
-                    </h2>
-                    <Badge className="bg-red-600 text-white text-[10px] font-black px-2 py-0.5 shadow-xs">
-                      YouTube URL
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Tự động lấy 100% transcript, gắn phiên âm IPA từng từ và lưu vào kho video bài học
-                  </p>
-                </div>
-              </div>
-
-              <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
-                <Sparkles className="size-3.5 text-primary" />
-                <span>Hỗ trợ mọi link video & Shorts</span>
-              </div>
-            </div>
-
-            {/* Prominent Input Bar with Explicit Label */}
-            <div className="space-y-2.5 max-w-4xl">
-              <label className="text-xs font-black uppercase tracking-wider text-foreground/90 flex items-center gap-1.5">
-                <span>Dán đường dẫn video YouTube tại đây:</span>
-              </label>
-
-              <div className="flex flex-col sm:flex-row gap-3 items-stretch">
-                <div className="relative flex-1 min-h-[52px]">
-                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-red-500 flex items-center pointer-events-none">
-                    <YouTubeIcon className="size-5" />
-                  </div>
-
-                  <Input
-                    ref={youtubeInputRef}
-                    value={customUrlInput}
-                    onChange={(e) => setCustomUrlInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleLoadCustomYouTubeUrl()}
-                    placeholder="Dán link: https://www.youtube.com/watch?v=... hoặc youtu.be/..."
-                    className="h-13 pl-11 pr-20 text-sm sm:text-base font-medium bg-background rounded-2xl border-2 border-primary/40 focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/15 shadow-sm text-foreground placeholder:text-muted-foreground/60"
-                  />
-
-                  <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                    {customUrlInput ? (
-                      <button
-                        onClick={() => setCustomUrlInput("")}
-                        className="size-8 rounded-xl hover:bg-muted text-muted-foreground flex items-center justify-center transition-colors"
-                        title="Xóa nội dung"
-                      >
-                        <X className="size-4" />
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handlePasteClipboard(false)}
-                        className="text-xs font-bold px-3 py-1.5 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 transition-all flex items-center gap-1"
-                        title="Dán nhanh từ bộ nhớ tạm"
-                      >
-                        <Copy className="size-3" />
-                        <span>Dán</span>
-                      </button>
-                    )}
-                  </div>
+          {/* ── YOUTUBE LINK EXTRACTOR (MINIMALIST SEARCH BAR) ── */}
+          <div className="shrink-0 w-full p-3 sm:p-3.5 rounded-2xl bg-card border border-border/70 shadow-xs">
+            <div className="flex flex-col sm:flex-row gap-2.5 items-stretch">
+              <div className="relative flex-1 min-h-[44px]">
+                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-red-500 flex items-center pointer-events-none">
+                  <YouTubeIcon className="size-5" />
                 </div>
 
-                <Button
-                  onClick={() => handleLoadCustomYouTubeUrl()}
-                  disabled={isLoadingCustomUrl || !customUrlInput.trim()}
-                  className="h-13 px-7 rounded-2xl font-black text-sm bg-primary hover:bg-primary/90 text-primary-foreground shrink-0 gap-2 shadow-lg shadow-primary/25 transition-all"
-                >
-                  {isLoadingCustomUrl ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" />
-                      <span>Đang trích xuất phụ đề...</span>
-                    </>
+                <Input
+                  ref={youtubeInputRef}
+                  value={customUrlInput}
+                  onChange={(e) => setCustomUrlInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleLoadCustomYouTubeUrl()}
+                  placeholder="Dán link YouTube (https://www.youtube.com/watch?v=... hoặc youtu.be/...) để học ngay"
+                  className="h-11 pl-10 pr-20 text-xs sm:text-sm font-medium bg-background rounded-xl border border-border/80 focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20 text-foreground placeholder:text-muted-foreground/60"
+                />
+
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                  {customUrlInput ? (
+                    <button
+                      onClick={() => setCustomUrlInput("")}
+                      className="size-7 rounded-lg hover:bg-muted text-muted-foreground flex items-center justify-center transition-colors"
+                      title="Xóa nội dung"
+                    >
+                      <X className="size-3.5" />
+                    </button>
                   ) : (
-                    <>
-                      <Sparkles className="size-4" />
-                      <span>Trích xuất & Học ngay</span>
-                    </>
+                    <button
+                      onClick={() => handlePasteClipboard(false)}
+                      className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 transition-all flex items-center gap-1"
+                      title="Dán nhanh từ bộ nhớ tạm"
+                    >
+                      <Copy className="size-3" />
+                      <span>Dán</span>
+                    </button>
                   )}
-                </Button>
-              </div>
-
-              {/* Supported formats & Example chips */}
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                <div className="flex items-center gap-2 flex-wrap text-[11px] text-muted-foreground">
-                  <span className="font-semibold text-foreground/70">Định dạng hỗ trợ:</span>
-                  <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-[10px]">youtube.com/watch?v=...</code>
-                  <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-[10px]">youtu.be/...</code>
-                  <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-[10px]">youtube.com/shorts/...</code>
-                </div>
-
-                <div className="flex items-center gap-1.5 text-xs">
-                  <span className="text-muted-foreground text-[11px]">Hoặc thử nhanh bài mẫu:</span>
-                  <button
-                    onClick={() => handleSelectLesson(CORODOMO_VIDEO_PRESETS[0])}
-                    className="font-bold text-[11px] text-primary hover:underline inline-flex items-center gap-1"
-                  >
-                    <Play className="size-2.5 fill-current" />
-                    <span>BBC Office English (205 câu)</span>
-                  </button>
                 </div>
               </div>
+
+              <Button
+                onClick={() => handleLoadCustomYouTubeUrl()}
+                disabled={isLoadingCustomUrl || !customUrlInput.trim()}
+                className="h-11 px-5 rounded-xl font-bold text-xs sm:text-sm bg-primary hover:bg-primary/90 text-primary-foreground shrink-0 gap-1.5 shadow-sm transition-all"
+              >
+                {isLoadingCustomUrl ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" />
+                    <span>Đang tải phụ đề...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="size-3.5" />
+                    <span>Trích xuất & Học ngay</span>
+                  </>
+                )}
+              </Button>
             </div>
           </div>
 
-          {/* ── SECTION 1: LỊCH SỬ VIDEO ĐÃ HỌC (WATCH & PRACTICE HISTORY) ── */}
-          <div className="shrink-0 space-y-3 pt-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <History className="size-4 text-primary" />
-                <h3 className="text-base font-extrabold text-foreground">Lịch sử video gần đây</h3>
-                <Badge variant="secondary" className="text-xs font-mono h-5">
-                  {watchHistory.length}
-                </Badge>
-              </div>
 
-              {watchHistory.length > 0 && (
-                <button
-                  onClick={handleClearHistory}
-                  className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1 transition-colors"
-                >
-                  <Trash2 className="size-3" />
-                  <span>Xóa lịch sử</span>
-                </button>
-              )}
-            </div>
-
-            {watchHistory.length === 0 ? (
-              <div className="p-8 rounded-3xl border border-dashed border-border/80 text-center flex flex-col items-center justify-center space-y-2 bg-card/40">
-                <Library className="size-10 text-muted-foreground/40" />
-                <p className="font-bold text-sm text-foreground">Chưa có video nào trong lịch sử</p>
-                <p className="text-xs text-muted-foreground max-w-sm leading-relaxed">
-                  Hãy dán link YouTube ở trên hoặc chọn một trong các bài mẫu tuyển chọn bên dưới để bắt đầu luyện tập.
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {watchHistory.map((item) => (
-                  <div
-                    key={item.id}
-                    onClick={() => handleSelectHistoryItem(item)}
-                    className="p-3.5 rounded-2xl border border-border/80 bg-card hover:border-primary/50 hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between space-y-3"
-                  >
-                    {/* Thumbnail + Duration */}
-                    <div className="aspect-video rounded-xl overflow-hidden bg-black relative shrink-0">
-                      <img
-                        src={item.thumbnail}
-                        alt={item.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                      <Badge className="absolute bottom-1.5 right-1.5 text-[9px] font-mono px-1.5 py-0 bg-black/80 text-white">
-                        {item.duration}
-                      </Badge>
-                      {item.cefrLevel && (
-                        <Badge className="absolute top-1.5 left-1.5 text-[9px] font-mono px-1.5 py-0 bg-primary text-primary-foreground">
-                          {item.cefrLevel}
-                        </Badge>
-                      )}
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <div className="size-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg">
-                          <Play className="size-4 fill-current ml-0.5" />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Metadata */}
-                    <div className="space-y-1.5 flex-1 min-w-0">
-                      <h4 className="font-extrabold text-xs sm:text-sm text-foreground line-clamp-2 leading-snug group-hover:text-primary transition-colors">
-                        {item.title}
-                      </h4>
-                      <p className="text-[11px] text-muted-foreground truncate">{item.channel}</p>
-
-                      {/* Progress bar */}
-                      <div className="space-y-1 pt-1">
-                        <div className="flex items-center justify-between text-[10px] font-bold text-muted-foreground">
-                          <span>
-                            Tiến độ: {item.completedSegments}/{item.totalSegments} câu
-                          </span>
-                          {item.averageScore !== undefined && (
-                            <span className="text-primary font-mono">
-                              ⭐ {item.averageScore}%
-                            </span>
-                          )}
-                        </div>
-                        <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-primary rounded-full"
-                            style={{
-                              width: `${Math.round(
-                                (item.completedSegments / (item.totalSegments || 1)) * 100
-                              )}%`,
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Card Actions */}
-                    <div className="flex items-center justify-between border-t border-border/40 pt-2 shrink-0">
-                      <span className="text-[10px] text-muted-foreground">
-                        {new Date(item.lastPracticedAt).toLocaleDateString("vi-VN")}
-                      </span>
-                      <button
-                        onClick={(e) => handleRemoveHistoryItem(item.youtubeId, e)}
-                        className="size-6 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 flex items-center justify-center transition-colors"
-                        title="Xóa khỏi lịch sử"
-                      >
-                        <Trash2 className="size-3" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* ── SECTION 2: KHO BÀI HỌC VIDEO (CRUD LIBRARY) ── */}
+          {/* ── KHO BÀI HỌC VIDEO (CRUD LIBRARY) ── */}
           <div className="shrink-0 space-y-4 pt-2">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2">
@@ -1198,39 +1647,7 @@ export default function CorodomoShadowingStudioPage() {
                   )}
                 </div>
 
-                {/* Reset to defaults button */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleResetDefaults}
-                  className="h-8 px-2.5 text-xs font-bold gap-1 rounded-xl text-muted-foreground hover:text-foreground shrink-0 border-border/80"
-                  title="Khôi phục lại danh sách bài học mẫu mặc định"
-                >
-                  <RotateCcw className="size-3" />
-                  <span className="hidden sm:inline">Khôi phục bài mẫu</span>
-                </Button>
               </div>
-            </div>
-
-            {/* CEFR Level Filter Pills */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-              {["all", "A1", "A2", "B1", "B2", "C1", "Custom"].map((lvl) => {
-                const isActive = libraryCefrFilter.toLowerCase() === lvl.toLowerCase();
-                return (
-                  <button
-                    key={lvl}
-                    onClick={() => setLibraryCefrFilter(lvl)}
-                    className={cn(
-                      "px-3 py-1 rounded-full text-xs font-bold transition-all shrink-0",
-                      isActive
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/60"
-                    )}
-                  >
-                    {lvl === "all" ? "Tất cả" : lvl}
-                  </button>
-                );
-              })}
             </div>
 
             {/* Grid or Empty state */}
@@ -1239,30 +1656,18 @@ export default function CorodomoShadowingStudioPage() {
                 <Library className="size-10 text-muted-foreground/40" />
                 <p className="font-bold text-sm text-foreground">Không tìm thấy bài học nào phù hợp</p>
                 <p className="text-xs text-muted-foreground max-w-sm leading-relaxed">
-                  {librarySearch || libraryCefrFilter !== "all"
-                    ? "Hãy thử xóa bộ lọc tìm kiếm hoặc cấp độ CEFR."
-                    : "Kho video đang trống. Hãy dán liên kết YouTube ở trên để thêm bài học mới hoặc bấm 'Khôi phục bài mẫu'."}
+                  {librarySearch
+                    ? "Hãy thử tìm kiếm với từ khóa khác."
+                    : "Kho video đang trống. Hãy dán liên kết YouTube ở trên để thêm bài học mới."}
                 </p>
-                {librarySearch || libraryCefrFilter !== "all" ? (
+                {librarySearch && (
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      setLibrarySearch("");
-                      setLibraryCefrFilter("all");
-                    }}
+                    onClick={() => setLibrarySearch("")}
                     className="h-8 text-xs rounded-xl mt-2"
                   >
-                    Xóa bộ lọc
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    onClick={handleResetDefaults}
-                    className="h-8 text-xs rounded-xl mt-2 bg-primary hover:bg-primary/90 text-primary-foreground gap-1"
-                  >
-                    <RotateCcw className="size-3" />
-                    <span>Khôi phục bài mẫu</span>
+                    Xóa tìm kiếm
                   </Button>
                 )}
               </div>
@@ -1284,14 +1689,6 @@ export default function CorodomoShadowingStudioPage() {
                       <Badge className="absolute bottom-1.5 right-1.5 text-[9px] font-mono px-1.5 py-0 bg-black/80 text-white">
                         {item.duration}
                       </Badge>
-                      <Badge className="absolute top-1.5 left-1.5 text-[9px] font-mono px-1.5 py-0 bg-primary text-primary-foreground">
-                        {item.cefrLevel || "B1"}
-                      </Badge>
-                      {item.isCustom && (
-                        <Badge className="absolute top-1.5 right-1.5 text-[9px] font-mono px-1.5 py-0 bg-indigo-600 text-white">
-                          Tự nạp
-                        </Badge>
-                      )}
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                         <div className="size-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg">
                           <Play className="size-4 fill-current ml-0.5" />
@@ -1393,26 +1790,6 @@ export default function CorodomoShadowingStudioPage() {
                     />
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-muted-foreground">Cấp độ CEFR</label>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {["A1", "A2", "B1", "B2", "C1", "Custom"].map((lvl) => (
-                        <button
-                          key={lvl}
-                          type="button"
-                          onClick={() => setEditCefr(lvl)}
-                          className={cn(
-                            "px-3 py-1 rounded-lg text-xs font-bold transition-colors",
-                            editCefr === lvl
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted/60 text-muted-foreground hover:text-foreground"
-                          )}
-                        >
-                          {lvl}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
                 </div>
 
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/60">
@@ -1450,10 +1827,7 @@ export default function CorodomoShadowingStudioPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  syncProgressToHistory();
-                  setCurrentView("hub");
-                }}
+                onClick={() => setCurrentView("hub")}
                 className="h-8 px-2.5 rounded-xl text-xs font-bold gap-1 border-border/80 hover:bg-muted text-foreground"
                 title="Quay về Màn Chính (Hub)"
               >
@@ -1483,7 +1857,10 @@ export default function CorodomoShadowingStudioPage() {
             {/* Right: Mode Tabs: [Shadowing] [Phát âm] */}
             <div className="flex items-center gap-1.5 shrink-0">
               <button
-                onClick={() => setActiveMode("shadowing")}
+                onClick={() => {
+                  if (isPlayingVideo) pauseVideo();
+                  setActiveMode("shadowing");
+                }}
                 className={cn(
                   "px-3 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5",
                   activeMode === "shadowing"
@@ -1495,7 +1872,10 @@ export default function CorodomoShadowingStudioPage() {
               </button>
 
               <button
-                onClick={() => setActiveMode("pronounce")}
+                onClick={() => {
+                  if (isPlayingVideo) pauseVideo();
+                  setActiveMode("pronounce");
+                }}
                 className={cn(
                   "px-3 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5",
                   activeMode === "pronounce"
@@ -1508,672 +1888,40 @@ export default function CorodomoShadowingStudioPage() {
             </div>
           </header>
 
-          {/* ── MODE 1: SHADOWING (Video + Subtitle Pill Below + Synchronized Sidebar) ── */}
-          {activeMode === "shadowing" && (
-            <main className="flex-1 p-2.5 sm:p-3 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-3 min-h-0">
-              {/* LEFT (8 cols): Video Player + Subtitle Pill Below + Bottom Controls */}
-              <div className="lg:col-span-8 h-full flex flex-col gap-2 min-h-0 overflow-hidden">
-                {/* Video Container */}
-                <div
-                  ref={playerContainerRef}
-                  className="shrink-0 aspect-video w-full rounded-2xl overflow-hidden bg-black border border-border/80 shadow-lg relative"
-                >
-                  <div id="corodomo-yt-player" className="w-full h-full absolute inset-0" />
-                </div>
-
-                {/* Subtitle Pill & Translation Area (Placed Below Video, matching Corodomo) */}
-                <div className="flex-1 min-h-[90px] flex flex-col items-center justify-center px-4 py-2 text-center select-text">
-                  {showSubtitle && (
-                    <div className="inline-flex flex-wrap items-end justify-center gap-x-2 gap-y-1 bg-[#1e2329] dark:bg-[#181d24] text-white px-5 py-2.5 rounded-2xl border border-white/10 shadow-md">
-                      {currentSentenceTokens.map((token, i) => (
-                        <div
-                          key={i}
-                          onClick={(e) => handleWordClick(token.cleanWord, e)}
-                          className="inline-flex flex-col items-center cursor-pointer group px-1 py-0.5 rounded transition-all hover:bg-white/10"
-                          title={`Click để tra từ: "${token.cleanWord}"`}
-                        >
-                          <span className="text-[10px] sm:text-[11px] font-mono text-amber-300 font-semibold leading-none mb-0.5 select-none tracking-tight">
-                            {token.ipa || "—"}
-                          </span>
-                          <span className="text-sm sm:text-base font-bold text-white group-hover:text-amber-200 transition-colors leading-tight">
-                            {token.word}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {showTranslation && currentSegment.translationVi && (
-                    <p className="text-xs sm:text-sm text-foreground font-bold leading-normal mt-2 max-w-2xl">
-                      {currentSegment.translationVi}
-                    </p>
-                  )}
-                </div>
-
-                {/* Video Controls Bar below Video */}
-                <div className="shrink-0 px-3.5 py-2 rounded-xl border border-border/60 bg-card flex items-center justify-between gap-2 shadow-2xs">
-                  {/* Left: Toggles for [Phụ đề] & [Bản dịch] */}
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setShowSubtitle(!showSubtitle)}
-                      className={cn(
-                        "px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1",
-                        showSubtitle
-                          ? "bg-primary/10 text-primary border border-primary/40"
-                          : "bg-muted/40 text-muted-foreground border border-border/60"
-                      )}
-                    >
-                      <Check className={cn("size-3", showSubtitle ? "opacity-100" : "opacity-0")} />
-                      <span>Phụ đề</span>
-                    </button>
-
-                    <button
-                      onClick={() => setShowTranslation(!showTranslation)}
-                      className={cn(
-                        "px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1",
-                        showTranslation
-                          ? "bg-primary/10 text-primary border border-primary/40"
-                          : "bg-muted/40 text-muted-foreground border border-border/60"
-                      )}
-                    >
-                      <Check className={cn("size-3", showTranslation ? "opacity-100" : "opacity-0")} />
-                      <span>Bản dịch</span>
-                    </button>
-                  </div>
-
-                  {/* Center: Sentence Navigation & Loop */}
-                  <div className="flex items-center gap-1.5">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handlePrevSegment}
-                      disabled={activeSegmentIndex === 0}
-                      className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
-                      title="Câu trước"
-                    >
-                      <ChevronLeft className="size-4" />
-                    </Button>
-
-                    <span className="text-xs font-mono font-bold text-foreground px-1.5">
-                      {activeSegmentIndex + 1} / {activeLesson.segments.length}
-                    </span>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleNextSegment}
-                      disabled={activeSegmentIndex === activeLesson.segments.length - 1}
-                      className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
-                      title="Câu sau"
-                    >
-                      <ChevronRight className="size-4" />
-                    </Button>
-
-                    <Button
-                      variant={isLooping ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setIsLooping(!isLooping)}
-                      className={cn(
-                        "size-7 p-0 rounded-lg transition-all",
-                        isLooping
-                          ? "bg-primary text-primary-foreground"
-                          : "text-muted-foreground border-border/60 hover:text-foreground"
-                      )}
-                      title="Lặp lại câu này"
-                    >
-                      <Repeat className="size-3.5" />
-                    </Button>
-                  </div>
-
-                  {/* Right: Speed & Back to Hub */}
-                  <div className="flex items-center gap-2">
-                    <div className="hidden sm:flex items-center gap-0.5 bg-muted/50 p-0.5 rounded-lg border border-border/60">
-                      {[0.75, 0.9, 1.0, 1.25].map((s) => (
-                        <button
-                          key={s}
-                          onClick={() => handleSpeedChange(s)}
-                          className={cn(
-                            "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md transition-all",
-                            playbackSpeed === s
-                              ? "bg-primary text-primary-foreground shadow-2xs"
-                              : "text-muted-foreground hover:text-foreground"
-                          )}
-                        >
-                          {s}x
-                        </button>
-                      ))}
-                    </div>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        syncProgressToHistory();
-                        setCurrentView("hub");
-                      }}
-                      className="h-7 px-2.5 rounded-lg text-xs font-bold gap-1 text-primary border-primary/40 hover:bg-primary/10"
-                    >
-                      <Film className="size-3" />
-                      <span className="hidden md:inline">Đổi video</span>
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              {/* RIGHT (4 cols): Synchronized Subtitle Sidebar (Auto-scrolls as speech moves) */}
-              <div className="lg:col-span-4 h-full flex flex-col rounded-3xl border border-border/80 bg-card overflow-hidden shadow-xs min-h-0">
-                {/* Header: "Phụ đề" + Download + Copy */}
-                <div className="px-4 py-2.5 border-b border-border/60 bg-muted/20 flex items-center justify-between gap-2 shrink-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-extrabold text-sm text-foreground">Phụ đề</h3>
-                    <Badge variant="outline" className="text-[10px] font-mono h-5 text-muted-foreground">
-                      {activeLesson.segments.length} câu
-                    </Badge>
-                  </div>
-
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleDownloadTranscript}
-                      className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
-                      title="Tải phụ đề về máy"
-                    >
-                      <Download className="size-3.5" />
-                    </Button>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleCopyTranscript}
-                      className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
-                      title="Sao chép toàn bộ lời thoại"
-                    >
-                      <Copy className="size-3.5" />
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Search Bar */}
-                <div className="p-2 border-b border-border/40 shrink-0">
-                  <div className="relative">
-                    <Search className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      value={transcriptSearch}
-                      onChange={(e) => setTranscriptSearch(e.target.value)}
-                      placeholder="Tìm kiếm câu thoại hoặc nghĩa tiếng Việt..."
-                      className="h-8 pl-8 text-xs bg-muted/20 rounded-xl"
-                    />
-                  </div>
-                </div>
-
-                {/* Scrollable Sentence List with Real-time Auto-Scroll Highlight */}
-                <div
-                  className="flex-1 min-h-0 overflow-y-auto p-2.5 space-y-2"
-                  onMouseEnter={() => (isUserInteractingTimeline.current = true)}
-                  onMouseLeave={() => (isUserInteractingTimeline.current = false)}
-                >
-                  {filteredSegments.map((seg, idx) => {
-                    const originalIndex = activeLesson.segments.findIndex(
-                      (s) => s.segment_id === seg.segment_id
-                    );
-                    const isActive = originalIndex === activeSegmentIndex;
-
-                    return (
-                      <div
-                        key={seg.segment_id}
-                        ref={(el) => {
-                          timelineItemRefs.current[originalIndex] = el;
-                        }}
-                        onClick={() => seekToSegment(originalIndex, true)}
-                        className={cn(
-                          "p-3 rounded-2xl border transition-all cursor-pointer select-text flex items-start gap-2.5",
-                          isActive
-                            ? "bg-primary/10 border-primary/50 shadow-xs ring-1 ring-primary/30"
-                            : "bg-card hover:bg-muted/30 border-border/60"
-                        )}
-                      >
-                        <button
-                          className={cn(
-                            "size-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 transition-colors",
-                            isActive
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted text-muted-foreground hover:bg-muted/80"
-                          )}
-                        >
-                          {isActive && isPlayingVideo ? (
-                            <Pause className="size-3 fill-current" />
-                          ) : (
-                            <Play className="size-3 fill-current ml-0.5" />
-                          )}
-                        </button>
-
-                        <div className="min-w-0 flex-1">
-                          <p
-                            className={cn(
-                              "text-xs sm:text-sm leading-snug",
-                              isActive ? "font-bold text-foreground" : "text-foreground/90 font-medium"
-                            )}
-                          >
-                            {seg.text}
-                          </p>
-
-                          {seg.translationVi && (
-                            <p className="text-[11px] sm:text-xs text-muted-foreground mt-1 leading-normal">
-                              {seg.translationVi}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </main>
-          )}
-
-          {/* ── MODE 2: PHÁT ÂM (Matches Corodomo Screenshot 2) ── */}
-          {activeMode === "pronounce" && (
-            <main className="flex-1 p-2.5 sm:p-3 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-3 min-h-0">
-              {/* LEFT (6 cols): Video Player + Progress + Subtitle Accordion */}
-              <div className="lg:col-span-6 h-full flex flex-col gap-2.5 min-h-0 overflow-hidden">
-                {!isVideoHidden && (
-                  <div className="shrink-0 aspect-video w-full rounded-2xl overflow-hidden bg-black border border-border/80 shadow-md relative">
-                    <div id="corodomo-yt-player" className="w-full h-full" />
-                  </div>
+          {/* ── PERSISTENT STUDIO WORKSPACE (Single Grid for both modes) ── */}
+          <main className="flex-1 p-2.5 sm:p-3 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-3 min-h-0">
+            {/* LEFT COLUMN: 8 cols in Shadowing, 6 cols in Pronounce */}
+            <div
+              className={cn(
+                "h-full flex flex-col gap-2 min-h-0 overflow-hidden",
+                activeMode === "shadowing" ? "lg:col-span-8" : "lg:col-span-6 gap-2.5"
+              )}
+            >
+              {/* Persistent Video Player Container - NEVER unmounted to preserve YouTube iframe */}
+              <div
+                ref={playerContainerRef}
+                className={cn(
+                  "shrink-0 aspect-video w-full rounded-2xl overflow-hidden bg-black border border-border/80 shadow-lg relative",
+                  activeMode === "pronounce" && isVideoHidden && "hidden"
                 )}
-
-                {/* Toolbar */}
-                <div className="shrink-0 px-3 py-1.5 rounded-xl border border-border/60 bg-card flex items-center justify-between gap-2 shadow-2xs">
-                  <div className="flex items-center gap-1.5">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setIsVideoHidden(!isVideoHidden)}
-                      className="h-7 px-2 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground gap-1"
-                    >
-                      <Video className="size-3" />
-                      <span>{isVideoHidden ? "Hiện video" : "Ẩn video"}</span>
-                    </Button>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        toast.info(
-                          "Phím tắt bàn phím",
-                          "Space: Phát lại • Enter: Kiểm tra phát âm • Mũi tên: Chuyển câu"
-                        )
-                      }
-                      className="h-7 px-2 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground gap-1"
-                    >
-                      <Keyboard className="size-3" />
-                      <span>Phím tắt</span>
-                    </Button>
-                  </div>
-
-                  <div className="flex items-center gap-0.5 bg-muted/50 p-0.5 rounded-lg border border-border/60">
-                    {[0.75, 1.0, 1.25].map((s) => (
-                      <button
-                        key={s}
-                        onClick={() => handleSpeedChange(s)}
-                        className={cn(
-                          "text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-md transition-all",
-                          playbackSpeed === s
-                            ? "bg-primary text-primary-foreground shadow-2xs"
-                            : "text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        {s}x
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Progress Bar */}
-                <div className="shrink-0 px-3.5 py-2.5 rounded-2xl bg-card border border-border/70 space-y-1.5 shadow-2xs">
-                  <div className="flex items-center justify-between text-xs font-bold">
-                    <span className="text-muted-foreground">
-                      Đã hoàn thành {completedCount}/{activeLesson.segments.length}
-                    </span>
-                    <span className="text-primary font-mono">
-                      {progressPercent}%
-                    </span>
-                  </div>
-                  <div className="h-2 w-full bg-muted/50 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary rounded-full transition-all duration-300"
-                      style={{ width: `${progressPercent}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Subtitle Accordion */}
-                <div className="flex-1 min-h-0 rounded-2xl border border-border/70 bg-card overflow-hidden flex flex-col shadow-2xs">
-                  <div
-                    onClick={() => setShowSubtitleAccordion(!showSubtitleAccordion)}
-                    className="px-3.5 py-2.5 border-b border-border/60 bg-muted/20 flex items-center justify-between cursor-pointer"
-                  >
-                    <span className="text-xs font-bold text-foreground">
-                      Phụ đề [{activeSegmentIndex + 1}/{activeLesson.segments.length}]
-                    </span>
-                    {showSubtitleAccordion ? (
-                      <ChevronUp className="size-4 text-muted-foreground" />
-                    ) : (
-                      <ChevronDown className="size-4 text-muted-foreground" />
-                    )}
-                  </div>
-
-                  {showSubtitleAccordion && (
-                    <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
-                      {activeLesson.segments.map((seg, idx) => {
-                        const isCur = idx === activeSegmentIndex;
-                        return (
-                          <div
-                            key={seg.segment_id}
-                            onClick={() => seekToSegment(idx, true)}
-                            className={cn(
-                              "p-2.5 rounded-xl border transition-all cursor-pointer text-left",
-                              isCur
-                                ? "bg-primary/10 border-primary/40 shadow-2xs"
-                                : "hover:bg-muted/20 border-border/40"
-                            )}
-                          >
-                            <span className="text-[10px] font-mono font-bold text-muted-foreground block mb-0.5">
-                              CÂU {idx + 1}
-                            </span>
-                            <p className="text-xs font-semibold text-foreground leading-snug">
-                              {seg.text}
-                            </p>
-                            {seg.translationVi && (
-                              <p className="text-[11px] text-muted-foreground mt-0.5 italic">
-                                {seg.translationVi}
-                              </p>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+              >
+                <div id="corodomo-yt-player" className="w-full h-full absolute inset-0" />
               </div>
 
-              {/* RIGHT (6 cols): "Luyện phát âm" Panel */}
-              <div className="lg:col-span-6 h-full flex flex-col rounded-3xl border border-border/80 bg-card overflow-hidden shadow-xs min-h-0">
-                <div className="px-4 py-2.5 border-b border-border/60 bg-muted/20 flex items-center justify-between shrink-0">
-                  <h3 className="font-extrabold text-sm text-foreground">Luyện phát âm</h3>
-                  <Badge variant="outline" className="text-xs font-mono font-bold h-6">
-                    {activeSegmentIndex + 1}/{activeLesson.segments.length}
-                  </Badge>
-                </div>
+              {/* Mode-specific Left Controls */}
+              {activeMode === "shadowing" ? renderShadowingLeftControls() : renderPronounceLeftControls()}
+            </div>
 
-                {/* Sentence Pagination */}
-                <div className="px-4 py-2.5 border-b border-border/50 shrink-0 flex items-center justify-between gap-2 overflow-x-auto">
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handlePrevSegment}
-                      disabled={activeSegmentIndex === 0}
-                      className="size-7 p-0 rounded-lg"
-                    >
-                      <ChevronLeft className="size-3.5" />
-                    </Button>
-
-                    {Array.from({ length: Math.min(10, activeLesson.segments.length) }, (_, i) => {
-                      const startOffset = Math.max(
-                        0,
-                        Math.min(activeSegmentIndex - 4, activeLesson.segments.length - 10)
-                      );
-                      const sentenceNum = startOffset + i + 1;
-                      const isCur = sentenceNum - 1 === activeSegmentIndex;
-
-                      return (
-                        <button
-                          key={sentenceNum}
-                          onClick={() => seekToSegment(sentenceNum - 1, true)}
-                          className={cn(
-                            "size-7 rounded-full text-xs font-mono font-bold transition-all flex items-center justify-center",
-                            isCur
-                              ? "bg-primary text-primary-foreground shadow-xs"
-                              : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
-                          )}
-                        >
-                          {sentenceNum}
-                        </button>
-                      );
-                    })}
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleNextSegment}
-                      disabled={activeSegmentIndex === activeLesson.segments.length - 1}
-                      className="size-7 p-0 rounded-lg"
-                    >
-                      <ChevronRight className="size-3.5" />
-                    </Button>
-                  </div>
-
-                  <div className="hidden sm:flex items-center gap-1 text-[11px] text-muted-foreground font-medium">
-                    <span>Số câu/lượt:</span>
-                    <span className="font-bold text-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
-                      1
-                    </span>
-                  </div>
-                </div>
-
-                {/* CÂU HIỆN TẠI */}
-                <div className="p-4 border-b border-border/60 bg-muted/10 space-y-3 shrink-0">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                      CÂU HIỆN TẠI
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => tts.speak(currentSegment.text)}
-                        className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
-                        title="Nghe Audio mẫu"
-                      >
-                        <Volume2 className="size-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setShowSubtitle(!showSubtitle)}
-                        className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
-                        title="Ẩn/Hiện chữ"
-                      >
-                        {showSubtitle ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setFontSizeLevel(
-                            fontSizeLevel === "md" ? "lg" : fontSizeLevel === "lg" ? "xl" : "md"
-                          );
-                        }}
-                        className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
-                        title="Cỡ chữ"
-                      >
-                        <Type className="size-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setShowTranslation(!showTranslation)}
-                        className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
-                        title="Ẩn/Hiện dịch nghĩa"
-                      >
-                        <Languages className="size-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Target Sentence Display with Stacked IPA */}
-                  <div className="min-h-[56px] flex flex-col justify-center">
-                    {showSubtitle ? (
-                      <div className="flex flex-wrap items-end gap-x-2 gap-y-1">
-                        {currentSentenceTokens.map((token, i) => (
-                          <div
-                            key={i}
-                            onClick={(e) => handleWordClick(token.cleanWord, e)}
-                            className="inline-flex flex-col items-center cursor-pointer group px-0.5 rounded transition-all hover:bg-muted/40"
-                          >
-                            <span className="text-[10px] font-mono text-primary font-semibold leading-none mb-0.5 select-none">
-                              {token.ipa || "—"}
-                            </span>
-                            <span
-                              className={cn(
-                                "font-extrabold text-foreground group-hover:text-primary transition-colors leading-tight",
-                                fontSizeLevel === "md"
-                                  ? "text-base"
-                                  : fontSizeLevel === "lg"
-                                  ? "text-lg"
-                                  : "text-xl"
-                              )}
-                            >
-                              {token.word}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5 text-muted-foreground py-2 italic text-xs">
-                        <EyeOff className="size-4" />
-                        <span>Nội dung đã ẩn để bạn tập trung luyện nghe</span>
-                      </div>
-                    )}
-
-                    {showTranslation && currentSegment.translationVi && (
-                      <p className="text-xs text-muted-foreground font-medium italic mt-2">
-                        {currentSegment.translationVi}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Big Action Buttons */}
-                <div className="p-4 border-b border-border/50 shrink-0 flex items-center justify-between gap-3">
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    onClick={handlePlayNative}
-                    className="h-11 px-4 rounded-2xl font-bold text-xs sm:text-sm border-border/80 flex-1 flex items-center justify-center gap-1.5 hover:bg-muted/50"
-                  >
-                    <Play className="size-4 fill-current text-muted-foreground" />
-                    <span>Phát lại</span>
-                    <kbd className="text-[9px] font-mono px-1 py-0.5 bg-muted rounded text-muted-foreground ml-1">
-                      space
-                    </kbd>
-                  </Button>
-
-                  <Button
-                    size="lg"
-                    onClick={recordingStatus === "recording" ? handleStopRecord : handleStartRecord}
-                    disabled={recordingStatus === "evaluating"}
-                    className={cn(
-                      "h-11 px-6 rounded-2xl font-black text-xs sm:text-sm flex-2 flex items-center justify-center gap-2 text-white shadow-md transition-all",
-                      recordingStatus === "recording"
-                        ? "bg-rose-500 hover:bg-rose-600 animate-pulse ring-4 ring-rose-500/25"
-                        : "bg-primary hover:bg-primary/90 text-primary-foreground"
-                    )}
-                  >
-                    {recordingStatus === "evaluating" ? (
-                      <>
-                        <Loader2 className="size-4 animate-spin" />
-                        <span>Đang chấm...</span>
-                      </>
-                    ) : recordingStatus === "recording" ? (
-                      <>
-                        <MicOff className="size-4" />
-                        <span>Dừng & Chấm điểm</span>
-                      </>
-                    ) : (
-                      <>
-                        <Mic className="size-4" />
-                        <span>Kiểm tra phát âm</span>
-                        <kbd className="text-[9px] font-mono px-1 py-0.5 bg-white/20 rounded ml-1">
-                          enter
-                        </kbd>
-                      </>
-                    )}
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    onClick={handleNextSegment}
-                    disabled={activeSegmentIndex === activeLesson.segments.length - 1}
-                    className="h-11 px-4 rounded-2xl font-bold text-xs sm:text-sm border-border/80 flex-1 flex items-center justify-center gap-1 hover:bg-muted/50"
-                  >
-                    <span>Tiếp</span>
-                    <ChevronRight className="size-4" />
-                  </Button>
-                </div>
-
-                {/* 4 Score Metric Cards */}
-                <div className="flex-1 min-h-0 p-4 grid grid-cols-2 gap-3 overflow-y-auto">
-                  <div className="p-3.5 rounded-2xl bg-card border border-border/70 flex flex-col justify-between shadow-2xs">
-                    <span className="text-xs font-bold text-muted-foreground">Điểm phát âm</span>
-                    <span
-                      className={cn(
-                        "text-2xl sm:text-3xl font-black font-mono mt-1",
-                        score?.overall
-                          ? score.overall >= 80
-                            ? "text-emerald-500"
-                            : score.overall >= 60
-                            ? "text-amber-500"
-                            : "text-rose-500"
-                          : "text-rose-500/80"
-                      )}
-                    >
-                      {score?.overall ? score.overall.toFixed(1) : "0.0"}
-                    </span>
-                  </div>
-
-                  <div className="p-3.5 rounded-2xl bg-card border border-border/70 flex flex-col justify-between shadow-2xs">
-                    <span className="text-xs font-bold text-muted-foreground">Độ chính xác</span>
-                    <span
-                      className={cn(
-                        "text-2xl sm:text-3xl font-black font-mono mt-1",
-                        score?.accuracy ? "text-emerald-500" : "text-rose-500/80"
-                      )}
-                    >
-                      {score?.accuracy ? score.accuracy.toFixed(1) : "0.0"}
-                    </span>
-                  </div>
-
-                  <div className="p-3.5 rounded-2xl bg-card border border-border/70 flex flex-col justify-between shadow-2xs">
-                    <span className="text-xs font-bold text-muted-foreground">Độ trôi chảy</span>
-                    <span
-                      className={cn(
-                        "text-2xl sm:text-3xl font-black font-mono mt-1",
-                        score?.fluency ? "text-emerald-500" : "text-rose-500/80"
-                      )}
-                    >
-                      {score?.fluency ? score.fluency.toFixed(1) : "0.0"}
-                    </span>
-                  </div>
-
-                  <div className="p-3.5 rounded-2xl bg-card border border-border/70 flex flex-col justify-between shadow-2xs">
-                    <span className="text-xs font-bold text-muted-foreground">Độ hoàn thiện</span>
-                    <span
-                      className={cn(
-                        "text-2xl sm:text-3xl font-black font-mono mt-1",
-                        score?.completeness ? "text-emerald-500" : "text-rose-500/80"
-                      )}
-                    >
-                      {score?.completeness ? score.completeness.toFixed(1) : "0.0"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </main>
-          )}
+            {/* RIGHT COLUMN: 4 cols in Shadowing (Sidebar), 6 cols in Pronounce (Grading Panel) */}
+            <div
+              className={cn(
+                "h-full min-h-0 overflow-hidden",
+                activeMode === "shadowing" ? "lg:col-span-4" : "lg:col-span-6"
+              )}
+            >
+              {activeMode === "shadowing" ? renderShadowingSidebar() : renderPronouncePanel()}
+            </div>
+          </main>
 
           {/* Session Completed Modal */}
           <SessionCompletedModal
@@ -2220,9 +1968,6 @@ export default function CorodomoShadowingStudioPage() {
                   <h3 className="font-extrabold text-sm sm:text-base text-foreground">
                     Thêm bài học từ YouTube
                   </h3>
-                  <p className="text-[11px] text-muted-foreground">
-                    Dán link video YouTube để tự động bóc tách phụ đề & tạo bài học
-                  </p>
                 </div>
               </div>
               <button
@@ -2269,15 +2014,7 @@ export default function CorodomoShadowingStudioPage() {
                 )}
               </div>
 
-              <div className="p-3 rounded-2xl bg-muted/40 border border-border/60 space-y-1 text-[11px] text-muted-foreground">
-                <p className="font-semibold text-foreground/80 flex items-center gap-1">
-                  <Sparkles className="size-3 text-primary" />
-                  <span>Tính năng tự động:</span>
-                </p>
-                <p>• Bóc tách 100% transcript và căn chỉnh thời gian chuẩn xác.</p>
-                <p>• Tự động sinh phiên âm chuẩn IPA phía trên từng từ vựng.</p>
-                <p>• Lưu vĩnh viễn bài học vào Kho Video của bạn.</p>
-              </div>
+
             </div>
 
             {/* Action Buttons */}
@@ -2307,6 +2044,117 @@ export default function CorodomoShadowingStudioPage() {
                     <span>Trích xuất & Học ngay</span>
                   </>
                 )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: XÁC NHẬN VIDEO ĐÃ TỒN TẠI TRONG THƯ VIỆN ── */}
+      {duplicatePrompt?.isOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setDuplicatePrompt(null)}
+        >
+          <div
+            className="w-full max-w-md bg-card border border-border/80 ring-1 ring-primary/25 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-border/60 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="size-10 rounded-2xl bg-amber-500/15 text-amber-500 border border-amber-500/30 flex items-center justify-center shrink-0">
+                  <Film className="size-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm sm:text-base text-foreground">
+                    Video đã có trong thư viện
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground">
+                    Bài học này đã được lưu và sẵn sàng để luyện tập
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setDuplicatePrompt(null)}
+                className="size-8 rounded-xl hover:bg-muted text-muted-foreground flex items-center justify-center"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            {/* Video preview card */}
+            <div className="p-3 rounded-2xl bg-muted/30 border border-border/60 flex items-center gap-3">
+              {duplicatePrompt.lesson.thumbnail && (
+                <div className="relative w-24 aspect-video rounded-xl overflow-hidden bg-black shrink-0 border border-border/40">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={duplicatePrompt.lesson.thumbnail}
+                    alt={duplicatePrompt.lesson.title}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                    <Play className="size-4 text-white fill-current" />
+                  </div>
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <h4 className="font-bold text-xs sm:text-sm text-foreground truncate">
+                  {duplicatePrompt.lesson.title}
+                </h4>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge variant="outline" className="text-[10px] font-mono h-4.5 text-primary border-primary/40">
+                    {duplicatePrompt.lesson.segments?.length || 0} câu thoại
+                  </Badge>
+                  {duplicatePrompt.lesson.channel && (
+                    <span className="text-[10px] text-muted-foreground truncate">
+                      {duplicatePrompt.lesson.channel}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Bài học này đã có trong thư viện. Bạn muốn mở để luyện tập tiếp hay tải lại phụ đề mới?
+            </p>
+
+            {/* Action buttons */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-2 border-t border-border/60">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setDuplicatePrompt(null)}
+                className="rounded-xl text-xs h-9 order-3 sm:order-1"
+              >
+                Hủy bỏ
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const url = duplicatePrompt.url;
+                  setDuplicatePrompt(null);
+                  handleLoadCustomYouTubeUrl(url, true);
+                }}
+                className="rounded-xl text-xs h-9 border-border/80 hover:bg-muted font-semibold gap-1.5 order-2"
+              >
+                <RotateCcw className="size-3.5" />
+                <span>Tải lại từ YouTube</span>
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  const lesson = duplicatePrompt.lesson;
+                  setDuplicatePrompt(null);
+                  setShowAddVideoModal(false);
+                  setCustomUrlInput("");
+                  setModalUrlInput("");
+                  handleSelectLesson(lesson);
+                }}
+                className="rounded-xl text-xs h-9 bg-primary hover:bg-primary/90 text-primary-foreground font-bold gap-1.5 shadow-md shadow-primary/25 order-1 sm:order-3"
+              >
+                <Play className="size-3.5 fill-current" />
+                <span>Mở bài đã lưu</span>
               </Button>
             </div>
           </div>

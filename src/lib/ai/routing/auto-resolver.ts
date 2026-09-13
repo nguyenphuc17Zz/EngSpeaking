@@ -45,9 +45,18 @@ export function resolveAutoModel(
 }
 
 // Server variant that checks real env keys
-export function resolveAutoModelServer(task: AITask): ResolvedModel {
+export function resolveAutoModelServer(task: AITask, preferredProvider?: string): ResolvedModel {
   const capability = TASK_TO_CAPABILITY[task];
   const candidates = CATALOG.filter((m) => m.active && (m.capabilities[capability] as boolean));
+  
+  // If specific provider requested, filter candidates for that provider first
+  if (preferredProvider && preferredProvider !== "auto") {
+    const providerCandidates = candidates.filter((m) => m.providerId === preferredProvider.toLowerCase());
+    if (providerCandidates.length > 0) {
+      return { providerId: preferredProvider.toLowerCase(), modelId: providerCandidates[0].id };
+    }
+  }
+
   candidates.sort((a, b) => PROVIDER_PREFERENCE.indexOf(a.providerId) - PROVIDER_PREFERENCE.indexOf(b.providerId));
   for (const m of candidates) {
     if (m.providerId === "browser" || m.providerId === "mock") continue; // server shouldn't pick browser

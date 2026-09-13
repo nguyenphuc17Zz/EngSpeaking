@@ -83,7 +83,7 @@ describe("Function 8 — Phoneme-Stress Engine & Spoken Vocabulary Studio", () =
       const wordItem = lookupLexiconWord("negotiate");
       expect(wordItem).toBeDefined();
       expect(wordItem?.word).toBe("negotiate");
-      expect(wordItem?.cefrLevel).toBe("B1");
+      expect(wordItem?.cefrLevel).toBe("B2");
       expect(wordItem?.ipaUS).toBeDefined();
       expect(wordItem?.collocations.length).toBeGreaterThan(0);
       expect(wordItem?.collocations[0].collocationType).toBeDefined();
@@ -119,6 +119,15 @@ describe("Function 8 — Phoneme-Stress Engine & Spoken Vocabulary Studio", () =
       expect(wordItem.ipaUS).toBeDefined();
       expect(wordItem.collocations.length).toBeGreaterThan(0);
       expect(wordItem.spontaneousChallenge).toBeDefined();
+    });
+
+    it("throws an explicit error without silent fallback when forceAI encounters a provider error", async () => {
+      await expect(
+        searchSpokenDictionary("resilience", {
+          forceAI: true,
+          provider: "non_existent_provider",
+        })
+      ).rejects.toThrow(/Lỗi gọi AI/);
     });
   });
 

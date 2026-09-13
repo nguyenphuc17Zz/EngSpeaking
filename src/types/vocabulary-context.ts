@@ -58,6 +58,8 @@ export interface SpokenWordItem {
   sentenceMasteryScore: number; // 0-100
   isMastered: boolean;
   practiceCount: number;
+  source?: "ai" | "curated" | "fallback";
+  aiModel?: string;
 }
 
 export interface WordPronunciationEvaluation {

@@ -114,6 +114,8 @@ export default function ConversationSessionPage() {
     return () => clearInterval(id);
   }, []);
 
+
+
   // ─── Speaking Controls ────────────────────────────────────────────────
   const handleStartSpeaking = useCallback(async () => {
     soundEffects.playMicStart();
@@ -173,10 +175,10 @@ export default function ConversationSessionPage() {
 
   const handleStopAndProcess = useCallback(async () => {
     soundEffects.playMicStop();
+    // 1. ALWAYS unconditionally stop Web Speech API first
+    speech.stopListening();
+
     const sttProvider = settings.stt?.provider || "browser";
-    if (sttProvider === "browser") {
-      speech.stopListening();
-    }
     setSessionStatus("thinking");
     setIsProcessing(true);
     setThinking(true);

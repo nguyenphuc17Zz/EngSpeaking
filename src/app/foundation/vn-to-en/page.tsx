@@ -103,6 +103,9 @@ export default function VNToENPage() {
 
     setPromptDisplayTime(Date.now());
     if (prepTimerRef.current) clearInterval(prepTimerRef.current);
+    if (unifiedSTTRef.current.isListening) {
+      unifiedSTTRef.current.stopListening().catch(() => {});
+    }
 
     if (autoStartMic && (sessionConfig.mode === "timed" || sessionConfig.mode === "rapid_fire")) {
       setIsCountingDown(true);
@@ -411,26 +414,16 @@ export default function VNToENPage() {
         </div>
 
         {/* Hero Banner */}
-        <div className="p-6 md:p-8 rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-background shadow-sm space-y-4">
-          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-primary/15 text-primary text-xs font-bold w-fit">
-            <Zap className="size-3.5" />
-            <span>Spoken Retrieval Engine • 100% Real Dynamic AI</span>
-          </div>
-
-          <div className="max-w-2xl space-y-2">
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
-              Vietnamese → English Speaking
-            </h1>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Ép não bộ truy xuất trực tiếp từ ý niệm tiếng Việt sang phát âm tiếng Anh tự nhiên — dứt điểm thói quen dịch nhẩm từng từ trong đầu.
-            </p>
-          </div>
+        <div className="p-5 sm:p-6 rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-background shadow-xs">
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
+            Vietnamese → English Speaking
+          </h1>
         </div>
 
         {/* 3 Retrieval Modes Selection */}
         <div className="space-y-3">
           <h2 className="text-sm font-bold text-foreground uppercase tracking-wider">
-            Chọn chế độ truy xuất khẩu ngữ:
+            Chọn chế độ luyện tập:
           </h2>
 
           <div className="grid sm:grid-cols-3 gap-4">

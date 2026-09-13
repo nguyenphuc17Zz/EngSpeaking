@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { word, isRandom, cefrLevel, forceAI, provider, model, currentWordId } = body;
+    const { word, isRandom, cefrLevel, forceAI, bypassCache, provider, model, currentWordId } = body;
 
     if (isRandom) {
       const wordItem = await generateDynamicRandomWord({ cefrLevel, forceAI, provider, model, currentWordId });
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Missing word" }, { status: 400 });
     }
 
-    const wordItem = await searchSpokenDictionary(word, { forceAI, provider, model });
+    const wordItem = await searchSpokenDictionary(word, { forceAI, bypassCache, provider, model });
     return NextResponse.json({ success: true, wordItem });
   } catch (error: unknown) {
     return NextResponse.json(

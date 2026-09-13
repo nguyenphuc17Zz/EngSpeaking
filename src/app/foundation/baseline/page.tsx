@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -41,6 +41,8 @@ export default function BaselinePage() {
       setTasks(data.tasks || []);
     } finally { setGenerating(false); }
   }, [settings.conversation.provider, settings.conversation.model]);
+
+
 
   const startRec = async () => {
     startTimeRef.current = Date.now();

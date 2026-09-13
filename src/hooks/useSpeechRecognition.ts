@@ -27,9 +27,26 @@ export function useSpeechRecognition(lang = "en-US") {
   }, []);
 
   const cleanup = useCallback(() => {
-    const rec = recognitionRef.current as { onstart?: unknown; onresult?: unknown; onerror?: unknown; onend?: unknown; abort?: () => void } | null;
+    const rec = recognitionRef.current as {
+      onstart?: unknown;
+      onresult?: unknown;
+      onerror?: unknown;
+      onend?: unknown;
+      abort?: () => void;
+      stop?: () => void;
+    } | null;
     if (rec) {
-      try { rec.onstart = null; rec.onresult = null; rec.onerror = null; rec.onend = null; rec.abort?.(); } catch {}
+      try {
+        rec.abort?.();
+      } catch {
+        try {
+          rec.stop?.();
+        } catch {}
+      }
+      rec.onstart = null;
+      rec.onresult = null;
+      rec.onerror = null;
+      rec.onend = null;
       recognitionRef.current = null;
     }
   }, []);

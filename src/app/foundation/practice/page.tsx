@@ -250,6 +250,8 @@ function PracticeInner() {
     };
   }, [currentExercise, startTimer, stopTimer]);
 
+
+
   const startRecording = async () => {
     soundEffects.playMicStart();
     startTimeRef.current = Date.now();

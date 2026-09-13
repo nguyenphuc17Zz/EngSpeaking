@@ -17,6 +17,7 @@ import {
   RotateCcw,
   Loader2,
   CheckCircle2,
+  Trash2,
 } from "lucide-react";
 
 interface SpeakingControllerProps {
@@ -69,7 +70,7 @@ export function SpeakingController({
   const isRecording = status === "recording";
   const hasPendingReview = Boolean(pendingText && !isRecording && !isEvaluating);
 
-  // Keyboard shortcut: Enter to submit pending, Space to toggle/re-record
+  // Keyboard shortcut: Enter to submit pending, Z / Backspace / Delete to clear, Space to toggle/re-record
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (["INPUT", "TEXTAREA"].includes((e.target as HTMLElement)?.tagName)) return;
@@ -77,12 +78,18 @@ export function SpeakingController({
       if (e.code === "Enter" && hasPendingReview) {
         e.preventDefault();
         onConfirmSubmit?.();
+      } else if (
+        (e.code === "KeyZ" || e.code === "Backspace" || e.code === "Delete") &&
+        hasPendingReview
+      ) {
+        e.preventDefault();
+        onResetLiveTranscript?.();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [hasPendingReview, onConfirmSubmit]);
+  }, [hasPendingReview, onConfirmSubmit, onResetLiveTranscript]);
 
   return (
     <Card className="h-full flex flex-col justify-between rounded-3xl border border-border/80 bg-card/95 shadow-sm overflow-hidden relative">
@@ -175,14 +182,28 @@ export function SpeakingController({
                 "{pendingText}"
               </div>
 
-              <div className="flex items-center justify-between gap-2.5 pt-1">
+              <div className="flex items-center justify-between gap-2 pt-1">
+                {onResetLiveTranscript && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={onResetLiveTranscript}
+                    className="rounded-xl text-xs font-semibold gap-1 text-red-500 border-red-500/30 hover:bg-red-500/10 btn-spring h-8 px-2.5"
+                    title="Xoá câu này [Z]"
+                  >
+                    <Trash2 className="size-3.5" />
+                    <span>Xoá [Z]</span>
+                  </Button>
+                )}
+
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={onReRecord || onStartRecord}
-                  className="rounded-xl text-xs font-semibold gap-1.5 border-border/80 hover:bg-muted btn-spring h-8 px-2.5"
-                  title="Xoá câu này và thu âm lại [Space]"
+                  className="rounded-xl text-xs font-semibold gap-1 border-border/80 hover:bg-muted btn-spring h-8 px-2.5"
+                  title="Thu âm lại câu này [Space]"
                 >
                   <RotateCcw className="size-3.5 text-muted-foreground" />
                   <span>Thu lại</span>
@@ -193,7 +214,7 @@ export function SpeakingController({
                   size="sm"
                   onClick={onConfirmSubmit}
                   disabled={!pendingText?.trim()}
-                  className="rounded-xl text-xs font-bold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md shadow-primary/25 btn-spring h-8 px-4 flex-1"
+                  className="rounded-xl text-xs font-bold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md shadow-primary/25 btn-spring h-8 px-3 flex-1"
                   title="Nộp bài cho AI chấm điểm [Enter]"
                 >
                   <Send className="size-3.5" />

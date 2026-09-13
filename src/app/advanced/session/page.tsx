@@ -125,6 +125,8 @@ export default function AdvancedSessionPage() {
   const currentBlock = session?.blocks[currentBlockIdx];
   const blitzLimitSec = currentBlock?.timeLimitSec || getDefaultBlitzLimitSec(currentBlock?.type);
 
+
+
   // ─────────────────────────────────────────────────────────────────────
   // DECLARATION ORDER: Core Speaking Handlers FIRST to avoid TDZ
   // ─────────────────────────────────────────────────────────────────────
@@ -151,10 +153,10 @@ export default function AdvancedSessionPage() {
 
   const handleStopAndProcess = useCallback(async () => {
     soundEffects.playMicStop();
+    // 1. ALWAYS unconditionally stop Web Speech API first
+    speech.stopListening();
+
     const sttProvider = settings.stt?.provider || "browser";
-    if (sttProvider === "browser") {
-      speech.stopListening();
-    }
     setSessionStatus("thinking");
     setIsProcessing(true);
     setIsLifelineVisible(false);

@@ -34,6 +34,9 @@ export function useBrowserTTS() {
 
       // Always read latest settings from store to guard against pre-hydration default values
       const currentTts = useSettingsStore.getState().tts || ttsSettings;
+      const globalSpeed = useSettingsStore.getState().ttsSpeed ?? 1.0;
+      const targetSpeed = opts?.rate ?? globalSpeed;
+
       const provider = currentTts?.provider || "edge-tts";
       const preferredModel = currentTts?.model || "en-US-JennyNeural";
 
@@ -56,7 +59,7 @@ export function useBrowserTTS() {
               text,
               voice: selectedVoice,
               provider,
-              speed: opts?.rate ?? 1,
+              speed: targetSpeed,
             });
             return;
           } catch (ttsErr) {
@@ -78,7 +81,7 @@ export function useBrowserTTS() {
         await speakWithBrowser({
           text,
           voice: opts?.voice,
-          speed: opts?.rate ?? 1,
+          speed: targetSpeed,
           language: opts?.lang || "en-US",
         });
       } catch (browserErr) {

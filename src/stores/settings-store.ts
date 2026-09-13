@@ -24,6 +24,19 @@ export interface AudioEnhancementState {
   noiseFloorGate: boolean;
 }
 
+export interface VocabularyKeybindings {
+  playWord: string;       // "KeyA"
+  playSentence: string;   // "KeyS"
+  clearSpeech: string;    // "KeyZ"
+  previousWord: string;   // "KeyQ" (Quay lại từ vừa bấm nhầm)
+  toggleMic: string;      // "Space"
+  submitOrNext: string;   // "Enter"
+  toggleHints: string;    // "KeyH"
+  randomWord: string;     // "KeyR"
+  step1: string;          // "Digit1"
+  step2: string;          // "Digit2"
+}
+
 export interface SettingsState {
   // Active Primary Engine Indicator
   activeProvider: "gemini" | "groq";
@@ -40,8 +53,10 @@ export interface SettingsState {
   generation: ProviderSelectionState;
   stt: ProviderSelectionState;
   tts: ProviderSelectionState;
+  ttsSpeed: number;
   aiProfile: AIProfileState;
   audioEnhancement: AudioEnhancementState;
+  vocabularyKeybindings: VocabularyKeybindings;
 
   // Setters
   setActiveProvider: (p: "gemini" | "groq") => void;
@@ -57,16 +72,19 @@ export interface SettingsState {
   setGeneration: (s: ProviderSelectionState) => void;
   setStt: (s: ProviderSelectionState) => void;
   setTts: (s: ProviderSelectionState) => void;
+  setTtsSpeed: (speed: number) => void;
   setAIProfile: (p: Partial<AIProfileState>) => void;
   setFeatureModel: (feature: string, selection: ProviderSelectionState) => void;
   applyProviderToAll: (provider: "gemini" | "groq", model?: string) => void;
+  setVocabularyKeybinding: (action: keyof VocabularyKeybindings, key: string) => void;
+  resetVocabularyKeybindings: () => void;
   setAll: (s: Partial<SettingsState>) => void;
 }
 
 const DEFAULTS = {
   activeProvider: "gemini" as const,
   preferredGeminiModel: "gemini-3.5-flash-lite",
-  preferredGroqModel: "llama-3.3-70b-versatile",
+  preferredGroqModel: "openai/gpt-oss-120b",
   sentenceBuilderGen: { provider: "gemini", model: "gemini-3.5-flash-lite" },
   sentenceBuilderEval: { provider: "gemini", model: "gemini-3.5-flash-lite" },
   shadowing: { provider: "gemini", model: "gemini-3.5-flash-lite" },
@@ -76,6 +94,7 @@ const DEFAULTS = {
   generation: { provider: "gemini", model: "gemini-3.5-flash-lite" },
   stt: { provider: "browser", model: "browser-stt" },
   tts: { provider: "edge-tts", model: "en-US-JennyNeural" },
+  ttsSpeed: 1.0,
   aiProfile: {
     mode: "auto" as const,
     qualityPreference: "balanced" as const,
@@ -89,12 +108,35 @@ const DEFAULTS = {
     micGain: 1.5,
     noiseFloorGate: true,
   },
+  vocabularyKeybindings: {
+    playWord: "KeyA",
+    playSentence: "KeyS",
+    clearSpeech: "KeyZ",
+    previousWord: "KeyQ",
+    toggleMic: "Space",
+    submitOrNext: "Enter",
+    toggleHints: "KeyH",
+    randomWord: "KeyR",
+    step1: "Digit1",
+    step2: "Digit2",
+  },
 };
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set, get) => ({
       ...DEFAULTS,
+      setVocabularyKeybinding: (action, key) =>
+        set((state) => ({
+          vocabularyKeybindings: {
+            ...state.vocabularyKeybindings,
+            [action]: key,
+          },
+        })),
+      resetVocabularyKeybindings: () =>
+        set({
+          vocabularyKeybindings: { ...DEFAULTS.vocabularyKeybindings },
+        }),
       setAudioEnhancement: (opts) =>
         set((state) => ({
           audioEnhancement: {
@@ -127,6 +169,7 @@ export const useSettingsStore = create<SettingsState>()(
       setGeneration: (s) => set({ generation: s }),
       setStt: (s) => set({ stt: s }),
       setTts: (s) => set({ tts: s }),
+      setTtsSpeed: (speed) => set({ ttsSpeed: speed }),
       setAIProfile: (p) => set((state) => ({ aiProfile: { ...state.aiProfile, ...p } })),
       setFeatureModel: (feature, selection) => {
         if (feature === "sentenceBuilder") {
@@ -163,26 +206,17 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: "english-speaking-settings",
-      version: 4,
+      version: 6,
       migrate: (persisted, version) => {
         const p = persisted as Partial<SettingsState>;
-        if (version < 4) {
-          return {
-            ...DEFAULTS,
-            ...p,
-            activeProvider: p.activeProvider || "gemini",
-            preferredGeminiModel: "gemini-3.5-flash-lite",
-            preferredGroqModel: p.preferredGroqModel || "llama-3.3-70b-versatile",
-            sentenceBuilderGen: { provider: "gemini", model: "gemini-3.5-flash-lite" },
-            sentenceBuilderEval: { provider: "gemini", model: "gemini-3.5-flash-lite" },
-            shadowing: { provider: "gemini", model: "gemini-3.5-flash-lite" },
-            survivalSpeaking: { provider: "gemini", model: "gemini-3.5-flash-lite" },
-            conversation: { provider: "gemini", model: "gemini-3.5-flash-lite" },
-            evaluation: { provider: "gemini", model: "gemini-3.5-flash-lite" },
-            generation: { provider: "gemini", model: "gemini-3.5-flash-lite" },
-          } as SettingsState;
-        }
-        return persisted as SettingsState;
+        return {
+          ...DEFAULTS,
+          ...p,
+          vocabularyKeybindings: {
+            ...DEFAULTS.vocabularyKeybindings,
+            ...(p.vocabularyKeybindings || {}),
+          },
+        } as SettingsState;
       },
     }
   )

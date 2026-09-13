@@ -16,7 +16,8 @@ export { INITIAL_DEFAULT_WORD } from "./default-word";
 
 function cleanJson(text: string): unknown {
   const trimmed = text.trim();
-  const withoutFence = trimmed
+  const withoutThink = trimmed.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  const withoutFence = withoutThink
     .replace(/^```json\s*/i, "")
     .replace(/^```\s*/i, "")
     .replace(/\s*```$/i, "");
@@ -68,25 +69,11 @@ async function fetchFreeDictionaryApi(word: string): Promise<{
  */
 export async function searchSpokenDictionary(
   queryWord: string,
-  options: { forceAI?: boolean; provider?: string; model?: string } = {}
+  options: { forceAI?: boolean; bypassCache?: boolean; provider?: string; model?: string } = {}
 ): Promise<SpokenWordItem> {
   const cleanWord = queryWord.trim().toLowerCase();
   const provider = options.provider || "gemini";
   const model = options.model || "auto";
-
-  // 1. Instant Local 10k DB Lookup if not forcing AI
-  if (!options.forceAI) {
-    const localHit = lookupLexiconWord(cleanWord);
-    if (localHit) return localHit;
-
-    // Check Content Bank for previously enriched word
-    const bankSample = await sampleBankTask<SpokenWordItem>({
-      module: "vocabulary_word",
-      topic: cleanWord,
-      forceSource: "bank",
-    });
-    if (bankSample) return bankSample.task;
-  }
 
   // Mock provider handling for unit tests
   if (provider === "mock") {
@@ -137,6 +124,27 @@ export async function searchSpokenDictionary(
     };
   }
 
+  // Check Content Bank for previously enriched word unless bypassCache is true
+  if (!options.bypassCache) {
+    const bankSample = await sampleBankTask<SpokenWordItem>({
+      module: "vocabulary_word",
+      topic: cleanWord,
+      forceSource: "bank",
+    });
+    if (
+      bankSample?.task?.word?.toLowerCase() === cleanWord &&
+      bankSample.task.contextSentences?.length > 0
+    ) {
+      return bankSample.task;
+    }
+  }
+
+  // 1. Instant Local 10k DB Lookup if not forcing AI
+  if (!options.forceAI) {
+    const localHit = lookupLexiconWord(cleanWord);
+    if (localHit) return localHit;
+  }
+
   // 2. On-Demand AI Spoken Lexicographer Deep Enrichment (Cách 2)
   const dictApiData = await fetchFreeDictionaryApi(cleanWord);
 
@@ -154,7 +162,7 @@ Return strict JSON matching the schema.`;
         messages: [{ role: "user", content: prompt }],
         systemInstruction: DICTIONARY_ENRICHMENT_SYSTEM,
         temperature: 0.3,
-        maxOutputTokens: 800,
+        maxOutputTokens: 3500,
       },
     });
 
@@ -174,6 +182,8 @@ Return strict JSON matching the schema.`;
     if (!validated.success) throw new Error(`Schema validation error: ${validated.error.message.slice(0, 100)}`);
 
     const item = validated.data as SpokenWordItem;
+    item.source = "ai";
+    item.aiModel = `${provider}/${model}`;
 
     // Save enriched word into Content Bank for instant future lookups
     saveBankTask({
@@ -189,12 +199,22 @@ Return strict JSON matching the schema.`;
     return item;
   } catch (err: any) {
     lastErrorMsg = err?.message || String(err);
+
+    // Tuân thủ yêu cầu của người dùng: "nếu bị lỗi thông báo ra ko fallback"
+    if (options.forceAI) {
+      throw new Error(
+        `Lỗi gọi AI (${provider} - ${model}): ${lastErrorMsg}. Vui lòng kiểm tra API Key hoặc chọn Model khác trên Header.`
+      );
+    }
+
     const emergencyBank = await sampleBankTask<SpokenWordItem>({
       module: "vocabulary_word",
       topic: cleanWord,
       forceSource: "bank",
     });
-    if (emergencyBank) return emergencyBank.task;
+    if (emergencyBank?.task?.word?.toLowerCase() === cleanWord) {
+      return emergencyBank.task;
+    }
 
     const fallbackLocal = lookupLexiconWord(cleanWord);
     if (fallbackLocal) return fallbackLocal;
@@ -217,52 +237,31 @@ export async function generateDynamicRandomWord(options: {
   model?: string;
   currentWordId?: string;
 } = {}): Promise<SpokenWordItem> {
+  const level = options.cefrLevel || "B1";
+
   if (!options.forceAI) {
     return getRandomLexiconWord({ cefrLevel: options.cefrLevel, currentWordId: options.currentWordId });
   }
 
   const provider = options.provider || "gemini";
   const model = options.model || "auto";
-  const level = options.cefrLevel || "B1";
 
   if (provider === "mock") {
     return getRandomLexiconWord({ cefrLevel: level, currentWordId: options.currentWordId });
   }
 
-  const prompt = `Pick a high-value, practical spoken English vocabulary word suitable for CEFR ${level}.
-Generate complete phonetic IPA, Vietnamese definition, stress guide, 2 collocations, and 2 context sentences.
-Return strict JSON matching the schema.`;
-
-  let lastErrorMsg = "";
-  try {
-    const res = await generateTextWithRouting({
+  // 1. Pick a high-yield candidate from the CEFR pool
+  const candidate = getRandomLexiconWord({ cefrLevel: level, currentWordId: options.currentWordId });
+  if (candidate?.word) {
+    // 2. Search and enrich with AI (leveraging Content Bank cache if already enriched)
+    // When forceAI is set, if AI throws an error, do NOT catch and swallow silently
+    const enriched = await searchSpokenDictionary(candidate.word, {
+      forceAI: true,
       provider,
       model,
-      input: {
-        messages: [{ role: "user", content: prompt }],
-        systemInstruction: DICTIONARY_ENRICHMENT_SYSTEM,
-        temperature: 0.8,
-        maxOutputTokens: 800,
-      },
     });
-
-    const parsed = cleanJson(res.text) as Record<string, unknown>;
-    if (parsed) {
-      if (!parsed.id) parsed.id = `word_ai_${Date.now()}`;
-      const validated = spokenWordItemSchema.safeParse(parsed);
-      if (validated.success) {
-        return validated.data as SpokenWordItem;
-      } else {
-        lastErrorMsg = `Schema validation error: ${validated.error.message.slice(0, 100)}`;
-      }
-    } else {
-      lastErrorMsg = "AI không trả về JSON hợp lệ";
-    }
-  } catch (err: any) {
-    lastErrorMsg = err?.message || String(err);
+    if (enriched) return enriched;
   }
 
-  throw new Error(
-    `Không thể tạo ngẫu nhiên từ mới từ AI: ${lastErrorMsg || "Lỗi không xác định"}. Vui lòng thử lại hoặc đổi AI Model / Provider.`
-  );
+  return getRandomLexiconWord({ cefrLevel: level, currentWordId: options.currentWordId });
 }

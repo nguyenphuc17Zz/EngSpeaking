@@ -87,21 +87,24 @@ export function useAudioRecorder() {
   const stop = useCallback(async (): Promise<AudioRecording> => {
     clearTimer();
     const r = recorderRef.current;
-    if (!r) throw new VoiceEngineError({ code: VoiceErrorCode.RECORDING_FAILED, message: "Recorder not active" });
+    if (!r) {
+      stopStream(streamRef.current);
+      streamRef.current = null;
+      setStatus("idle");
+      throw new VoiceEngineError({ code: VoiceErrorCode.RECORDING_FAILED, message: "Recorder not active" });
+    }
     try {
       const recording = await r.stop();
       setStatus("idle");
       setDurationMs(recording.durationMs);
-      stopStream(streamRef.current);
-      streamRef.current = null;
-      recorderRef.current = null;
       return recording;
     } catch (e: unknown) {
+      setStatus("error");
+      throw e;
+    } finally {
       stopStream(streamRef.current);
       streamRef.current = null;
       recorderRef.current = null;
-      setStatus("error");
-      throw e;
     }
   }, [clearTimer]);
 
@@ -130,6 +133,8 @@ export function useAudioRecorder() {
       clearTimer();
       try { recorderRef.current?.cancel(); } catch {}
       stopStream(streamRef.current);
+      streamRef.current = null;
+      recorderRef.current = null;
     };
   }, [clearTimer]);
 

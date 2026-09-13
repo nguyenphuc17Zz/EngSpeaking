@@ -10,8 +10,10 @@ import {
   Clock,
   Sparkles,
   BookOpen,
+  Zap,
 } from "lucide-react";
 import type { SpokenWordItem } from "@/types/vocabulary-context";
+import { searchLexiconPrefix } from "@/lib/foundation/vocabulary/lexicon-db.service";
 
 interface VocabularyCommandSearchProps {
   currentWordId: string;
@@ -69,6 +71,9 @@ export function VocabularyCommandSearch({
     setQuery("");
   };
 
+  const liveSuggestions =
+    query.trim().length > 0 ? searchLexiconPrefix(query.trim(), 6) : [];
+
   const filteredRecents = recentWords.filter(
     (w) =>
       w.id !== currentWordId &&
@@ -81,12 +86,16 @@ export function VocabularyCommandSearch({
         variant="outline"
         size="sm"
         onClick={() => setIsOpen(true)}
-        className="rounded-xl h-8 gap-1.5 text-xs font-semibold border-border/80 text-muted-foreground hover:text-foreground"
-        title="Tra cứu từ vựng (Ctrl+K)"
+        className="rounded-xl h-8 sm:h-8.5 gap-2 text-xs font-bold border-primary/30 bg-primary/5 hover:bg-primary/10 text-foreground hover:text-primary transition-all shadow-xs"
+        title="Tra cứu bất kỳ từ vựng nào bằng AI (Ctrl+K)"
       >
-        <Search className="size-3.5" />
-        <span className="hidden sm:inline">Tra từ</span>
-        <kbd className="hidden sm:inline text-[10px] font-mono px-1 py-0.5 bg-muted rounded">Ctrl+K</kbd>
+        <div className="size-4 rounded-md bg-primary/20 text-primary flex items-center justify-center">
+          <Search className="size-2.5" />
+        </div>
+        <span>Tra từ bất kỳ</span>
+        <kbd className="hidden sm:inline text-[10px] font-mono px-1.5 py-0.5 bg-background border border-border/60 rounded text-muted-foreground">
+          Ctrl+K
+        </kbd>
       </Button>
     );
   }
@@ -100,8 +109,17 @@ export function VocabularyCommandSearch({
       />
 
       {/* Command Dialog */}
-      <div className="fixed left-1/2 top-[18%] z-50 -translate-x-1/2 w-full max-w-lg animate-in fade-in-0 zoom-in-95 duration-150">
+      <div className="fixed left-1/2 top-[16%] z-50 -translate-x-1/2 w-full max-w-lg px-3 animate-in fade-in-0 zoom-in-95 duration-150">
         <div className="rounded-2xl border border-border/80 bg-card shadow-2xl overflow-hidden">
+          {/* Header Hint */}
+          <div className="px-4 py-2 bg-muted/40 border-b border-border/40 flex items-center justify-between text-[11px] text-muted-foreground">
+            <span className="flex items-center gap-1.5 font-medium text-foreground">
+              <Sparkles className="size-3 text-primary" />
+              <span>Tra cứu & Tự sinh bài học bằng AI</span>
+            </span>
+            <span>Hỗ trợ 100% từ tiếng Anh</span>
+          </div>
+
           {/* Search Input */}
           <div className="flex items-center gap-2 px-4 py-3 border-b border-border/40">
             {isSearching ? (
@@ -117,8 +135,8 @@ export function VocabularyCommandSearch({
                 if (e.code === "Enter") handleSearch();
                 if (e.code === "Escape") { setIsOpen(false); setQuery(""); }
               }}
-              placeholder="Nhập từ vựng tiếng Anh để tra cứu (AI phân tích ngay)..."
-              className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+              placeholder="Nhập bất kỳ từ tiếng Anh nào (AI phân tích ngay)..."
+              className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none font-medium"
             />
             {query && (
               <button onClick={() => setQuery("")} className="text-muted-foreground hover:text-foreground transition-colors">
@@ -133,17 +151,17 @@ export function VocabularyCommandSearch({
               size="sm"
               disabled={!query.trim() || isSearching}
               onClick={handleSearch}
-              className="h-7 rounded-lg text-xs font-bold px-3 gap-1"
+              className="h-7.5 rounded-lg text-xs font-bold px-3 gap-1 bg-primary text-primary-foreground shadow-xs"
             >
               <Sparkles className="size-3" />
-              <span>Tra & phân tích AI</span>
+              <span>Phân tích & Học từ này</span>
             </Button>
             <Button
               variant="outline"
               size="sm"
               disabled={isSearching}
               onClick={() => { onShuffleRandomWord(); setIsOpen(false); setQuery(""); }}
-              className="h-7 rounded-lg text-xs font-semibold px-3 gap-1 border-border/80"
+              className="h-7.5 rounded-lg text-xs font-semibold px-3 gap-1 border-border/80"
             >
               <RotateCcw className="size-3" />
               <span>Từ ngẫu nhiên</span>
@@ -154,14 +172,55 @@ export function VocabularyCommandSearch({
             </span>
           </div>
 
-          {/* Recent Words List */}
-          {filteredRecents.length > 0 && (
-            <div className="max-h-60 overflow-y-auto">
-              <div className="px-4 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                <Clock className="size-3" />
-                <span>Từ đã tra gần đây ({filteredRecents.length})</span>
+          {/* Live Auto-Complete Oxford Dictionary Suggestions (0ms) */}
+          {liveSuggestions.length > 0 && (
+            <div className="max-h-64 overflow-y-auto divide-y divide-border/20">
+              <div className="px-4 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between bg-muted/10">
+                <div className="flex items-center gap-1.5">
+                  <Zap className="size-3 text-amber-500" />
+                  <span>Từ điển Oxford có sẵn ({liveSuggestions.length})</span>
+                </div>
+                <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-bold">0ms Instant</span>
               </div>
-              {filteredRecents.slice(0, 8).map((word) => (
+              {liveSuggestions.map((word) => (
+                <button
+                  key={word.id}
+                  onClick={() => handleSelectRecent(word)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted/50 transition-colors text-left group"
+                >
+                  <div className="size-7 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0">
+                    <BookOpen className="size-3.5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">
+                        {word.word}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground font-mono">{word.ipaUS}</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground truncate">{word.meaningVi}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0">
+                      {word.cefrLevel}
+                    </Badge>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Recent Words List (1-touch restore if user switched accidentally) */}
+          {query === "" && filteredRecents.length > 0 && (
+            <div className="max-h-64 overflow-y-auto divide-y divide-border/20">
+              <div className="px-4 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between bg-muted/10">
+                <div className="flex items-center gap-1.5">
+                  <Clock className="size-3 text-primary" />
+                  <span>Từ vừa xem gần đây ({filteredRecents.length})</span>
+                </div>
+                <span className="text-[10px] font-normal lowercase opacity-80">bấm để quay lại</span>
+              </div>
+              {filteredRecents.slice(0, 8).map((word, idx) => (
                 <button
                   key={word.id}
                   onClick={() => handleSelectRecent(word)}
@@ -171,10 +230,16 @@ export function VocabularyCommandSearch({
                     <BookOpen className="size-3.5 text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <span className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">
-                      {word.word}
-                    </span>
-                    <span className="text-[11px] text-muted-foreground ml-2 font-mono">{word.ipaUS}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">
+                        {word.word}
+                      </span>
+                      {idx === 0 && (
+                        <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-primary/10 text-primary border-0 font-normal">
+                          Vừa học trước đó
+                        </Badge>
+                      )}
+                    </div>
                     <p className="text-[11px] text-muted-foreground truncate">{word.meaningVi}</p>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
@@ -192,7 +257,7 @@ export function VocabularyCommandSearch({
 
           {filteredRecents.length === 0 && query === "" && (
             <div className="px-4 py-6 text-center text-xs text-muted-foreground">
-              Nhập từ vựng để tra cứu hoặc bấm "Từ ngẫu nhiên" để luyện tập
+              Nhập bất kỳ từ vựng nào để tra cứu hoặc bấm &quot;Từ ngẫu nhiên&quot; để luyện tập
             </div>
           )}
         </div>

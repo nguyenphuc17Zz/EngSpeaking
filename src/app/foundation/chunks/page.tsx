@@ -96,7 +96,13 @@ export default function ChunkAutomaticityPage() {
     setPromptDisplayTime(Date.now());
     setCurrentHintTier(0);
     setPendingSpokenText(null);
+    speechRec.stopListening();
+    if (recorder.status === "recording") {
+      recorder.cancel?.();
+    }
   }, [currentChainTask?.id, currentSingleTask?.id]);
+
+
 
   // Recording duration timer
   useEffect(() => {
@@ -194,48 +200,58 @@ export default function ChunkAutomaticityPage() {
 
   // Stop Mic -> Store in pending review state
   const handleStopRecord = useCallback(async () => {
-    if (recorder.status !== "recording") return;
-
     soundEffects.playMicStop();
+
+    // 1. ALWAYS unconditionally stop Web Speech API first
+    speechRec.stopListening();
+
     const settings = useSettingsStore.getState();
     const sttProvider = settings.stt?.provider || "browser";
     const sttModel =
       settings.stt?.model ||
       (sttProvider === "groq" ? "whisper-large-v3" : "onnx-community/whisper-tiny.en");
 
-    speechRec.stopListening();
     const measuredLatency = Math.max(500, Date.now() - promptDisplayTime);
 
-    try {
-      const recording = await recorder.stop();
-      let spokenText = "";
+    // 2. Stop audio recorder if active
+    if (recorder.status === "recording") {
+      try {
+        const recording = await recorder.stop();
+        let spokenText = "";
 
-      if (sttProvider !== "browser" && recording?.blob) {
-        try {
-          const res = await transcribeViaServer(recording.blob, {
-            provider: sttProvider === "auto" ? "whisper-local" : sttProvider,
-            model: sttModel,
-            language: "en-US",
-          });
-          spokenText = res.text.trim();
-        } catch {
-          spokenText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
+        if (sttProvider !== "browser" && recording?.blob) {
+          try {
+            const res = await transcribeViaServer(recording.blob, {
+              provider: sttProvider === "auto" ? "whisper-local" : sttProvider,
+              model: sttModel,
+              language: "en-US",
+            });
+            spokenText = res.text.trim();
+          } catch {
+            spokenText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
+          }
+        } else {
+          await new Promise((r) => setTimeout(r, 400));
+          spokenText =
+            speechRec.fullTranscript.trim() || speechRec.transcript.trim();
         }
-      } else {
-        await new Promise((r) => setTimeout(r, 400));
-        spokenText =
-          speechRec.fullTranscript.trim() || speechRec.transcript.trim();
-      }
 
-      if (!spokenText) {
-        toast.error("Chưa nhận diện được giọng nói", "Vui lòng bấm mic và nói lại.");
-        return;
-      }
+        if (!spokenText) {
+          toast.error("Chưa nhận diện được giọng nói", "Vui lòng bấm mic và nói lại.");
+          return;
+        }
 
-      setPendingSpokenText(spokenText);
-      setPendingLatencyMs(measuredLatency);
-    } catch {
-      toast.error("Lỗi xử lý", "Không thể dừng micro.");
+        setPendingSpokenText(spokenText);
+        setPendingLatencyMs(measuredLatency);
+      } catch {
+        toast.error("Lỗi xử lý", "Không thể dừng micro.");
+      }
+    } else {
+      const spokenText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
+      if (spokenText) {
+        setPendingSpokenText(spokenText);
+        setPendingLatencyMs(measuredLatency);
+      }
     }
   }, [recorder, speechRec, promptDisplayTime]);
 
@@ -304,8 +320,13 @@ export default function ChunkAutomaticityPage() {
           handleContinue();
         }
       } else if (e.code === "Escape") {
-        e.preventDefault();
-        router.push("/foundation");
+        if (isLibraryOpen) {
+          e.preventDefault();
+          setIsLibraryOpen(false);
+        } else if (currentHintTier > 0) {
+          e.preventDefault();
+          setCurrentHintTier(0);
+        }
       }
     };
 
@@ -318,6 +339,8 @@ export default function ChunkAutomaticityPage() {
     isEvaluating,
     isGenerating,
     pendingSpokenText,
+    isLibraryOpen,
+    currentHintTier,
     handleStartRecord,
     handleStopRecord,
     handleConfirmSubmit,

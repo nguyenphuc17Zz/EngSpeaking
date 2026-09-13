@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,10 +13,13 @@ import {
   Target,
   BookOpen,
   ArrowRight,
+  Play,
+  Square,
 } from "lucide-react";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 import { sanitizeTextForTTS } from "@/lib/tts/browser";
 import { decomposeIpa, getMinimalPairContrast } from "@/lib/foundation/vocabulary/phoneme-stress.engine";
+import { useSettingsStore } from "@/stores/settings-store";
 import type { SpokenWordItem } from "@/types/vocabulary-context";
 
 interface VocabularyPhoneticsCardProps {
@@ -29,6 +32,12 @@ interface VocabularyPhoneticsCardProps {
   isSearchingNext?: boolean;
 }
 
+interface SyllablesAudioData {
+  audioBase64: string;
+  boundaries: { index: number; text: string; startSec: number; endSec: number }[];
+  totalDurationSec: number;
+}
+
 export function VocabularyPhoneticsCard({
   step,
   wordItem,
@@ -39,15 +48,186 @@ export function VocabularyPhoneticsCard({
   isSearchingNext,
 }: VocabularyPhoneticsCardProps) {
   const [showL1Details, setShowL1Details] = useState(false);
-  const tts = useBrowserTTS();
+  const [playingSyllableIndex, setPlayingSyllableIndex] = useState<number | null>(null);
+  const [isPlayingSequence, setIsPlayingSequence] = useState(false);
 
-  const handlePlay = (text: string) => tts.speak(sanitizeTextForTTS(text));
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const syllableDataRef = useRef<SyllablesAudioData | null>(null);
+  const stopTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isSegmentPlayingRef = useRef(false);
+
+  const globalSpeed = useSettingsStore((s) => s.ttsSpeed ?? 1.0);
+  const tts = useBrowserTTS();
   const wordMastered = wordItem.wordMasteryScore >= wordMasteryThreshold;
 
   // Real-time phonological diagnostics
   const phonemeAnalysis = decomposeIpa(wordItem.ipaUS);
   const minimalPair = getMinimalPairContrast(wordItem.word);
   const topPitfall = phonemeAnalysis.vietnameseL1Pitfalls?.[0];
+
+  const handleStopAll = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.ontimeupdate = null;
+      audioRef.current.onended = null;
+    }
+    if (stopTimeoutRef.current) {
+      clearTimeout(stopTimeoutRef.current);
+      stopTimeoutRef.current = null;
+    }
+    isSegmentPlayingRef.current = false;
+    setIsPlayingSequence(false);
+    setPlayingSyllableIndex(null);
+  }, []);
+
+  // Preload and cache syllable audio for current word
+  const fetchSyllablesAudio = useCallback(
+    async (word: string, count: number, speed: number = 1.0): Promise<SyllablesAudioData | null> => {
+      if (syllableDataRef.current && syllableDataRef.current.boundaries.length === count) {
+        return syllableDataRef.current;
+      }
+      try {
+        const res = await fetch(
+          `/api/ai/speak-syllables?word=${encodeURIComponent(word)}&count=${count}&speed=${speed}`
+        );
+        if (!res.ok) return null;
+        const data: SyllablesAudioData = await res.json();
+        syllableDataRef.current = data;
+        if (!audioRef.current) {
+          audioRef.current = new Audio(data.audioBase64);
+        } else {
+          audioRef.current.src = data.audioBase64;
+        }
+        if (audioRef.current) {
+          audioRef.current.playbackRate = speed;
+        }
+        return data;
+      } catch {
+        return null;
+      }
+    },
+    []
+  );
+
+  // Preload on word or speed change & reset state
+  useEffect(() => {
+    handleStopAll();
+    syllableDataRef.current = null;
+    fetchSyllablesAudio(wordItem.word, phonemeAnalysis.totalSyllables, globalSpeed);
+  }, [wordItem.word, wordItem.id, phonemeAnalysis.totalSyllables, globalSpeed, fetchSyllablesAudio, handleStopAll]);
+
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      if (stopTimeoutRef.current) {
+        clearTimeout(stopTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handlePlay = useCallback(
+    (text: string) => {
+      handleStopAll();
+      tts.speak(sanitizeTextForTTS(text));
+    },
+    [handleStopAll, tts]
+  );
+
+  const handlePlaySingleSyllable = useCallback(
+    async (index: number) => {
+      handleStopAll();
+
+      let data = syllableDataRef.current;
+      if (!data) {
+        data = await fetchSyllablesAudio(wordItem.word, phonemeAnalysis.totalSyllables, globalSpeed);
+      }
+
+      const boundary = data?.boundaries?.[index];
+      if (data && boundary) {
+        let audio = audioRef.current;
+        if (!audio) {
+          audio = new Audio(data.audioBase64);
+          audioRef.current = audio;
+        }
+
+        isSegmentPlayingRef.current = true;
+        setPlayingSyllableIndex(index);
+        audio.currentTime = boundary.startSec;
+        audio.playbackRate = globalSpeed;
+
+        const durationMs = Math.max(200, ((boundary.endSec - boundary.startSec) / globalSpeed) * 1000);
+
+        audio.play().catch(() => {});
+
+        stopTimeoutRef.current = setTimeout(() => {
+          if (isSegmentPlayingRef.current) {
+            audio.pause();
+            isSegmentPlayingRef.current = false;
+            setPlayingSyllableIndex(null);
+          }
+        }, durationMs);
+      } else {
+        // Fallback to full word TTS
+        tts.speak(wordItem.word);
+      }
+    },
+    [handleStopAll, fetchSyllablesAudio, wordItem.word, phonemeAnalysis.totalSyllables, globalSpeed, tts]
+  );
+
+  const handlePlaySequence = useCallback(async () => {
+    if (isPlayingSequence) {
+      handleStopAll();
+      return;
+    }
+
+    handleStopAll();
+
+    let data = syllableDataRef.current;
+    if (!data) {
+      data = await fetchSyllablesAudio(wordItem.word, phonemeAnalysis.totalSyllables, globalSpeed);
+    }
+
+    if (!data) {
+      handlePlay(wordItem.word);
+      return;
+    }
+
+    let audio = audioRef.current;
+    if (!audio) {
+      audio = new Audio(data.audioBase64);
+      audioRef.current = audio;
+    }
+
+    setIsPlayingSequence(true);
+    audio.currentTime = 0;
+    audio.playbackRate = globalSpeed;
+
+    const boundaries = data.boundaries;
+
+    audio.ontimeupdate = () => {
+      const cur = audio.currentTime;
+      const currentSyl = boundaries.find(
+        (b) => cur >= b.startSec - 0.05 && cur <= b.endSec + 0.05
+      );
+      if (currentSyl) {
+        setPlayingSyllableIndex(currentSyl.index);
+      } else {
+        setPlayingSyllableIndex(null);
+      }
+    };
+
+    audio.onended = () => {
+      handleStopAll();
+    };
+
+    audio.play().catch(() => {
+      handleStopAll();
+    });
+  }, [isPlayingSequence, handleStopAll, fetchSyllablesAudio, handlePlay, wordItem.word, phonemeAnalysis.totalSyllables]);
 
   return (
     <Card className="rounded-3xl border border-border/80 bg-gradient-to-br from-card via-card to-primary/5 shadow-xs overflow-hidden flex flex-col h-full">
@@ -136,35 +316,90 @@ export function VocabularyPhoneticsCard({
           </div>
 
           {/* Syllables Breakdown */}
-          <div className="p-2.5 rounded-2xl bg-card border border-border/80 shadow-2xs space-y-1.5">
-            <div className="flex items-center justify-between text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-              <span className="flex items-center gap-1">
+          <div className="p-2.5 rounded-2xl bg-card border border-border/80 shadow-2xs space-y-2">
+            <div className="flex items-center justify-between gap-1.5 flex-wrap">
+              <span className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                 <Target className="size-3 text-primary" />
-                Phân rã âm tiết & trọng âm:
+                <span>Phân rã âm tiết & trọng âm:</span>
               </span>
-              <span className="font-mono text-[10px] text-primary">
-                {phonemeAnalysis.totalSyllables} âm · Nhấn âm {phonemeAnalysis.primaryStressIndex + 1}
-              </span>
+
+              <div className="flex items-center gap-1.5">
+                <span className="font-mono text-[10px] text-primary">
+                  {phonemeAnalysis.totalSyllables} âm · Nhấn âm {phonemeAnalysis.primaryStressIndex + 1}
+                </span>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={isPlayingSequence ? handleStopAll : handlePlaySequence}
+                  className={`h-5.5 px-2 rounded-lg text-[10px] font-bold gap-1 cursor-pointer transition-all ${
+                    isPlayingSequence
+                      ? "border-rose-500/40 text-rose-600 bg-rose-500/10 hover:bg-rose-500/20"
+                      : "border-primary/30 text-primary hover:bg-primary/10 hover:border-primary/60"
+                  }`}
+                  title={isPlayingSequence ? "Dừng phát chuỗi âm" : "Phát lần lượt từng âm tiết (1 → 2 → 3)"}
+                >
+                  {isPlayingSequence ? (
+                    <>
+                      <Square className="size-2.5 fill-current" />
+                      <span>Dừng</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="size-2.5 fill-current" />
+                      <span>Phát chuỗi</span>
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
 
             <div className="flex items-center gap-1.5 flex-wrap">
-              {phonemeAnalysis.syllables.map((syl, i) => (
-                <div
-                  key={i}
-                  className={`px-2.5 py-1 rounded-xl border text-xs font-mono font-bold flex flex-col items-center transition-all ${
-                    syl.isPrimaryStressed
-                      ? "bg-primary/15 border-primary text-primary shadow-xs ring-1 ring-primary/30 scale-105"
-                      : "bg-muted/40 border-border/70 text-foreground/80"
-                  }`}
-                >
-                  <span className="text-xs tracking-wide">
-                    {syl.isPrimaryStressed ? `ˈ${syl.raw}` : syl.raw}
-                  </span>
-                  <span className="text-[8px] font-normal text-muted-foreground">
-                    {syl.isPrimaryStressed ? "★ Trọng âm" : `Âm ${i + 1}`}
-                  </span>
-                </div>
-              ))}
+              {phonemeAnalysis.syllables.map((syl, i) => {
+                const isPlayingThis = playingSyllableIndex === i;
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => handlePlaySingleSyllable(i)}
+                    title={`Bấm để nghe riêng âm tiết ${i + 1}: /${syl.raw}/`}
+                    className={`group px-2.5 py-1 rounded-xl border text-xs font-mono font-bold flex flex-col items-center transition-all cursor-pointer select-none text-left relative ${
+                      isPlayingThis
+                        ? "bg-primary text-primary-foreground border-primary shadow-xs ring-2 ring-primary/40 scale-105"
+                        : syl.isPrimaryStressed
+                        ? "bg-primary/15 border-primary text-primary shadow-xs ring-1 ring-primary/30 hover:bg-primary/25 hover:scale-105"
+                        : "bg-muted/40 border-border/70 text-foreground/80 hover:bg-muted/70 hover:border-primary/40 hover:scale-105"
+                    }`}
+                  >
+                    <div className="flex items-center gap-1">
+                      <Volume2
+                        className={`size-2.5 shrink-0 transition-opacity ${
+                          isPlayingThis
+                            ? "animate-pulse text-primary-foreground"
+                            : "opacity-60 group-hover:opacity-100 group-hover:text-primary"
+                        }`}
+                      />
+                      <span className="text-xs tracking-wide">
+                        {syl.isPrimaryStressed ? `ˈ${syl.raw}` : syl.raw}
+                      </span>
+                    </div>
+                    <span
+                      className={`text-[8px] font-normal tracking-tight ${
+                        isPlayingThis
+                          ? "text-primary-foreground/90 font-medium"
+                          : "text-muted-foreground group-hover:text-foreground/80"
+                      }`}
+                    >
+                      {isPlayingThis
+                        ? "Đang phát..."
+                        : syl.isPrimaryStressed
+                        ? "★ Trọng âm"
+                        : `Âm ${i + 1}`}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 

@@ -79,15 +79,18 @@ export function RetryFeedbackPanel({
 
   // Stop Mic Recording & Submit Repair Attempt
   const handleStopRecord = async () => {
-    if (recorder.status !== "recording") return;
     soundEffects.playMicStop();
+    // 1. ALWAYS unconditionally stop Web Speech API first
+    speechRec.stopListening();
+
+    if (recorder.status !== "recording") return;
+
     const settings = useSettingsStore.getState();
     const sttProvider = settings.stt?.provider || "browser";
     const sttModel =
       settings.stt?.model ||
       (sttProvider === "groq" ? "whisper-large-v3" : "onnx-community/whisper-tiny.en");
 
-    speechRec.stopListening();
     const durationMs = Math.max(600, Date.now() - recordingStartTime);
 
     try {

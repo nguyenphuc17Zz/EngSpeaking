@@ -40,7 +40,7 @@ export function GlobalAiSelector({ className = "", size = "default" }: Props) {
   const activeModel =
     activeProvider === "gemini"
       ? settings.preferredGeminiModel || "gemini-3.5-flash-lite"
-      : settings.preferredGroqModel || "llama-3.3-70b-versatile";
+      : settings.preferredGroqModel || "openai/gpt-oss-120b";
 
   // Draft states inside dialog
   const [selectedProvider, setSelectedProvider] = useState<"gemini" | "groq">(activeProvider);
@@ -58,12 +58,12 @@ export function GlobalAiSelector({ className = "", size = "default" }: Props) {
       const res = await fetch(`/api/ai/models?provider=${provider}&capability=textGeneration&live=true`);
       const data = await res.json();
       if (Array.isArray(data.models) && data.models.length > 0) {
-        // Prioritize gemini-3.5-flash-lite and llama-3.3-70b-versatile at the top
+        // Prioritize gemini-3.5-flash-lite and openai/gpt-oss-120b at the top
         const prioritized = [...data.models].sort((a: AIModel, b: AIModel) => {
-          if (a.id === "gemini-3.5-flash-lite" || a.id === "llama-3.3-70b-versatile") return -1;
-          if (b.id === "gemini-3.5-flash-lite" || b.id === "llama-3.3-70b-versatile") return 1;
-          if (a.id === "gemini-3.7-flash") return -1;
-          if (b.id === "gemini-3.7-flash") return 1;
+          if (a.id === "gemini-3.5-flash-lite" || a.id === "openai/gpt-oss-120b") return -1;
+          if (b.id === "gemini-3.5-flash-lite" || b.id === "openai/gpt-oss-120b") return 1;
+          if (a.id === "gemini-3.7-flash" || a.id === "qwen/qwen3.6-27b") return -1;
+          if (b.id === "gemini-3.7-flash" || b.id === "qwen/qwen3.6-27b") return 1;
           return 0;
         });
         setModels(prioritized);
@@ -88,8 +88,10 @@ export function GlobalAiSelector({ className = "", size = "default" }: Props) {
         ]);
       } else {
         setModels([
-          { id: "llama-3.3-70b-versatile", displayName: "Llama 3.3 70B Versatile (Thông minh - Khuyên dùng)" } as AIModel,
-          { id: "llama-3.1-8b-instant", displayName: "Llama 3.1 8B Instant (Tốc độ)" } as AIModel,
+          { id: "openai/gpt-oss-120b", displayName: "GPT OSS 120B (Groq - Khuyên dùng)" } as AIModel,
+          { id: "qwen/qwen3.6-27b", displayName: "Qwen 3.6 27B (Groq - Cực nhanh)" } as AIModel,
+          { id: "openai/gpt-oss-20b", displayName: "GPT OSS 20B (Groq - Siêu nhẹ)" } as AIModel,
+          { id: "llama-3.3-70b-versatile", displayName: "Llama 3.3 70B Versatile (Groq)" } as AIModel,
         ]);
       }
     } finally {

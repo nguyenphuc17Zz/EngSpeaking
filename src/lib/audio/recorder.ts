@@ -71,13 +71,18 @@ export function createAudioRecorder(stream: MediaStream): AudioRecorder {
       state = "inactive";
       const blob = await new Promise<Blob>((resolve, reject) => {
         r.onstop = () => {
+          stopStream(stream);
           const b = new Blob(chunks, { type: mimeType });
           resolve(b);
         };
-        r.onerror = (ev: unknown) => reject(ev);
+        r.onerror = (ev: unknown) => {
+          stopStream(stream);
+          reject(ev);
+        };
         try {
           r.stop();
         } catch (e) {
+          stopStream(stream);
           reject(e);
         }
       });
@@ -105,6 +110,7 @@ export function createAudioRecorder(stream: MediaStream): AudioRecorder {
       try {
         recorder?.stop();
       } catch {}
+      stopStream(stream);
       recorder = null;
       chunks = [];
       state = "inactive";
@@ -130,9 +136,14 @@ export async function requestMicrophone(): Promise<MediaStream> {
 
 export function stopStream(stream: MediaStream | null) {
   if (!stream) return;
-  for (const t of stream.getTracks()) {
-    try { t.stop(); } catch {}
-  }
+  try {
+    for (const t of stream.getTracks()) {
+      try {
+        t.enabled = false;
+        t.stop();
+      } catch {}
+    }
+  } catch {}
 }
 
 export function isRecordingSupported(): boolean {

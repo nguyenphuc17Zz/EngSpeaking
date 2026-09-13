@@ -78,12 +78,16 @@ export default function SurvivalSpeakingPage() {
     }
   }, [mode, currentCircumTask, currentScenarioTask, fetchNextCircumTask, fetchNextScenarioTask]);
 
-  // Countdown timer on prompt ready
+  // Countdown timer on prompt ready & mic release on task switch
   useEffect(() => {
     setPromptDisplayTime(Date.now());
     setCountdownSeconds(5);
     setCurrentHintTier(0);
     setPendingSpokenText(null);
+    speechRec.stopListening();
+    if (recorder.status === "recording") {
+      recorder.cancel?.();
+    }
 
     if (countdownRef.current) clearInterval(countdownRef.current);
     countdownRef.current = setInterval(() => {
@@ -100,6 +104,8 @@ export default function SurvivalSpeakingPage() {
       if (countdownRef.current) clearInterval(countdownRef.current);
     };
   }, [currentCircumTask?.id, currentScenarioTask?.id]);
+
+
 
   // Recording duration timer
   useEffect(() => {
@@ -185,9 +191,11 @@ export default function SurvivalSpeakingPage() {
 
   // Stop recording -> Do NOT send immediately, store in pending review state
   const handleStopRecord = useCallback(async () => {
-    if (recorder.status !== "recording") return;
-
     soundEffects.playMicStop();
+
+    // 1. ALWAYS unconditionally stop Web Speech API first
+    speechRec.stopListening();
+
     let sttProvider = "browser";
     let sttModel = "auto";
     try {
@@ -197,15 +205,13 @@ export default function SurvivalSpeakingPage() {
       sttModel = settings.stt?.model || "auto";
     } catch {}
 
-    if (sttProvider === "browser") {
-      speechRec.stopListening();
-    }
-
     const measuredLatency = Math.max(500, Date.now() - promptDisplayTime);
 
-    try {
-      const recording = await recorder.stop();
-      let spokenText = "";
+    // 2. Stop audio recorder if active
+    if (recorder.status === "recording") {
+      try {
+        const recording = await recorder.stop();
+        let spokenText = "";
 
       if (sttProvider !== "browser" && recording?.blob) {
         try {
@@ -233,7 +239,14 @@ export default function SurvivalSpeakingPage() {
     } catch {
       toast.error("Lỗi xử lý", "Không thể dừng micro.");
     }
-  }, [recorder, speechRec, promptDisplayTime]);
+  } else {
+    const spokenText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
+    if (spokenText) {
+      setPendingSpokenText(spokenText);
+      setPendingLatencyMs(measuredLatency);
+    }
+  }
+}, [recorder, speechRec, promptDisplayTime]);
 
   // Confirm submit pending speech
   const handleConfirmSubmit = useCallback(async () => {
@@ -309,8 +322,13 @@ export default function SurvivalSpeakingPage() {
           handleContinue();
         }
       } else if (e.code === "Escape") {
-        e.preventDefault();
-        router.push("/foundation");
+        if (isSummaryOpen) {
+          e.preventDefault();
+          setIsSummaryOpen(false);
+        } else if (currentHintTier > 0) {
+          e.preventDefault();
+          setCurrentHintTier(0);
+        }
       }
     };
 
@@ -322,6 +340,8 @@ export default function SurvivalSpeakingPage() {
     isGenerating,
     lastEvaluation,
     pendingSpokenText,
+    isSummaryOpen,
+    currentHintTier,
     handleStartRecord,
     handleStopRecord,
     handleConfirmSubmit,

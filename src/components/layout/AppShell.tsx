@@ -11,6 +11,7 @@ import { Menu, Mic, Moon, Sun, Volume2, Sparkles, Keyboard } from "lucide-react"
 import Link from "next/link";
 import { KeybindingsModal } from "@/components/common/KeybindingsModal";
 import { GlobalAiSelector } from "@/components/common/GlobalAiSelector";
+import { GlobalSpeedSelector } from "@/components/common/GlobalSpeedSelector";
 import { GlobalSelectionAudio } from "@/components/common/GlobalSelectionAudio";
 import { cn } from "@/lib/utils";
 
@@ -150,6 +151,9 @@ export function AppShell({ children }: AppShellProps) {
 
             {/* Universal Global AI Engine Selector (Header) */}
             <GlobalAiSelector />
+
+            {/* Universal Global Speed Controller (Header) */}
+            <GlobalSpeedSelector />
 
             {/* Universal Keybinding Button (Header) */}
             <Button

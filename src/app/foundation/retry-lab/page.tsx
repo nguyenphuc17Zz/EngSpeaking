@@ -98,6 +98,9 @@ export default function SpokenRepairLabPage() {
       return;
     }
 
+    if (unifiedSTTRef.current.isListening) {
+      unifiedSTTRef.current.stopListening().catch(() => {});
+    }
     setPrepSecondsLeft(2.0);
     const start = Date.now();
     const duration = 2000;
@@ -576,9 +579,6 @@ export default function SpokenRepairLabPage() {
 
         <div className="flex items-center gap-2">
           <GlobalAiSelector size="sm" />
-          <Badge variant="outline" className="text-xs font-mono border-amber-500/30 text-amber-600 dark:text-amber-400">
-            Function 3 • Real AI
-          </Badge>
         </div>
       </div>
 
@@ -586,16 +586,9 @@ export default function SpokenRepairLabPage() {
       <Card className="rounded-3xl border-2 border-primary/40 bg-gradient-to-r from-primary/15 via-card to-amber-500/10 p-6 shadow-sm overflow-hidden">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="space-y-1.5 max-w-xl">
-            <div className="flex items-center gap-2 text-primary font-bold text-xs uppercase tracking-wider">
-              <Sparkles className="size-4" />
-              <span>Luyện Phản Xạ Sửa Sai Ngay Lập Tức</span>
-            </div>
             <h2 className="text-lg md:text-xl font-bold text-foreground">
-              Khởi động Studio Sửa Lỗi với AI Thông Minh
+              Studio Luyện Phản Xạ Sửa Lỗi (Retry Lab)
             </h2>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              AI sẽ mô phỏng các câu nói có lỗi điển hình của người Việt (thì quá khứ, chia động từ, giới từ, dịch thô). Nhiệm vụ của bạn là phát âm sửa lại cho tự nhiên nhất!
-            </p>
           </div>
 
           <Button

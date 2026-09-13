@@ -55,12 +55,19 @@ export class GroqProvider implements AIProvider {
 
   async generateText(input: TextGenerationInput): Promise<TextGenerationResult> {
     if (!this.apiKey) throw new VoiceEngineError({ code: VoiceErrorCode.PROVIDER_NOT_CONFIGURED, message: "Groq API key missing", provider: "groq" });
-    const model = input.model?.trim() || "llama-3.3-70b-versatile";
+    const rawModel = input.model?.trim();
+    const model = (!rawModel || rawModel === "auto") ? "openai/gpt-oss-120b" : rawModel;
     const messages: Array<{ role: string; content: string }> = [];
     if (input.systemInstruction) messages.push({ role: "system", content: input.systemInstruction });
     for (const m of input.messages) messages.push({ role: m.role, content: m.content });
     if (!messages.length) messages.push({ role: "user", content: "Hello" });
-    const maxTokens = input.maxOutputTokens || 600;
+    const isReasoningModel = model.includes("gpt-oss") || model.includes("deepseek-r1");
+    let maxTokens = input.maxOutputTokens || 600;
+    if (isReasoningModel && maxTokens < 3500) {
+      // Groq reasoning models (e.g. openai/gpt-oss-120b) generate 500-1100 reasoning tokens internally,
+      // which count against max_tokens. Ensure at least 3500 tokens headroom so output is not cut off.
+      maxTokens = 3500;
+    }
     const payload: Record<string, unknown> = {
       model,
       messages,

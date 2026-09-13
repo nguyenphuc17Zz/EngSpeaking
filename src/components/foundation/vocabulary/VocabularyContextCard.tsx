@@ -13,6 +13,8 @@ import {
   ChevronDown,
   Copy,
   Check,
+  AlertTriangle,
+  RotateCw,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
@@ -38,6 +40,9 @@ interface VocabularyContextCardProps {
   onSelectHintTier: (tier: number) => void;
   speakingMode?: "guided" | "spontaneous";
   onSelectSpeakingMode?: (mode: "guided" | "spontaneous") => void;
+  isEnrichingContext?: boolean;
+  aiError?: string | null;
+  onRegenerateWithAI?: () => void;
 }
 
 function buildStep1Hints(wordItem: SpokenWordItem): HintTier[] {
@@ -130,6 +135,9 @@ export function VocabularyContextCard({
   onSelectHintTier,
   speakingMode = "guided",
   onSelectSpeakingMode,
+  isEnrichingContext = false,
+  aiError,
+  onRegenerateWithAI,
 }: VocabularyContextCardProps) {
   const [isHintsExpanded, setIsHintsExpanded] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -172,6 +180,28 @@ export function VocabularyContextCard({
             <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
               {step === 1 ? "2. Cụm từ & Gợi ý nấc thang" : "2. Ngữ cảnh & Phản xạ"}
             </span>
+
+            {wordItem.source === "ai" && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 gap-1 font-normal">
+                <Sparkles className="size-2.5 text-emerald-500" />
+                AI Generated
+              </Badge>
+            )}
+
+            {onRegenerateWithAI && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                onClick={onRegenerateWithAI}
+                disabled={isEnrichingContext}
+                className="h-5 px-1.5 text-[10px] gap-1 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted/80"
+                title="Làm mới câu ví dụ bằng AI"
+              >
+                <Sparkles className={`size-3 text-amber-500 ${isEnrichingContext ? "animate-spin" : ""}`} />
+                <span className="hidden sm:inline">Làm mới bằng AI</span>
+              </Button>
+            )}
           </div>
 
           {/* Mode Switcher in Step 2 */}
@@ -209,6 +239,40 @@ export function VocabularyContextCard({
 
         {/* Scrollable Container with Zero-scroll ergonomics */}
         <div className="flex-1 overflow-y-auto space-y-2.5 pr-0.5 min-h-0">
+          {/* AI Error Alert Banner — Per user requirement: hiển thị lỗi, không fallback ngầm */}
+          {aiError && (
+            <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-xs">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <AlertTriangle className="size-3.5 shrink-0 text-destructive" />
+                <span className="truncate text-[11px] font-medium" title={aiError}>
+                  {aiError}
+                </span>
+              </div>
+              {onRegenerateWithAI && (
+                <Button
+                  size="xs"
+                  variant="outline"
+                  onClick={onRegenerateWithAI}
+                  disabled={isEnrichingContext}
+                  className="shrink-0 h-6 px-2 text-[10px] gap-1 border-destructive/40 hover:bg-destructive/10 text-destructive"
+                >
+                  <RotateCw className={`size-3 ${isEnrichingContext ? "animate-spin" : ""}`} />
+                  Thử lại
+                </Button>
+              )}
+            </div>
+          )}
+
+          {/* Background AI Enrichment Notification Banner */}
+          {isEnrichingContext && (
+            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 text-xs font-medium animate-pulse">
+              <Sparkles className="size-3.5 animate-spin shrink-0 text-amber-500" />
+              <span className="text-[11px] truncate">
+                AI đang làm giàu câu ví dụ & collocations mới cho từ này...
+              </span>
+            </div>
+          )}
+
           {/* ── STEP 1: PMI Collocations ── */}
           {step === 1 && wordItem.collocations && wordItem.collocations.length > 0 && (
             <div className="p-2.5 rounded-2xl bg-card border border-border/80 shadow-2xs space-y-1.5">

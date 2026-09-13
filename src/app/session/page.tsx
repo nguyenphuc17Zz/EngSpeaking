@@ -230,6 +230,8 @@ export default function SessionPage() {
     turnsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [session?.turns]);
 
+
+
   // ─── Keyboard Hotkeys (Space to toggle speaking / Barge-in) ───────────
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -388,10 +390,10 @@ export default function SessionPage() {
 
   const handleStopAndProcess = useCallback(async () => {
     soundEffects.playMicStop();
+    // 1. ALWAYS unconditionally stop Web Speech API first
+    speechRec.stopListening();
+
     const sttProvider = settings.stt?.provider || "browser";
-    if (sttProvider === "browser") {
-      speechRec.stopListening();
-    }
     setStatus("thinking");
     setIsProcessing(true);
     setIsLifelineVisible(false);
