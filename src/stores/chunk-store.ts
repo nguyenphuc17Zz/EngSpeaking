@@ -8,9 +8,11 @@ import type {
   ChunkTrainingTask,
   ChunkEvaluationResult,
   ChunkChainEvaluationResult,
+  ChunkSessionSummary,
   PragmaticStrategyType,
 } from "@/types/chunk-automaticity";
 import { SEED_CHUNK_LIBRARY } from "@/lib/foundation/chunks/seed-chunks";
+import { resolveTopicForPrompt } from "@/lib/foundation/sentence-builder/topics";
 
 interface ChunkStoreState {
   mode: "chain_builder" | "single_chunk";
@@ -19,6 +21,21 @@ interface ChunkStoreState {
   currentSingleTask: ChunkTrainingTask | null;
   selectedChunk: ChunkRecord | null;
   selectedStrategy: PragmaticStrategyType | "all";
+
+  // Topic selector
+  selectedTopicId: string;
+  customTopicText: string;
+
+  // Session tracking
+  completedTasksCount: number;
+  currentTaskIndex: number;
+  sessionHistory: Array<{
+    task: ChunkChainTask | ChunkTrainingTask;
+    evaluation: ChunkChainEvaluationResult | ChunkEvaluationResult;
+  }>;
+  isSessionCompleted: boolean;
+  sessionSummary: ChunkSessionSummary | null;
+  sessionStartedAt: string | null;
 
   isGenerating: boolean;
   isRegeneratingAI: boolean;
@@ -31,6 +48,7 @@ interface ChunkStoreState {
   // Actions
   setMode: (mode: "chain_builder" | "single_chunk") => void;
   setSelectedStrategy: (strategy: PragmaticStrategyType | "all") => void;
+  setSelectedTopic: (topicId: string, customText?: string) => void;
   loadLibrary: () => void;
   fetchNextChainTask: (options?: string | { topic?: string; strategy?: PragmaticStrategyType; domain?: any; forceSource?: "bank" | "ai" | "auto" }) => Promise<void>;
   generateNewTaskWithAI: () => Promise<void>;
@@ -41,6 +59,8 @@ interface ChunkStoreState {
   processSingleEvaluation: (evalResult: ChunkEvaluationResult) => void;
   setIsEvaluating: (val: boolean) => void;
   resetSession: () => void;
+  finishSessionManually: () => void;
+  dismissSummary: () => void;
 }
 
 export const useChunkStore = create<ChunkStoreState>()(
@@ -52,6 +72,16 @@ export const useChunkStore = create<ChunkStoreState>()(
       currentSingleTask: null,
       selectedChunk: null,
       selectedStrategy: "all",
+
+      selectedTopicId: "random",
+      customTopicText: "",
+
+      completedTasksCount: 0,
+      currentTaskIndex: 1,
+      sessionHistory: [],
+      isSessionCompleted: false,
+      sessionSummary: null,
+      sessionStartedAt: null,
 
       isGenerating: false,
       isRegeneratingAI: false,
@@ -70,9 +100,26 @@ export const useChunkStore = create<ChunkStoreState>()(
       setSelectedStrategy: (selectedStrategy) => {
         set({ selectedStrategy });
         if (get().mode === "chain_builder") {
+          const { selectedTopicId, customTopicText } = get();
+          const topic = resolveTopicForPrompt(selectedTopicId, customTopicText);
           get().fetchNextChainTask({
+            topic,
             strategy: selectedStrategy === "all" ? undefined : selectedStrategy,
           });
+        }
+      },
+
+      setSelectedTopic: (topicId, customText) => {
+        set({ selectedTopicId: topicId, customTopicText: customText ?? "" });
+        const topic = resolveTopicForPrompt(topicId, customText ?? "");
+        const { mode, selectedStrategy } = get();
+        if (mode === "chain_builder") {
+          get().fetchNextChainTask({
+            topic,
+            strategy: selectedStrategy === "all" ? undefined : selectedStrategy,
+          });
+        } else {
+          get().fetchNextSingleTask();
         }
       },
 
@@ -86,9 +133,19 @@ export const useChunkStore = create<ChunkStoreState>()(
       },
 
       fetchNextChainTask: async (options) => {
+        // Start session tracking
+        const { sessionStartedAt } = get();
+        if (!sessionStartedAt) {
+          set({ sessionStartedAt: new Date().toISOString() });
+        }
+
         set({ isGenerating: true, lastChainEvaluation: null, generationError: null });
 
-        const topic = typeof options === "string" ? options : options?.topic;
+        const { selectedTopicId, customTopicText } = get();
+        const effectiveTopic = typeof options === "string"
+          ? options
+          : options?.topic ?? resolveTopicForPrompt(selectedTopicId, customTopicText);
+
         const currentSelectedStrategy = get().selectedStrategy;
         const strategy =
           typeof options === "object" && options?.strategy
@@ -115,11 +172,16 @@ export const useChunkStore = create<ChunkStoreState>()(
           const res = await fetch("/api/foundation/chunks/generate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mode: "chain_builder", topic, strategy, domain, provider, model, forceSource }),
+            body: JSON.stringify({ mode: "chain_builder", topic: effectiveTopic, strategy, domain, provider, model, forceSource }),
           });
           const data = await res.json();
           if (data.task) {
-            set({ currentChainTask: data.task, isGenerating: false, generationError: null });
+            set((s) => ({
+              currentChainTask: data.task,
+              isGenerating: false,
+              generationError: null,
+              currentTaskIndex: s.currentTaskIndex,
+            }));
           } else {
             set({
               isGenerating: false,
@@ -138,7 +200,13 @@ export const useChunkStore = create<ChunkStoreState>()(
         set({ isRegeneratingAI: true, lastChainEvaluation: null, lastSingleEvaluation: null, generationError: null });
         try {
           if (get().mode === "chain_builder") {
-            await get().fetchNextChainTask({ forceSource: "ai" });
+            const { selectedTopicId, customTopicText, selectedStrategy } = get();
+            const topic = resolveTopicForPrompt(selectedTopicId, customTopicText);
+            await get().fetchNextChainTask({
+              forceSource: "ai",
+              topic,
+              strategy: selectedStrategy === "all" ? undefined : selectedStrategy,
+            });
           } else {
             await get().fetchNextSingleTask();
           }
@@ -223,16 +291,29 @@ export const useChunkStore = create<ChunkStoreState>()(
       },
 
       processChainEvaluation: (evalResult) => {
-        set({ lastChainEvaluation: evalResult });
+        const { currentChainTask, sessionHistory, completedTasksCount, currentTaskIndex } = get();
+        const newHistory = currentChainTask
+          ? [...sessionHistory, { task: currentChainTask, evaluation: evalResult }]
+          : sessionHistory;
+        set({
+          lastChainEvaluation: evalResult,
+          completedTasksCount: completedTasksCount + 1,
+          currentTaskIndex: currentTaskIndex + 1,
+          sessionHistory: newHistory,
+        });
       },
 
       processSingleEvaluation: (evalResult) => {
-        set({ lastSingleEvaluation: evalResult });
+        const { selectedChunk, library, currentSingleTask, sessionHistory, completedTasksCount, currentTaskIndex } = get();
+        const newHistory = currentSingleTask
+          ? [...sessionHistory, { task: currentSingleTask, evaluation: evalResult }]
+          : sessionHistory;
+
         // Update mastery in library
-        const { selectedChunk, library } = get();
+        let updatedLib = library;
         if (selectedChunk) {
           const delta = evalResult.masteryDelta;
-          const updatedLib = library.map((c) =>
+          updatedLib = library.map((c) =>
             c.id === selectedChunk.id
               ? {
                   ...c,
@@ -243,11 +324,79 @@ export const useChunkStore = create<ChunkStoreState>()(
                 }
               : c
           );
-          set({ library: updatedLib });
         }
+        set({
+          lastSingleEvaluation: evalResult,
+          library: updatedLib,
+          completedTasksCount: completedTasksCount + 1,
+          currentTaskIndex: currentTaskIndex + 1,
+          sessionHistory: newHistory,
+        });
       },
 
       setIsEvaluating: (val) => set({ isEvaluating: val }),
+
+      finishSessionManually: () => {
+        const { sessionHistory, sessionStartedAt, completedTasksCount } = get();
+        if (completedTasksCount === 0) return;
+
+        const chainEvals = sessionHistory
+          .filter((h) => "blocksUsedCount" in h.evaluation)
+          .map((h) => h.evaluation as ChunkChainEvaluationResult);
+        const singleEvals = sessionHistory
+          .filter((h) => "chunkDetected" in h.evaluation)
+          .map((h) => h.evaluation as ChunkEvaluationResult);
+
+        const allScores = [
+          ...chainEvals.map((e) => e.overallScore),
+          ...singleEvals.map((e) => e.overallScore),
+        ];
+        const averageScore = allScores.length > 0
+          ? Math.round(allScores.reduce((a, b) => a + b, 0) / allScores.length)
+          : 0;
+
+        const allLatencies = [
+          ...chainEvals.map((e) => e.responseLatencyMs),
+          ...singleEvals.map((e) => e.retrievalLatencyMs),
+        ];
+        const averageLatencyMs = allLatencies.length > 0
+          ? Math.round(allLatencies.reduce((a, b) => a + b, 0) / allLatencies.length)
+          : 0;
+
+        const blocksUsedTotal = chainEvals.reduce((sum, e) => sum + e.blocksUsedCount, 0);
+        const fastRecallCount = singleEvals.filter((e) => e.retrievalLatencyMs < 2000).length;
+
+        const strategyDistribution: Record<string, number> = {};
+        sessionHistory.forEach((h) => {
+          if ("pragmaticStrategy" in h.task) {
+            const task = h.task as ChunkChainTask;
+            const strategy = task.pragmaticStrategy || "opinion_defense";
+            strategyDistribution[strategy] = (strategyDistribution[strategy] || 0) + 1;
+          }
+        });
+
+        const summary: ChunkSessionSummary = {
+          sessionId: `chunk_${Date.now()}`,
+          startedAt: sessionStartedAt || new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+          totalTasks: completedTasksCount,
+          averageScore,
+          averageLatencyMs,
+          fastRecallCount,
+          blocksUsedTotal,
+          strategyDistribution,
+          history: sessionHistory,
+        };
+
+        set({ isSessionCompleted: true, sessionSummary: summary });
+      },
+
+      dismissSummary: () => {
+        set({
+          isSessionCompleted: false,
+          sessionSummary: null,
+        });
+      },
 
       resetSession: () => {
         set({
@@ -255,12 +404,18 @@ export const useChunkStore = create<ChunkStoreState>()(
           lastSingleEvaluation: null,
           isGenerating: false,
           isEvaluating: false,
+          completedTasksCount: 0,
+          currentTaskIndex: 1,
+          sessionHistory: [],
+          isSessionCompleted: false,
+          sessionSummary: null,
+          sessionStartedAt: new Date().toISOString(),
         });
       },
     }),
     {
-      name: "chunk_automaticity_store_v1",
-      partialize: (s) => ({ library: s.library }),
+      name: "chunk_automaticity_store_v2",
+      partialize: (s) => ({ library: s.library, selectedTopicId: s.selectedTopicId, selectedStrategy: s.selectedStrategy }),
     }
   )
 );

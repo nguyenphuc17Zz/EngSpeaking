@@ -15,8 +15,14 @@ import {
   buildLatencySessionSummary,
 } from "@/lib/foundation/latency/adaptive-latency-engine";
 import { updateFoundationProfileFromScore } from "@/lib/foundation/services/progress.service";
+import { resolveTopicForPrompt } from "@/lib/foundation/sentence-builder/topics";
 
 interface LatencyStoreState {
+  // Topic State
+  selectedTopicId: string;
+  customTopicText: string;
+  setSelectedTopic: (topicId: string, customText?: string) => void;
+
   currentTask: LatencyTask | null;
   nextTask: LatencyTask | null;
   isGenerating: boolean;
@@ -27,6 +33,7 @@ interface LatencyStoreState {
   currentDrillMode: LatencyDrillMode;
   targetCount: number;
   currentTaskIndex: number;
+  completedTasksCount: number;
   sessionStartedAt: string | null;
   sessionHistory: Array<{ task: LatencyTask; evaluation: LatencyEvaluation }>;
   isSessionCompleted: boolean;
@@ -38,7 +45,9 @@ interface LatencyStoreState {
 
   // Actions
   clearGenerationError: () => void;
-  initSession: (mode: LatencyDrillMode, targetCount?: number) => Promise<void>;
+  initSession: (mode?: LatencyDrillMode, targetCount?: number) => Promise<void>;
+  setDrillMode: (mode: LatencyDrillMode) => Promise<void>;
+  finishSessionManually: () => void;
   fetchFirstTask: (opts?: { forceSource?: "ai" | "bank" | "auto" }) => Promise<void>;
   generateNewTaskWithAI: () => Promise<void>;
   preloadNextTask: () => Promise<void>;
@@ -49,15 +58,22 @@ interface LatencyStoreState {
 }
 
 const DEFAULT_COUNTS: Record<LatencyDrillMode, number> = {
-  open_response: 8,
-  rapid_retrieval: 12,
-  timed_countdown: 10,
+  open_response: 0, // 0 = Endless Mode by default
+  rapid_retrieval: 0,
+  timed_countdown: 0,
   baseline_test: 10,
 };
 
 export const useLatencyStore = create<LatencyStoreState>()(
   persist(
     (set, get) => ({
+      selectedTopicId: "random",
+      customTopicText: "",
+      setSelectedTopic: (topicId: string, customText?: string) => {
+        set({ selectedTopicId: topicId, customTopicText: customText || "" });
+        get().fetchFirstTask();
+      },
+
       currentTask: null,
       nextTask: null,
       isGenerating: false,
@@ -67,8 +83,9 @@ export const useLatencyStore = create<LatencyStoreState>()(
       generationError: null,
 
       currentDrillMode: "open_response",
-      targetCount: 8,
+      targetCount: 0,
       currentTaskIndex: 0,
+      completedTasksCount: 0,
       sessionStartedAt: null,
       sessionHistory: [],
       isSessionCompleted: false,
@@ -79,12 +96,13 @@ export const useLatencyStore = create<LatencyStoreState>()(
 
       clearGenerationError: () => set({ generationError: null }),
 
-      initSession: async (mode: LatencyDrillMode, targetCount?: number) => {
-        const count = targetCount || DEFAULT_COUNTS[mode];
+      initSession: async (mode: LatencyDrillMode = "open_response", targetCount?: number) => {
+        const count = targetCount !== undefined ? targetCount : DEFAULT_COUNTS[mode];
         set({
           currentDrillMode: mode,
           targetCount: count,
           currentTaskIndex: 0,
+          completedTasksCount: 0,
           sessionStartedAt: new Date().toISOString(),
           sessionHistory: [],
           isSessionCompleted: false,
@@ -98,9 +116,37 @@ export const useLatencyStore = create<LatencyStoreState>()(
         await get().fetchFirstTask();
       },
 
+      setDrillMode: async (mode: LatencyDrillMode) => {
+        const currentMode = get().currentDrillMode;
+        if (currentMode === mode) return;
+        const count = DEFAULT_COUNTS[mode];
+        set({
+          currentDrillMode: mode,
+          targetCount: count,
+          lastEvaluation: null,
+        });
+        await get().fetchFirstTask();
+      },
+
+      finishSessionManually: () => {
+        const { sessionHistory, currentDrillMode, sessionStartedAt, adaptiveState } = get();
+        const summary = buildLatencySessionSummary(
+          `lat_sess_${Date.now()}`,
+          currentDrillMode,
+          sessionStartedAt || new Date().toISOString(),
+          sessionHistory,
+          adaptiveState.baselineMedianMs
+        );
+        set({
+          isSessionCompleted: true,
+          sessionSummary: summary,
+        });
+      },
+
       fetchFirstTask: async (opts?: { forceSource?: "ai" | "bank" | "auto" }) => {
         set({ isGenerating: true, generationError: null });
-        const { currentDrillMode, adaptiveState } = get();
+        const { currentDrillMode, adaptiveState, selectedTopicId, customTopicText } = get();
+        const effectiveTopic = resolveTopicForPrompt(selectedTopicId, customTopicText);
 
         let provider = "gemini";
         let model = "auto";
@@ -122,6 +168,7 @@ export const useLatencyStore = create<LatencyStoreState>()(
               drillMode: currentDrillMode,
               targetDifficulty: adaptiveState.currentDifficulty,
               targetLatencyMs: adaptiveState.currentTargetLatencyMs,
+              topic: effectiveTopic,
               provider,
               model,
               forceSource: opts?.forceSource,
@@ -148,7 +195,8 @@ export const useLatencyStore = create<LatencyStoreState>()(
 
       generateNewTaskWithAI: async () => {
         set({ isRegeneratingAI: true, generationError: null });
-        const { currentDrillMode, adaptiveState } = get();
+        const { currentDrillMode, adaptiveState, selectedTopicId, customTopicText } = get();
+        const effectiveTopic = resolveTopicForPrompt(selectedTopicId, customTopicText);
 
         let provider = "gemini";
         let model = "auto";
@@ -170,6 +218,7 @@ export const useLatencyStore = create<LatencyStoreState>()(
               drillMode: currentDrillMode,
               targetDifficulty: adaptiveState.currentDifficulty,
               targetLatencyMs: adaptiveState.currentTargetLatencyMs,
+              topic: effectiveTopic,
               provider,
               model,
               forceSource: "ai",
@@ -202,7 +251,7 @@ export const useLatencyStore = create<LatencyStoreState>()(
       },
 
       processEvaluation: (evaluation: LatencyEvaluation) => {
-        const { currentTask, adaptiveState, sessionHistory } = get();
+        const { currentTask, adaptiveState, sessionHistory, completedTasksCount } = get();
         if (!currentTask) return;
 
         const updatedAdaptive = updateAdaptiveLatencyState(adaptiveState, evaluation);
@@ -217,6 +266,7 @@ export const useLatencyStore = create<LatencyStoreState>()(
         set({
           lastEvaluation: evaluation,
           adaptiveState: updatedAdaptive,
+          completedTasksCount: completedTasksCount + 1,
           sessionHistory: [...sessionHistory, { task: currentTask, evaluation }],
         });
       },
@@ -234,7 +284,8 @@ export const useLatencyStore = create<LatencyStoreState>()(
 
         const nextIndex = currentTaskIndex + 1;
 
-        if (nextIndex >= targetCount) {
+        // If targetCount > 0 (e.g. baseline test 10 items) and completed
+        if (targetCount > 0 && nextIndex >= targetCount) {
           const summary = buildLatencySessionSummary(
             `lat_sess_${Date.now()}`,
             currentDrillMode,

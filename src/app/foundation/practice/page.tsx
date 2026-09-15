@@ -434,7 +434,7 @@ function PracticeInner() {
       {/* Top Header Navigation */}
       <div className="p-4 rounded-2xl bg-card border border-border/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <Link href="/foundation">
+          <Link href="/">
             <Button variant="ghost" size="icon-xs" className="rounded-xl text-muted-foreground">
               <ArrowLeft className="size-4" />
             </Button>

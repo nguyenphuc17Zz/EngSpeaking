@@ -8,7 +8,7 @@ export async function DELETE() {
     db.prepare("DELETE FROM sessions").run();
     db.prepare("DELETE FROM foundation_attempts").run();
     db.prepare("DELETE FROM foundation_sessions").run();
-    healthRepo.resetUserData("default_learner");
+    healthRepo.resetUserData();
     return NextResponse.json({ ok: true, message: "Đã xóa toàn bộ dữ liệu SQLite cục bộ" });
   } catch (e) {
     return NextResponse.json({ ok: false, message: String(e) }, { status: 500 });

@@ -1521,8 +1521,8 @@ export default function CorodomoShadowingStudioPage() {
           {/* Header Bar */}
           <div className="flex items-center justify-between gap-3 border-b border-border/60 pb-4 shrink-0">
             <div className="flex items-center gap-2.5">
-              <Link href="/foundation">
-                <Button variant="ghost" size="sm" className="size-8 p-0 rounded-xl" title="Quay lại Hub Foundation">
+              <Link href="/">
+                <Button variant="ghost" size="sm" className="size-8 p-0 rounded-xl" title="Quay lại Trang chủ">
                   <ArrowLeft className="size-4" />
                 </Button>
               </Link>

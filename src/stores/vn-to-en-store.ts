@@ -170,9 +170,14 @@ export const useVNToENStore = create<VNToENStoreState>()(
         } catch {}
 
         let recentErrors: string[] = [];
+        let pedagogicalConstraint: string | undefined;
         try {
+          const { getCompactErrorContextPack, buildErrorBankPedagogicalPrompt } = await import(
+            "@/lib/foundation/error-bank/error-bank.service"
+          );
           const pack = getCompactErrorContextPack();
           recentErrors = pack.topWeaknesses.map((w) => w.patternKey || w.labelVi).filter(Boolean);
+          pedagogicalConstraint = buildErrorBankPedagogicalPrompt() || undefined;
         } catch {}
 
         try {
@@ -183,6 +188,7 @@ export const useVNToENStore = create<VNToENStoreState>()(
               retrievalMode: sessionConfig.mode,
               targetDifficulty: adaptiveState.currentDifficulty,
               recentErrors,
+              pedagogicalConstraint,
               topic: effectiveTopic,
               provider,
               model,
@@ -278,7 +284,7 @@ export const useVNToENStore = create<VNToENStoreState>()(
         const { currentTask, adaptiveState, sessionHistory, attemptCount } = get();
         if (!currentTask) return;
 
-        // 1. Record error bank (adapted for shared error bank format)
+        // 1. Record error bank via unified normalize-batch (shared + master)
         try {
           recordErrorsFromEvaluation({
             overallScore: evaluation.overallScore,
@@ -310,24 +316,24 @@ export const useVNToENStore = create<VNToENStoreState>()(
             attemptNumber: evaluation.attemptNumber,
           });
 
-          // Ingest into Function 5 Master Error Bank
-          evaluation.errors.forEach((err) => {
-            ingestErrorOccurrence({
-              patternKey: err.patternKey || err.type || "general_grammar",
-              canonicalName: err.patternKey || err.type || "Grammar/Structure",
-              category: err.type === "vocabulary" ? "vocabulary" : "grammar",
-              labelVi: err.explanation || "Lỗi cấu trúc câu",
-              descriptionVi: err.explanation || "",
-              userText: err.userText || evaluation.userTranscript,
-              correction: err.correction || evaluation.betterVersion,
-              contextSentence: currentTask.promptVi,
+          // Ingest into Function 5 Master Error Bank via unified batch normalizer
+          const { normalizeEvaluatedErrors } = require("@/lib/foundation/error-bank/normalize-batch.service") as typeof import("@/lib/foundation/error-bank/normalize-batch.service");
+          const { ingestEvaluatedErrors } = require("@/lib/foundation/error-bank/error-bank.service") as typeof import("@/lib/foundation/error-bank/error-bank.service");
+          const occurrences = normalizeEvaluatedErrors(evaluation.errors, {
+            fallbackUserTranscript: evaluation.userTranscript,
+            fallbackCorrection: evaluation.betterVersion,
+            contextSentence: currentTask.promptVi,
+            latencyMs: evaluation.responseLatencyMs,
+            communicativelyValid: evaluation.isCommunicativelyValid,
+          });
+          if (occurrences.length > 0) {
+            ingestEvaluatedErrors(occurrences, {
               sourceModule: "vn_to_en",
               responseLatencyMs: evaluation.responseLatencyMs,
               wasRetried: attemptCount > 1,
               retrySucceeded: evaluation.isSuccessful,
-              severity: err.severity,
             });
-          });
+          }
         } catch {}
 
         // 2. Update Adaptive Retrieval state

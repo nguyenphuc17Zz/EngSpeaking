@@ -42,6 +42,7 @@ export interface LatencyTask {
     phonetic?: string;
   }>;
   source?: "ai" | "bank";
+  topic?: string;
 }
 
 export interface HesitationProfile {

@@ -9,10 +9,7 @@ import {
   Layers,
   Sparkles,
   Globe,
-  BarChart3,
-  GraduationCap,
   Zap,
-  TrendingUp,
   Menu,
   Target,
   RotateCcw,
@@ -35,11 +32,7 @@ const NAV = [
   { href: "/foundation/survival", label: "Survival", icon: ShieldAlert },
   { href: "/foundation/vocabulary", label: "Vocabulary", icon: BookOpen },
   { href: "/session", label: "Luyện nói", icon: Mic },
-  { href: "/foundation", label: "Foundation", icon: Layers },
   { href: "/conversation", label: "Conversation", icon: Globe },
-  { href: "/curriculum", label: "Curriculum", icon: GraduationCap },
-  { href: "/diagnostics", label: "Diagnostics", icon: BarChart3 },
-  { href: "/progress", label: "Progress", icon: TrendingUp },
 ];
 
 export function TopNav() {

@@ -43,12 +43,77 @@ export interface ErrorExample {
   userText: string;
   correction: string;
   contextSentence?: string;
-  sourceModule: "sentence_builder" | "vn_to_en" | "retry_lab" | "latency" | "shadowing" | "conversation";
+  sourceModule:
+    | "sentence_builder"
+    | "vn_to_en"
+    | "retry_lab"
+    | "latency"
+    | "shadowing"
+    | "conversation"
+    | "survival";
   responseLatencyMs?: number;
   wasSelfCorrected?: boolean;
   wasRetried?: boolean;
   retrySucceeded?: boolean;
   timestamp: string;
+}
+
+// ── Drill Studio session/adaptive types (aligned with SB/VN-EN/Survival) ──
+
+export type DrillSessionMode = "endless" | "quick" | "standard" | "deep";
+
+export interface DrillSessionConfig {
+  mode: DrillSessionMode;
+  targetCount: number; // 0 = endless
+  autoStartMic: boolean;
+  prepTimeSec: number;
+}
+
+export interface DrillAdaptiveState {
+  currentDifficulty: number; // 1-10 (severity × FSRS urgency)
+  prepTimeSec: number; // 2.5 -> 1.5
+  consecutiveSuccesses: number;
+  consecutiveFailures: number;
+  rapidStreak: number;
+  recentScores: number[];
+  recentPatterns: string[];
+  irtTheta?: number;
+  optimalZpdDifficulty?: number;
+}
+
+export interface DrillSkillMastery {
+  correction: number; // 0-100
+  retrieval: number;
+  fluency: number;
+  naturalness: number;
+  independence: number;
+  overallMastery: number;
+  totalAttempts: number;
+  successfulFirstAttempts: number;
+  streakCount: number;
+  updatedAt: string;
+}
+
+export interface DrillEvaluatedError {
+  type: "grammar" | "vocabulary" | "pronunciation" | "fluency" | "omission" | "strategy";
+  severity: "minor" | "major";
+  userText: string;
+  correction: string;
+  explanation: string;
+  patternKey?: string;
+}
+
+export interface DrillHesitationMetrics {
+  wpm: number;
+  durationMs: number;
+  hesitationLevel: "smooth" | "moderate" | "hesitant";
+  pauseEstimatedSec: number;
+}
+
+export interface DrillSayItBetterSet {
+  professional: string;
+  casual: string;
+  idiomatic: string;
 }
 
 export type FossilizationLevel = "emerging" | "habitual" | "fossilized";
@@ -160,8 +225,70 @@ export interface SpokenDiagnosticReport {
     id: string;
     titleVi: string;
     actionDescriptionVi: string;
-    targetModule: "retry_lab" | "latency" | "sentence_builder" | "vn_to_en";
+    targetModule: "retry_lab" | "latency" | "sentence_builder" | "vn_to_en" | "survival";
     dailyMinutes: number;
   }>;
   motivationalQuoteVi: string;
+}
+
+export interface DrillHistoryEntry {
+  record: MasterErrorRecord;
+  userTranscript: string;
+  latencyMs: number;
+  speechDurationMs?: number;
+  evaluation: DrillEvaluationResult;
+  targetCorrection: string;
+  attemptsCount?: number;
+}
+
+export interface DrillEvaluationResult {
+  corrected: boolean;
+  overallScore: number;
+  targetErrorResolved: boolean;
+  grammarAccuracy: number;
+  naturalness: number;
+  // SB/VN-EN/Survival aligned multi-dimensional scores
+  conceptClarityScore?: number;
+  fluencyScore?: number;
+  retrievalScore?: number;
+  independenceScore?: number;
+  errors?: DrillEvaluatedError[];
+  praisePoints?: string[];
+  actionableFeedback?: string;
+  sayItBetter?: DrillSayItBetterSet;
+  naturalAlternatives?: Array<{ expression: string; tone: string; explanationVi?: string }>;
+  isSayItBetterNeeded?: boolean;
+  coachFeedbackVi: string;
+  betterPhrasing?: string;
+  userTranscript?: string;
+  cleanTranscript?: string;
+  hintTierUsed?: number;
+  attemptNumber?: number;
+  evaluationSource?: "fast_pass" | "ai_llm" | "deterministic";
+  hesitationMetrics?: DrillHesitationMetrics;
+  isFastPass?: boolean;
+}
+
+export interface DrillSessionSummary {
+  totalDrilled: number;
+  totalCorrected: number;
+  correctionRate: number;
+  averageScore: number;
+  averageLatencyMs: number;
+  topImproved: MasterErrorRecord[];
+  stillNeedsWork: MasterErrorRecord[];
+  durationMs: number;
+  // SB/VN-EN/Survival aligned report
+  sessionId?: string;
+  mode?: DrillSessionMode;
+  startedAt?: string;
+  completedAt?: string;
+  firstAttemptSuccessCount?: number;
+  firstAttemptAccuracy?: number;
+  averageIndependence?: number;
+  averageOverallScore?: number;
+  masteryDelta?: number;
+  topWeaknessIdentified?: string;
+  recommendedNextAction?: string;
+  history?: DrillHistoryEntry[];
 }

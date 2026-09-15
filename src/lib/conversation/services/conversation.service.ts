@@ -3,6 +3,12 @@ import { conversationAIResponseSchema } from "@/lib/validation/conversation-sche
 import { RESPONSE_SYSTEM, buildResponseUserPrompt } from "@/lib/conversation/prompts/response-generator";
 import type { ConversationWorldState, ConversationAIResponse, PragmaticSpeechAct } from "@/types/conversation-world";
 import {
+  computeFastPassTurn,
+  calculateHesitationMetrics,
+  independenceFromTier,
+  normalizeSpokenText,
+} from "@/lib/conversation/turn-fast-pass.service";
+import {
   classifyPragmaticSpeechAct,
   computeAffectiveDeltas,
   checkHiddenObjectiveUnlock,
@@ -51,26 +57,38 @@ function mockResponse(state: ConversationWorldState, transcript: string): Conver
     pragmaticAct: pragmatic.act,
     pragmaticFeedbackVi: pragmatic.feedbackVi,
     unlockedObjective: unlockedObjective || undefined,
+    hints: {
+      tier1Keywords: [
+        { term: "From my perspective", meaning: "Theo góc nhìn của tôi", penaltyWeight: 0.1 },
+        { term: "In terms of", meaning: "Xét về mặt", penaltyWeight: 0.1 },
+      ],
+      tier2Starters: [
+        { starter: "I would say that...", meaning: "Tôi muốn nói rằng...", penaltyWeight: 0.5 },
+        { starter: "As far as I know...", meaning: "Theo như tôi biết...", penaltyWeight: 0.5 },
+      ],
+      tier3FullAnswer: {
+        en: "I agree with your point, and I believe taking clear steps will lead to success.",
+        vi: "Tôi đồng ý với quan điểm của bạn và tin rằng từng bước rõ ràng sẽ dẫn tới thành công.",
+        penaltyWeight: 0.85,
+      },
+    },
     pedagogy: {
       grammarIssue: null,
       grammarFix: null,
       nativeReformulation: transcript,
       turnScore: 85,
       coachTipVi: `${pragmatic.icon} ${pragmatic.labelVi}: ${pragmatic.feedbackVi}`,
-    },
-    hints: {
-      tier1Keywords: [
-        { term: "From my perspective", meaning: "Theo góc nhìn của tôi" },
-        { term: "In terms of", meaning: "Xét về mặt" },
-      ],
-      tier2Starters: [
-        { starter: "I would say that...", meaning: "Tôi muốn nói rằng..." },
-        { starter: "As far as I know...", meaning: "Theo như tôi biết..." },
-      ],
-      tier3FullAnswer: {
-        en: "I agree with your point, and I believe taking clear steps will lead to success.",
-        vi: "Tôi đồng ý với quan điểm của bạn và tin rằng từng bước rõ ràng sẽ dẫn tới thành công.",
-      },
+      meaningScore: 85,
+      fluencyScore: 80,
+      retrievalScore: 80,
+      independenceScore: 100,
+      errors: [],
+      praisePoints: ["Phản xạ hội thoại tự nhiên."],
+      actionableFeedback: pragmatic.feedbackVi,
+      hintTierUsed: 0,
+      attemptNumber: 1,
+      evaluationSource: "deterministic",
+      isFastPass: false,
     },
   };
 }
@@ -94,11 +112,50 @@ export async function generateTurnResponse(
   state: ConversationWorldState,
   transcript: string,
   recentTurns: Array<{ role: string; text: string }>,
-  opts?: { provider?: string; model?: string; summaryJson?: string; activeEventJson?: string }
+  opts?: {
+    provider?: string;
+    model?: string;
+    summaryJson?: string;
+    activeEventJson?: string;
+    speechDurationMs?: number;
+    hintTierUsed?: number;
+    attemptNumber?: number;
+    pedagogicalConstraint?: string;
+  }
 ): Promise<ConversationAIResponse> {
   const provider = opts?.provider || "gemini";
   const model = opts?.model || "auto";
-  if (provider === "mock") return mockResponse(state, transcript);
+  const speechDurationMs = opts?.speechDurationMs ?? 2800;
+  const hintTierUsed = opts?.hintTierUsed ?? 0;
+  const attemptNumber = opts?.attemptNumber ?? 1;
+  if (provider === "mock") {
+    const mocked = mockResponse(state, transcript);
+    mocked.pedagogy = {
+      ...mocked.pedagogy,
+      speechRateWpm: calculateHesitationMetrics({ userTranscript: transcript, speechDurationMs }).wpm,
+      hintTierUsed,
+      attemptNumber,
+      independenceScore: independenceFromTier(hintTierUsed),
+      hesitationMetrics: calculateHesitationMetrics({ userTranscript: transcript, speechDurationMs }),
+    };
+    return mocked;
+  }
+
+  // Fast-pass 0ms: high-fidelity paraphrase of last AI question context needs no LLM eval
+  try {
+    const lastAi = [...recentTurns].reverse().find((t) => t.role === "assistant")?.text || "";
+    const fastPass = computeFastPassTurn(
+      transcript,
+      [lastAi, state.currentObjective, state.scenario.userGoal].filter(Boolean),
+      {
+        responseLatencyMs: 1800,
+        speechDurationMs,
+        hintTierUsed,
+        attemptNumber,
+      }
+    );
+    void fastPass;
+  } catch {}
 
   const pragmatic = classifyPragmaticSpeechAct(transcript);
   const affective = computeAffectiveDeltas(pragmatic.act, state.activeCharacter);
@@ -124,6 +181,10 @@ export async function generateTurnResponse(
     userTranscript: transcript,
     activeEventJson: opts?.activeEventJson,
     pragmaticActInfo: `${pragmatic.icon} ${pragmatic.labelVi} (${pragmatic.act}). Character impact recommendation: Trust ${affective.deltaTrust > 0 ? `+${affective.deltaTrust}` : affective.deltaTrust}, Defensiveness ${affective.deltaDefensiveness > 0 ? `+${affective.deltaDefensiveness}` : affective.deltaDefensiveness}. ${contradictionWarning ? `\nContradiction Detected: ${contradictionWarning}` : ""}`,
+    speechDurationMs,
+    hintTierUsed,
+    attemptNumber,
+    pedagogicalConstraint: opts?.pedagogicalConstraint,
   });
 
   try {
@@ -134,7 +195,7 @@ export async function generateTurnResponse(
         messages: [{ role: "user", content: prompt }],
         systemInstruction: RESPONSE_SYSTEM,
         temperature: 0.75,
-        maxOutputTokens: 400,
+        maxOutputTokens: 900,
       },
     });
     const json = extractJson(res.text);
@@ -164,6 +225,22 @@ export async function generateTurnResponse(
     aiRes.pragmaticAct = pragmatic.act as PragmaticSpeechAct;
     aiRes.pragmaticFeedbackVi = pragmatic.feedbackVi;
     aiRes.unlockedObjective = unlockedObjective || undefined;
+    // Enrich pedagogy with deterministic metrics (aligned Survival/Drill)
+    if (aiRes.pedagogy) {
+      if (typeof aiRes.pedagogy.hintTierUsed !== "number") aiRes.pedagogy.hintTierUsed = hintTierUsed;
+      if (typeof aiRes.pedagogy.attemptNumber !== "number") aiRes.pedagogy.attemptNumber = attemptNumber;
+      if (typeof aiRes.pedagogy.independenceScore !== "number") {
+        aiRes.pedagogy.independenceScore = independenceFromTier(hintTierUsed);
+      }
+      if (!aiRes.pedagogy.hesitationMetrics) {
+        aiRes.pedagogy.hesitationMetrics = calculateHesitationMetrics({
+          userTranscript: transcript,
+          speechDurationMs,
+        });
+      }
+      aiRes.pedagogy.evaluationSource = "ai_llm";
+      aiRes.pedagogy.isFastPass = false;
+    }
 
     if (!aiRes.stateUpdate) {
       aiRes.stateUpdate = {};

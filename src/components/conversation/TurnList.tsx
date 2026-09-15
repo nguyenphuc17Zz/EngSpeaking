@@ -137,6 +137,16 @@ export function TurnList({ turns }: TurnListProps) {
                       {(ped.latencyMs / 1000).toFixed(1)}s
                     </Badge>
                   )}
+                  {isUser && (ped?.isFastPass || ped?.evaluationSource === "fast_pass") && (
+                    <Badge variant="outline" className="text-[9px] font-mono px-1 py-0 h-4 border-amber-500/40 text-amber-600">
+                      ⚡ Fast-Pass
+                    </Badge>
+                  )}
+                  {isUser && (ped?.independenceScore ?? 100) < 100 && (
+                    <Badge variant="outline" className="text-[9px] font-mono px-1 py-0 h-4 border-amber-500/30 text-amber-600">
+                      Tự lập {ped?.independenceScore}%
+                    </Badge>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground">
@@ -195,8 +205,50 @@ export function TurnList({ turns }: TurnListProps) {
                     </div>
                   )}
 
-                  {/* Grammar Issue & Fix */}
-                  {ped.grammarIssue && (
+                  {/* Multi-dim mini badges */}
+                  {(ped.meaningScore !== undefined || ped.fluencyScore !== undefined || ped.retrievalScore !== undefined) && (
+                    <div className="flex flex-wrap items-center gap-1">
+                      {[
+                        { label: "Ý", v: ped.meaningScore ?? ped.turnScore ?? 75 },
+                        { label: "Trôi chảy", v: ped.fluencyScore ?? 75 },
+                        { label: "Truy xuất", v: ped.retrievalScore ?? 75 },
+                      ].map((s) => (
+                        <Badge
+                          key={s.label}
+                          variant="outline"
+                          className={`text-[9px] font-bold px-1.5 py-0 h-4 ${s.v >= 75 ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30" : "bg-amber-500/10 text-amber-600 border-amber-500/30"}`}
+                        >
+                          {s.label}: {s.v}%
+                        </Badge>
+                      ))}
+                      {ped.hesitationMetrics && (
+                        <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 h-4">
+                          {ped.hesitationMetrics.wpm} wpm
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Errors list (unified patternKey) */}
+                  {ped.errors && ped.errors.length > 0 && (
+                    <div className="p-2.5 rounded-xl bg-card border border-amber-600/30 text-[11px] space-y-1 paper-shadow-sm">
+                      <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400 font-bold">
+                        <AlertTriangle className="size-3 shrink-0" />
+                        <span>Điểm cần sửa ({ped.errors.length}):</span>
+                      </div>
+                      {ped.errors.slice(0, 2).map((err, i) => (
+                        <p key={i} className="text-foreground/90 font-sans">
+                          <span className="line-through text-red-500 font-mono">"{err.userText}"</span>
+                          {" → "}
+                          <span className="text-chart-2 font-semibold">"{err.correction}"</span>
+                          <span className="text-muted-foreground"> ({err.explanation})</span>
+                        </p>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Grammar Issue & Fix (legacy fallback) */}
+                  {ped.grammarIssue && (!ped.errors || ped.errors.length === 0) && (
                     <div className="p-2.5 rounded-xl bg-card border border-amber-600/30 text-[11px] space-y-1 paper-shadow-sm">
                       <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400 font-bold">
                         <AlertTriangle className="size-3 shrink-0" />
@@ -232,12 +284,25 @@ export function TurnList({ turns }: TurnListProps) {
                     </div>
                   )}
 
+                  {/* Say It Better inline */}
+                  {ped.sayItBetter && (
+                    <div className="p-2 rounded-xl bg-primary/5 border border-primary/20 text-[11px] space-y-1">
+                      <span className="font-bold text-primary flex items-center gap-1">
+                        <Sparkles className="size-3" /> Say It Better:
+                      </span>
+                      <p className="font-mono font-semibold">"{ped.sayItBetter.casual || ped.sayItBetter.professional}"</p>
+                    </div>
+                  )}
+
                   {/* Coach tip */}
-                  {ped.coachTipVi && (
+                  {(ped.actionableFeedback || ped.coachTipVi) && (
                     <p className="text-[10px] text-muted-foreground flex items-center gap-1.5 italic">
                       <Lightbulb className="size-3 text-primary shrink-0" />
-                      <span>{ped.coachTipVi}</span>
+                      <span>{ped.actionableFeedback || ped.coachTipVi}</span>
                     </p>
+                  )}
+                  {ped.praisePoints?.[0] && (
+                    <p className="text-[10px] text-emerald-600 font-medium">✨ {ped.praisePoints[0]}</p>
                   )}
                 </div>
               )}

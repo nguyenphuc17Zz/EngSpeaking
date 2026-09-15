@@ -8,10 +8,7 @@ import {
   Mic,
   Layers,
   MessageSquareText,
-  Activity,
-  GraduationCap,
   Zap,
-  TrendingUp,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -54,12 +51,6 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "Tổng quan",
         icon: LayoutGrid,
         description: "Trung tâm học tập & mục tiêu ngày",
-      },
-      {
-        href: "/curriculum",
-        label: "Lộ trình AI",
-        icon: GraduationCap,
-        description: "Bài học cá nhân hoá hôm nay",
       },
     ],
   },
@@ -121,12 +112,6 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: Video,
         description: "Phân tích CEFR, nối âm & nhịp thở qua video",
       },
-      {
-        href: "/foundation",
-        label: "Foundation Hub",
-        icon: Layers,
-        description: "Phản xạ từ vựng, chunk & cấu trúc",
-      },
     ],
   },
   {
@@ -153,24 +138,7 @@ export const NAV_GROUPS: NavGroup[] = [
       },
     ],
   },
-  {
-    id: "insights",
-    title: "PHÂN TÍCH & BÁO CÁO",
-    items: [
-      {
-        href: "/diagnostics",
-        label: "Chẩn đoán 8 chiều",
-        icon: Activity,
-        description: "Tìm điểm nghẽn phát âm & phản xạ",
-      },
-      {
-        href: "/progress",
-        label: "Tiến độ & Báo cáo",
-        icon: TrendingUp,
-        description: "Xu hướng TTFW, WPM & cột mốc dài hạn",
-      },
-    ],
-  },
+
   {
     id: "system",
     title: "HỆ THỐNG",
@@ -275,9 +243,7 @@ export function AppSidebar({ collapsed, onToggleCollapse, onNavigateMobile }: Ap
               const active =
                 item.href === "/"
                   ? pathname === "/"
-                  : pathname === item.href ||
-                    (item.href !== "/foundation" && pathname.startsWith(item.href)) ||
-                    (item.href === "/foundation" && pathname === "/foundation");
+                  : pathname === item.href || pathname.startsWith(item.href);
               const Icon = item.icon;
 
               return (
@@ -326,9 +292,9 @@ export function AppSidebar({ collapsed, onToggleCollapse, onNavigateMobile }: Ap
           <p className="text-[11px] text-muted-foreground leading-relaxed">
             10 phút khẩu ngữ mỗi ngày để đánh thức phản xạ nói tự nhiên, không cần nhẩm dịch.
           </p>
-          <Link href="/curriculum" onClick={onNavigateMobile} className="block">
+          <Link href="/session" onClick={onNavigateMobile} className="block">
             <Button size="sm" variant="default" className="w-full text-xs font-semibold gap-1.5 h-8 rounded-xl btn-spring shadow-xs">
-              Luyện bài hôm nay
+              Luyện nói ngay
             </Button>
           </Link>
         </div>

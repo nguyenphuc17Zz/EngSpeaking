@@ -36,7 +36,7 @@ export function DiagnosticReportCard({ report }: Props) {
       case "vn_to_en":
         return "/foundation/vn-to-en";
       default:
-        return "/foundation";
+        return "/";
     }
   };
 

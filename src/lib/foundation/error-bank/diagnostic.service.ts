@@ -23,6 +23,7 @@ CRITICAL PEDAGOGICAL INSIGHTS:
    - "latency" (Response Latency Speed Gym: Bật câu dưới 2.0s)
    - "sentence_builder" (Sentence Builder: Khung ngữ pháp có giàn giáo)
    - "vn_to_en" (VN -> EN Speaking: Phản xạ dịch xuôi tự nhiên)
+   - "survival" (Survival Speaking: Diễn giải vòng + cứu cánh hội thoại)
 
 OUTPUT STRICT JSON ONLY. NO MARKDOWN FORMATTING:
 {
@@ -46,7 +47,7 @@ OUTPUT STRICT JSON ONLY. NO MARKDOWN FORMATTING:
       "id": "rx_1",
       "titleVi": string,
       "actionDescriptionVi": string,
-      "targetModule": "retry_lab" | "latency" | "sentence_builder" | "vn_to_en",
+      "targetModule": "retry_lab" | "latency" | "sentence_builder" | "vn_to_en" | "survival",
       "dailyMinutes": number
     }
   ],

@@ -170,12 +170,12 @@ export function RepairSummaryModal({
             <span>Luyện tiếp tục</span>
           </Button>
 
-          <Link href="/foundation" className="w-full sm:w-auto">
+          <Link href="/" className="w-full sm:w-auto">
             <Button
               variant="outline"
               className="w-full h-11 rounded-2xl font-semibold gap-2 border-border/80 hover:bg-muted"
             >
-              <span>Về Foundation Hub</span>
+              <span>Về Trang chủ</span>
               <ArrowRight className="size-4" />
             </Button>
           </Link>

@@ -786,16 +786,6 @@ export default function SettingsPage() {
             capability="textGeneration"
             onChange={(p, m) => settings.setConversation({ provider: p, model: m })}
           />
-
-          {/* 6. General Diagnostics */}
-          <ModelSelector
-            label="📊 Chẩn đoán phát âm & Phân tích 8 chiều (Diagnostics)"
-            description="Đánh giá tổng quát 8 chiều, phân tích xu hướng tiến bộ và phát hiện điểm nghẽn phản xạ."
-            providerValue={settings.evaluation.provider}
-            modelValue={settings.evaluation.model}
-            capability="textGeneration"
-            onChange={(p, m) => settings.setEvaluation({ provider: p, model: m })}
-          />
         </div>
       </div>
 

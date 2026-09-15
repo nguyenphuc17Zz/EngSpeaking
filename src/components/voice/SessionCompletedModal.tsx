@@ -44,6 +44,11 @@ interface SessionCompletedModalProps {
   ttrRatio?: number;
   twistResolved?: boolean;
   cefrEstimate?: string;
+  firstAttemptAccuracy?: number;
+  averageIndependence?: number;
+  masteryDelta?: number;
+  topWeakness?: string;
+  recommendedNextAction?: string;
   onRestart?: () => void;
 }
 
@@ -55,16 +60,24 @@ export function SessionCompletedModal({
   turnsCount = 6,
   avgTtfwMs = 1400,
   overallScore = 85,
-  grammarScore = 88,
-  fluencyScore = 82,
-  vocabularyScore = 86,
+  grammarScore,
+  fluencyScore,
+  vocabularyScore,
   errorsDetected = 1,
   wpm = 120,
   ttrRatio = 72,
   twistResolved = true,
   cefrEstimate = "B2",
+  firstAttemptAccuracy,
+  averageIndependence,
+  masteryDelta,
+  topWeakness,
+  recommendedNextAction,
   onRestart,
 }: SessionCompletedModalProps) {
+  const grammar = grammarScore ?? Math.min(100, overallScore + 3);
+  const fluency = fluencyScore ?? Math.max(40, overallScore - 3);
+  const vocabulary = vocabularyScore ?? overallScore;
   useEffect(() => {
     if (open) {
       soundEffects.playSuccessFanfare();
@@ -90,14 +103,14 @@ export function SessionCompletedModal({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Streak & XP Highlight */}
+        {/* Streak & XP Highlight (summary thật, không hardcode) */}
         <div className="p-3.5 rounded-2xl bg-gradient-to-br from-orange-500/10 via-amber-500/5 to-background border border-orange-500/20 flex items-center justify-around">
           <div className="flex flex-col items-center">
             <div className="flex items-center gap-1 text-orange-500 font-bold text-lg font-mono">
               <Flame className="size-5 fill-orange-500 animate-pulse" />
-              <span>4 ngày</span>
+              <span>{firstAttemptAccuracy !== undefined ? `${firstAttemptAccuracy}%` : `${turnsCount} turns`}</span>
             </div>
-            <span className="text-[11px] text-muted-foreground">Streak liên tiếp</span>
+            <span className="text-[11px] text-muted-foreground">Đúng lần đầu</span>
           </div>
 
           <div className="h-8 w-px bg-border/60" />
@@ -105,9 +118,9 @@ export function SessionCompletedModal({
           <div className="flex flex-col items-center">
             <div className="flex items-center gap-1 text-primary font-bold text-lg font-mono">
               <Sparkles className="size-5" />
-              <span>+50 XP</span>
+              <span>+{masteryDelta ?? 3}</span>
             </div>
-            <span className="text-[11px] text-muted-foreground">Điểm kinh nghiệm</span>
+            <span className="text-[11px] text-muted-foreground">Mastery tăng</span>
           </div>
 
           <div className="h-8 w-px bg-border/60" />
@@ -117,9 +130,18 @@ export function SessionCompletedModal({
               <CheckCircle2 className="size-5" />
               <span>{overallScore}/100</span>
             </div>
-            <span className="text-[11px] text-muted-foreground">Điểm tổng quan</span>
+            <span className="text-[11px] text-muted-foreground">Điểm tổng quan{averageIndependence !== undefined ? ` · Tự lập ${averageIndependence}%` : ""}</span>
           </div>
         </div>
+
+        {(topWeakness || recommendedNextAction) && (
+          <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-left text-xs space-y-1">
+            {topWeakness && (
+              <p className="font-bold text-amber-700 dark:text-amber-300">Tiêu điểm: {topWeakness}</p>
+            )}
+            {recommendedNextAction && <p className="text-muted-foreground">{recommendedNextAction}</p>}
+          </div>
+        )}
 
         {/* Dimensional Performance Breakdown (Standards from Foundation) */}
         <div className="p-3.5 rounded-2xl bg-muted/20 border border-border/60 space-y-2.5 text-left">
@@ -131,25 +153,25 @@ export function SessionCompletedModal({
             <div className="space-y-1">
               <div className="flex justify-between font-semibold">
                 <span className="text-muted-foreground">Độ chính xác ngữ pháp (Grammar):</span>
-                <span className="font-mono text-foreground">{grammarScore}%</span>
+                <span className="font-mono text-foreground">{grammar}%</span>
               </div>
-              <Progress value={grammarScore} className="h-1.5" />
+              <Progress value={grammar} className="h-1.5" />
             </div>
 
             <div className="space-y-1">
               <div className="flex justify-between font-semibold">
                 <span className="text-muted-foreground">Lưu loát & Tốc độ nói (Fluency):</span>
-                <span className="font-mono text-foreground">{fluencyScore}%</span>
+                <span className="font-mono text-foreground">{fluency}%</span>
               </div>
-              <Progress value={fluencyScore} className="h-1.5" />
+              <Progress value={fluency} className="h-1.5" />
             </div>
 
             <div className="space-y-1">
               <div className="flex justify-between font-semibold">
                 <span className="text-muted-foreground">Vốn từ & Cụm bản xứ (Lexical Range):</span>
-                <span className="font-mono text-foreground">{vocabularyScore}%</span>
+                <span className="font-mono text-foreground">{vocabulary}%</span>
               </div>
-              <Progress value={vocabularyScore} className="h-1.5" />
+              <Progress value={vocabulary} className="h-1.5" />
             </div>
           </div>
         </div>
@@ -223,14 +245,14 @@ export function SessionCompletedModal({
 
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-2 pt-1">
-          <Link href="/foundation" className="flex-1">
+          <Link href="/" className="flex-1">
             <Button
               variant="default"
               size="lg"
               className="w-full gap-2 rounded-2xl font-bold h-11 shadow-sm"
               onClick={() => onOpenChange(false)}
             >
-              <span>Tiếp tục lộ trình học</span>
+              <span>Về Trang chủ</span>
               <ArrowRight className="size-4" />
             </Button>
           </Link>

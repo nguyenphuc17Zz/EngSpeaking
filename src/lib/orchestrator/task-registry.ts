@@ -14,9 +14,6 @@ export type AITask =
   | "fluency_analysis"
   | "communication_analysis"
   | "pronunciation_analysis"
-  | "bottleneck_detection"
-  | "curriculum_planning"
-  | "session_replanning"
   | "feedback_generation"
   | "hint_generation"
   | "speech_to_text"
@@ -50,9 +47,6 @@ export const TASK_REQUIREMENTS: Record<AITask, AITaskRequirements> = {
   fluency_analysis: { task: "fluency_analysis", requiredCapabilities: ["textGeneration"], qualityLevel: "standard", latencyLevel: "medium", contextSize: "medium" },
   communication_analysis: { task: "communication_analysis", requiredCapabilities: ["textGeneration"], qualityLevel: "standard", latencyLevel: "medium", contextSize: "medium" },
   pronunciation_analysis: { task: "pronunciation_analysis", requiredCapabilities: ["textGeneration"], qualityLevel: "high", latencyLevel: "medium", contextSize: "small" },
-  bottleneck_detection: { task: "bottleneck_detection", requiredCapabilities: ["textGeneration", "structuredOutput"], qualityLevel: "high", latencyLevel: "medium", contextSize: "medium", structuredOutput: true },
-  curriculum_planning: { task: "curriculum_planning", requiredCapabilities: ["textGeneration", "structuredOutput"], qualityLevel: "high", latencyLevel: "medium", contextSize: "medium", structuredOutput: true },
-  session_replanning: { task: "session_replanning", requiredCapabilities: ["textGeneration", "structuredOutput"], qualityLevel: "standard", latencyLevel: "low", contextSize: "medium", structuredOutput: true },
   feedback_generation: { task: "feedback_generation", requiredCapabilities: ["textGeneration"], qualityLevel: "standard", latencyLevel: "low", contextSize: "small" },
   hint_generation: { task: "hint_generation", requiredCapabilities: ["textGeneration"], qualityLevel: "standard", latencyLevel: "low", contextSize: "small" },
   speech_to_text: { task: "speech_to_text", requiredCapabilities: ["speechToText"], qualityLevel: "high", latencyLevel: "low", contextSize: "small", audioInput: true },

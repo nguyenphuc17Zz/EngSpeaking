@@ -175,20 +175,23 @@ export function SurvivalContextCard({
           </div>
 
           <div className="flex items-center gap-1 bg-muted/60 p-0.5 rounded-xl border border-border/60">
-            {[0, 1, 2, 3, 4].map((t) => (
-              <button
-                key={t}
-                onClick={() => onSelectHintTier(t)}
-                className={`text-[10px] font-mono px-2 py-0.5 rounded-lg font-bold transition-all ${
-                  currentHintTier === t
-                    ? "bg-amber-600 text-white shadow-xs"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                title={`Nấc gợi ý T${t}`}
-              >
-                T{t}
-              </button>
-            ))}
+            {[0, 1, 2, 3, 4].map((t) => {
+              const penalty = [0, 0.1, 0.25, 0.5, 0.85][t];
+              return (
+                <button
+                  key={t}
+                  onClick={() => onSelectHintTier(t)}
+                  className={`text-[10px] font-mono px-2 py-0.5 rounded-lg font-bold transition-all ${
+                    currentHintTier === t
+                      ? "bg-amber-600 text-white shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  title={`Nấc gợi ý T${t} (trừ ${Math.round(penalty * 100)}% tự lập)`}
+                >
+                  T{t}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -284,6 +287,53 @@ export function SurvivalContextCard({
             </div>
           )}
 
+          {/* Say It Better trio (SB/VN-EN aligned) */}
+          {(circumTask?.sayItBetter || scenarioTask?.sayItBetter) && (
+            <div className="p-2.5 rounded-2xl border border-indigo-500/25 bg-indigo-500/5 space-y-1.5">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-300 flex items-center gap-1">
+                <Layers className="size-3" />
+                <span>Bộ 3 cách nói bản xứ (Say It Better):</span>
+              </div>
+              <div className="grid gap-1.5 text-xs font-mono">
+                {(
+                  [
+                    { k: "Đời thường", v: (circumTask?.sayItBetter || scenarioTask?.sayItBetter)?.casual },
+                    { k: "Công sở", v: (circumTask?.sayItBetter || scenarioTask?.sayItBetter)?.professional },
+                    { k: "Khẩu ngữ", v: (circumTask?.sayItBetter || scenarioTask?.sayItBetter)?.idiomatic },
+                  ] as Array<{ k: string; v?: string }>
+                )
+                  .filter((x) => x.v)
+                  .map((x) => (
+                    <div
+                      key={x.k}
+                      className="flex items-start justify-between gap-2 p-2 rounded-xl bg-card border border-border/60"
+                    >
+                      <div className="min-w-0">
+                        <span className="text-[9px] font-bold text-muted-foreground block">{x.k}:</span>
+                        <span className="text-foreground text-xs leading-snug block">"{x.v}"</span>
+                      </div>
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        <button
+                          onClick={() => handleCopy(x.v || "", `sib-${x.k}`)}
+                          className="text-muted-foreground hover:text-foreground p-1 rounded-sm"
+                          title="Sao chép"
+                        >
+                          {copiedId === `sib-${x.k}` ? <Check className="size-3 text-emerald-500" /> : <Copy className="size-3" />}
+                        </button>
+                        <button
+                          onClick={() => handlePlayAudio(x.v || "")}
+                          className="text-muted-foreground hover:text-primary p-1 rounded-sm"
+                          title="Nghe mẫu"
+                        >
+                          <Volume2 className="size-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
           {/* 4-Tier Ladder */}
           <div className="rounded-2xl border border-border/60 bg-muted/20 p-3 space-y-2">
             <div className="flex items-center justify-between">
@@ -340,6 +390,9 @@ export function SurvivalContextCard({
                               }`}
                             >
                               {h.title}
+                            </span>
+                            <span className="text-[9px] font-mono text-muted-foreground">
+                              -{Math.round((h.penaltyWeight ?? [0, 0.1, 0.25, 0.5, 0.85][h.tier] ?? 0) * 100)}%
                             </span>
                           </div>
 

@@ -8,9 +8,9 @@ import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 import { sanitizeTextForTTS } from "@/lib/tts/browser";
 
 export interface DynamicScaffoldingHints {
-  tier1Keywords: Array<{ term: string; meaning: string }>;
-  tier2Starters: Array<{ starter: string; meaning: string }>;
-  tier3FullAnswer: { en: string; vi: string };
+  tier1Keywords: Array<{ term: string; meaning: string; penaltyWeight?: number }>;
+  tier2Starters: Array<{ starter: string; meaning: string; penaltyWeight?: number }>;
+  tier3FullAnswer: { en: string; vi: string; penaltyWeight?: number };
   directStarter?: string;
 }
 
@@ -27,6 +27,8 @@ interface QuickHintsDrawerProps {
   isLoadingHints?: boolean;
   onRefreshHints?: () => void;
   onSelectHint?: (hintText: string) => void;
+  currentHintTier?: number;
+  onSelectHintTier?: (tier: 0 | 1 | 2 | 3 | 4) => void;
   className?: string;
 }
 
@@ -56,6 +58,8 @@ export function QuickHintsDrawer({
   isLoadingHints,
   onRefreshHints,
   onSelectHint,
+  currentHintTier = 0,
+  onSelectHintTier,
   className,
 }: QuickHintsDrawerProps) {
   const tts = useBrowserTTS();
@@ -97,6 +101,28 @@ export function QuickHintsDrawer({
       )}
     >
       {/* Header with tier selector and dynamic indicator */}
+      <div className="px-2 sm:px-2.5 pt-2 flex items-center justify-between gap-1.5 shrink-0">
+        <span className="text-[10px] font-mono text-muted-foreground">
+          Nấc hiện tại: T{currentHintTier}/4
+          {currentHintTier > 0 && (
+            <> · -{Math.round(([0, 0.1, 0.25, 0.5, 0.85][currentHintTier] ?? 0) * 100)}% tự lập</>
+          )}
+        </span>
+        {onSelectHintTier && (
+          <div className="flex items-center gap-0.5 bg-background p-0.5 rounded-lg border border-border/70">
+            {[0, 1, 2, 3].map((t) => (
+              <button
+                key={t}
+                onClick={() => onSelectHintTier(t as 0 | 1 | 2 | 3)}
+                title={`Nấc T${t}`}
+                className={`text-[9px] font-mono px-1.5 py-0.5 rounded-md font-bold ${currentHintTier === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                T{t}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       <div className="p-2 sm:p-2.5 border-b border-border/60 bg-muted/20 flex items-center justify-between gap-1.5 shrink-0">
         <div className="flex items-center gap-1.5 min-w-0">
           <div className="size-6 rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">

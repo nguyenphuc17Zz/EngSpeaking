@@ -126,18 +126,13 @@ export default function SpokenRepairLabPage() {
           const target = records.find((r) => r.id === recordId);
           if (target) {
             autoLaunchedRef.current = true;
+            const latestExample = target.examples[target.examples.length - 1];
             startRepairSession({
               originalTaskId: target.id,
               sourceContext: "retry_lab",
-              originalPrompt: target.targetSentence,
-              originalTranscript: target.userSpokenTranscript || target.erroneousSentence,
-              expectedSentence: target.targetSentence,
-              detectedErrors: target.detectedErrors?.map((e) => ({
-                type: e.type,
-                userText: e.userErroneousWord || "",
-                correction: e.correctedWord || "",
-                explanation: e.explanationVi || "",
-              })),
+              originalPrompt: latestExample?.correction || target.patternKey,
+              originalTranscript: latestExample?.userText || "",
+              expectedSentence: latestExample?.correction || "",
             });
             return;
           }
@@ -370,12 +365,12 @@ export default function SpokenRepairLabPage() {
       <header className="flex items-center justify-between border-b border-border/40 pb-2.5 shrink-0 gap-3">
         {/* Left: Exit button & Inline Topic Selector */}
         <div className="flex items-center gap-2.5">
-          <Link href="/foundation">
+          <Link href="/">
             <Button
               variant="ghost"
               size="sm"
               className="size-8 p-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
-              title="Thoát về Foundation Hub"
+              title="Thoát về Trang chủ"
             >
               <X className="size-4" />
             </Button>

@@ -12,6 +12,9 @@ export async function POST(req: NextRequest) {
       task,
       userTranscript = "",
       responseLatencyMs = 2000,
+      speechDurationMs = 2500,
+      hintTierUsed = 0,
+      attemptNumber = 1,
       provider,
       model,
     } = body;
@@ -25,6 +28,9 @@ export async function POST(req: NextRequest) {
         task,
         userTranscript,
         responseLatencyMs,
+        speechDurationMs,
+        hintTierUsed,
+        attemptNumber,
         provider,
         model,
       });
@@ -34,6 +40,9 @@ export async function POST(req: NextRequest) {
         task,
         userTranscript,
         responseLatencyMs,
+        speechDurationMs,
+        hintTierUsed,
+        attemptNumber,
         provider,
         model,
       });

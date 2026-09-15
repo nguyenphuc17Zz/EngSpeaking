@@ -9,7 +9,7 @@ import { toUserMessage } from "@/lib/errors/codes";
 export async function POST(req: Request) {
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: { message: "JSON invalid" } }, { status: 400 }); }
-  const { worldId, worldState, transcript, recentTurns, summaryJson, provider = "gemini", model = "auto", durationMs, timeToFirstWordMs } = body as {
+  const { worldId, worldState, transcript, recentTurns, summaryJson, provider = "gemini", model = "auto", durationMs, timeToFirstWordMs, speechDurationMs, hintTierUsed, attemptNumber, pedagogicalConstraint } = body as {
     worldId?: string;
     worldState?: ConversationWorldState;
     transcript?: string;
@@ -19,6 +19,10 @@ export async function POST(req: Request) {
     model?: string;
     durationMs?: number;
     timeToFirstWordMs?: number;
+    speechDurationMs?: number;
+    hintTierUsed?: number;
+    attemptNumber?: number;
+    pedagogicalConstraint?: string;
   };
 
   if (!transcript || !worldState || !recentTurns) return NextResponse.json({ error: { message: "Thiếu worldState/transcript/recentTurns" } }, { status: 400 });
@@ -28,7 +32,28 @@ export async function POST(req: Request) {
     const possibleEvent = await maybeGenerateEvent(worldState, recentTurns, { provider, model });
     const activeEventJson = possibleEvent ? JSON.stringify(possibleEvent) : undefined;
 
-    const aiResponse = await generateTurnResponse(worldState, transcript, recentTurns, { provider, model, summaryJson, activeEventJson });
+    const aiResponse = await generateTurnResponse(worldState, transcript, recentTurns, {
+      provider,
+      model,
+      summaryJson,
+      activeEventJson,
+      speechDurationMs: speechDurationMs ?? durationMs,
+      hintTierUsed,
+      attemptNumber,
+      pedagogicalConstraint,
+    });
+
+    // Ingest turn errors into Personal Error Bank (non-fatal, aligned SB/VN/Survival/Drill)
+    try {
+      const { ingestTurnErrorsToBank } = await import("@/lib/conversation/normalize-turn-errors");
+      ingestTurnErrorsToBank({
+        pedagogy: aiResponse.pedagogy as import("@/types/conversation").TurnPedagogy | null,
+        userTranscript: transcript,
+        contextSentence: worldState.currentTopic || worldState.scenario.topic,
+        latencyMs: timeToFirstWordMs,
+        retrySucceeded: (aiResponse.pedagogy?.turnScore ?? 75) >= 70,
+      });
+    } catch {}
 
     // Apply state update deterministically
     let nextState: ConversationWorldState = applyStateUpdate(worldState, aiResponse);

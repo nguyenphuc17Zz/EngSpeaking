@@ -4,7 +4,7 @@ import type { AdvancedTrainingSession } from "@/types/advanced";
 export function validateAdvancedSession(session: unknown): { valid: true; session: AdvancedTrainingSession } | { valid: false; errors: string[] } {
   const parsed = advancedTrainingSessionSchema.safeParse(session);
   if (!parsed.success) return { valid: false, errors: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) };
-  const s = parsed.data;
+  const s = parsed.data as unknown as AdvancedTrainingSession;
   const errors: string[] = [];
   const sum = s.blocks.reduce((a, b) => a + b.estimatedDurationMinutes, 0);
   if (Math.abs(sum - s.estimatedDurationMinutes) > 5) errors.push(`blocks sum ${sum} != estimated ${s.estimatedDurationMinutes}`);

@@ -53,12 +53,15 @@ function mockScenario(settings: ConversationSettings): ScenarioBlueprint {
   return {
     id,
     mode: mode as ScenarioBlueprint["mode"],
-    topic: base.topic || "general",
+    topic: (settings.topic && settings.topic !== "auto" ? settings.topic : undefined) || base.topic || "general",
     setting: base.setting || "general setting",
     character: base.character as ScenarioBlueprint["character"],
     userGoal: base.userGoal || "Engage in conversation",
     aiGoal: base.aiGoal || "Respond naturally",
     difficulty,
+    difficultyOverall: difficulty,
+    prepTimeSec: 2.5,
+    skills: ["spoken_retrieval", "conversation"],
     difficultyLabel: (typeof settings.difficulty === "string" ? settings.difficulty : "normal") as ScenarioBlueprint["difficultyLabel"],
     context: base.context || "General conversation",
     conflict: base.conflict,
@@ -126,6 +129,8 @@ export async function generateScenario(
     setting: settings.setting,
     aiPrompt: settings.aiPrompt,
     duration: settings.duration,
+    recentErrors: settings.recentErrors,
+    pedagogicalConstraint: settings.pedagogicalConstraint,
   });
 
   const attemptOnce = async (): Promise<ScenarioBlueprint | null> => {

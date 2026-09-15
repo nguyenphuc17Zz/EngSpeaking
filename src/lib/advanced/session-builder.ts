@@ -6,9 +6,19 @@ import { advancedTrainingSessionSchema } from "@/lib/validation/advanced-schemas
 export async function buildAdvancedSession(context: AdvancedTrainingContext, opts?: { provider?: string; model?: string }): Promise<AdvancedTrainingSession> {
   const provider = opts?.provider || "gemini";
   const model = opts?.model || "auto";
+  const resolveType = (): string => {
+    const track = (context as unknown as Record<string, unknown>).track as string | undefined;
+    if (track) {
+      try {
+        const { defaultSkillTagForTrack } = require("./track-map") as typeof import("./track-map");
+        return defaultSkillTagForTrack(track as never);
+      } catch {}
+    }
+    return context.targetSkills?.[0] || "spontaneous";
+  };
   // AI decides composition if not mock
   if (provider === "mock") {
-    const type = (context.targetSkills?.[0] || "spontaneous") as any;
+    const type = resolveType() as any;
     return generateMockSession(type, context);
   }
   // Try AI generation of full session
@@ -28,9 +38,9 @@ export async function buildAdvancedSession(context: AdvancedTrainingContext, opt
     if (!json.createdAt) json.createdAt = new Date().toISOString();
     if (!json.context) json.context = context;
     const parsed = advancedTrainingSessionSchema.safeParse(json);
-    if (parsed.success) return parsed.data;
+    if (parsed.success) return parsed.data as unknown as AdvancedTrainingSession;
   } catch {}
   // Fallback deterministic
-  const type = (context.targetSkills?.[0] || "spontaneous") as any;
+  const type = resolveType() as any;
   return generateMockSession(type, context);
 }

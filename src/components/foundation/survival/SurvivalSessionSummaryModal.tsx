@@ -1,23 +1,23 @@
 "use client";
 
+import { useEffect } from "react";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
-  ShieldCheck,
   Trophy,
-  Zap,
   RotateCcw,
   ArrowRight,
-  Sparkles,
+  TrendingUp,
+  AlertTriangle,
 } from "lucide-react";
 import type { SurvivalSessionSummary } from "@/types/survival-speaking";
+import { triggerConfetti } from "@/components/ui/confetti";
+import { soundEffects } from "@/lib/audio/audio-chimes";
 
 interface SurvivalSessionSummaryModalProps {
   isOpen: boolean;
@@ -32,65 +32,89 @@ export function SurvivalSessionSummaryModal({
   summary,
   onRestart,
 }: SurvivalSessionSummaryModalProps) {
+  useEffect(() => {
+    if (isOpen && summary) {
+      soundEffects.playSuccessFanfare();
+      triggerConfetti();
+    }
+  }, [isOpen, summary]);
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md rounded-3xl p-6 md:p-8 bg-card border border-border/80 shadow-2xl space-y-6">
+      <DialogContent className="sm:max-w-lg rounded-3xl p-6 md:p-8 bg-card border border-border/80 shadow-2xl space-y-6">
         <div className="text-center space-y-2">
-          <div className="size-14 rounded-3xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto shadow-md">
-            <Trophy className="size-7" />
+          <div className="size-16 rounded-3xl bg-gradient-to-tr from-amber-500 to-orange-600 text-white flex items-center justify-center mx-auto shadow-lg shadow-amber-500/30 animate-bounce">
+            <Trophy className="size-8" />
           </div>
-          <DialogTitle className="text-xl font-bold tracking-tight text-foreground">
-            Tổng kết buổi luyện Survival Speaking
+          <DialogTitle className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
+            Hoàn thành phiên Survival Speaking! 🎉
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            Bạn đã hoàn thành các thử thách xử lý sự cố và ứng biến giao tiếp.
+            Bạn đã hoàn thành {summary.completedTasks ?? summary.totalAttempts} thử thách ứng biến
+            ({summary.kind === "scenarios" ? "Real-Life Scenarios" : "Circumlocution Gym"}).
           </DialogDescription>
         </div>
 
-        {/* 3 Metric Cards */}
-        <div className="grid grid-cols-3 gap-3 text-center">
-          <div className="p-3.5 rounded-2xl bg-muted/40 border border-border/60 space-y-1">
-            <span className="text-[10px] uppercase font-bold text-muted-foreground">
-              Phục hồi
-            </span>
-            <p className="text-xl font-mono font-extrabold text-emerald-600 dark:text-emerald-400">
-              {summary.recoveryRate}%
-            </p>
+        {/* 4 Core Metrics Grid (SB/VN-EN aligned) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          <div className="p-3 rounded-2xl bg-muted/40 border border-border/60 text-center space-y-1">
+            <span className="text-[10px] text-muted-foreground font-semibold block">Phục hồi</span>
+            <span className="font-mono text-base font-bold text-emerald-500">{summary.recoveryRate}%</span>
           </div>
-
-          <div className="p-3.5 rounded-2xl bg-muted/40 border border-border/60 space-y-1">
-            <span className="text-[10px] uppercase font-bold text-muted-foreground">
-              Số câu
+          <div className="p-3 rounded-2xl bg-muted/40 border border-border/60 text-center space-y-1">
+            <span className="text-[10px] text-muted-foreground font-semibold block">Đúng lần đầu</span>
+            <span className="font-mono text-base font-bold text-indigo-500">
+              {summary.firstAttemptAccuracy ?? summary.recoveryRate}%
             </span>
-            <p className="text-xl font-mono font-extrabold text-foreground">
-              {summary.successfulAttempts}/{summary.totalAttempts}
-            </p>
           </div>
-
-          <div className="p-3.5 rounded-2xl bg-muted/40 border border-border/60 space-y-1">
-            <span className="text-[10px] uppercase font-bold text-muted-foreground">
-              Độ trễ TB
-            </span>
-            <p className="text-xl font-mono font-extrabold text-primary">
+          <div className="p-3 rounded-2xl bg-muted/40 border border-border/60 text-center space-y-1">
+            <span className="text-[10px] text-muted-foreground font-semibold block">Độ trễ TB</span>
+            <span className="font-mono text-base font-bold text-amber-500">
               {(summary.averageLatencyMs / 1000).toFixed(1)}s
-            </p>
+            </span>
+          </div>
+          <div className="p-3 rounded-2xl bg-primary/10 border border-primary/20 text-center space-y-1">
+            <span className="text-[10px] text-primary font-semibold block">Mastery +</span>
+            <span className="font-mono text-base font-bold text-primary">+{summary.masteryDelta ?? 3}</span>
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex gap-2 pt-2">
+        {/* Skills + weakness */}
+        <div className="p-4 rounded-2xl bg-muted/20 border border-border/60 space-y-2 text-xs">
+          <div className="flex items-center gap-1.5 font-bold text-foreground">
+            <TrendingUp className="size-3.5 text-primary" />
+            <span>Đã luyện: {(summary.practicedSkills || [summary.strongestSkill]).join(" · ")}</span>
+          </div>
+          <div className="text-muted-foreground">
+            Điểm TB: {summary.averageOverallScore ?? summary.recoveryRate}/100 · Tự lập:{" "}
+            {summary.averageIndependence ?? 100}%
+          </div>
+        </div>
+
+        {(summary.topWeaknessIdentified || summary.needsWorkSkill) && (
+          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-1 text-xs">
+            <div className="flex items-center gap-1.5 font-bold text-amber-700 dark:text-amber-300">
+              <AlertTriangle className="size-3.5" />
+              <span>Tiêu điểm: {summary.topWeaknessIdentified || summary.needsWorkSkill}</span>
+            </div>
+            <p className="text-muted-foreground text-[11px]">
+              {summary.recommendedNextAction || "Luyện thêm với hint T3 rồi giảm dần về T0."}
+            </p>
+          </div>
+        )}
+
+        <div className="flex flex-col sm:flex-row gap-2 pt-1">
           <Button
             variant="outline"
             onClick={onRestart}
-            className="flex-1 rounded-2xl text-xs font-bold h-10 border-border/80"
+            className="flex-1 rounded-2xl text-xs font-bold h-11 border-border/80"
           >
             <RotateCcw className="size-3.5 mr-1.5" />
             Luyện lại
           </Button>
-
           <Button
             onClick={onClose}
-            className="flex-1 rounded-2xl text-xs font-bold h-10 bg-primary shadow-md shadow-primary/25 btn-spring"
+            className="flex-1 rounded-2xl text-xs font-bold h-11 bg-primary shadow-md shadow-primary/25 btn-spring"
           >
             <span>Tiếp tục học</span>
             <ArrowRight className="size-3.5 ml-1.5" />

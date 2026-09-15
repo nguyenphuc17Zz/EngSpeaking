@@ -294,6 +294,51 @@ export function ingestErrorOccurrence(params: {
   return records;
 }
 
+export function ingestEvaluatedErrors(
+  occurrences: Array<{
+    patternKey: string;
+    canonicalName: string;
+    category: MainErrorCategory;
+    labelVi: string;
+    descriptionVi: string;
+    severity?: MasterErrorRecord["severity"];
+    gapType?: MasterErrorRecord["gapType"];
+    confidenceScore?: number;
+    userText: string;
+    correction: string;
+    contextSentence?: string;
+  }>,
+  opts: {
+    sourceModule: ErrorExample["sourceModule"];
+    responseLatencyMs?: number;
+    wasRetried?: boolean;
+    retrySucceeded?: boolean;
+    wasSelfCorrected?: boolean;
+  }
+): MasterErrorRecord[] {
+  let records = getMasterErrorBank();
+  for (const o of occurrences) {
+    records = ingestErrorOccurrence({
+      patternKey: o.patternKey,
+      canonicalName: o.canonicalName,
+      category: o.category,
+      labelVi: o.labelVi,
+      descriptionVi: o.descriptionVi,
+      userText: o.userText,
+      correction: o.correction,
+      contextSentence: o.contextSentence,
+      sourceModule: opts.sourceModule,
+      responseLatencyMs: opts.responseLatencyMs,
+      wasRetried: opts.wasRetried,
+      retrySucceeded: opts.retrySucceeded,
+      wasSelfCorrected: opts.wasSelfCorrected,
+      severity: o.severity,
+      confidenceScore: o.confidenceScore,
+    });
+  }
+  return records;
+}
+
 export function flagErrorAsFalsePositive(recordId: string): MasterErrorRecord[] {
   const records = getMasterErrorBank();
   const idx = records.findIndex((r) => r.id === recordId);

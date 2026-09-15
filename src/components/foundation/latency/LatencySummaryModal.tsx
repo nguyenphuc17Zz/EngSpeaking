@@ -157,12 +157,12 @@ export function LatencySummaryModal({
             <span>Luyện tiếp</span>
           </Button>
 
-          <Link href="/foundation" className="w-full sm:w-1/2">
+          <Link href="/" className="w-full sm:w-1/2">
             <Button
               size="lg"
               className="w-full h-11 rounded-2xl font-bold gap-2 shadow-md shadow-primary/20"
             >
-              <span>Về Foundation Hub</span>
+              <span>Về Trang chủ</span>
               <ArrowRight className="size-4" />
             </Button>
           </Link>

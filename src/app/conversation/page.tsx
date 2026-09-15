@@ -27,13 +27,45 @@ import {
   Shield,
   Heart,
   Settings2,
+  Compass,
+  ChevronDown,
+  Check,
+  Coffee,
+  HeartPulse,
 } from "lucide-react";
 import { useConversationStore } from "@/stores/conversation-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { toast } from "@/lib/toast";
 import type { ConversationMode, ConversationSettings } from "@/types/conversation-world";
+import type { ConversationSessionMode } from "@/types/conversation";
 import { cn } from "@/lib/utils";
 import { GlobalAiSelector } from "@/components/common/GlobalAiSelector";
+import { PRESET_TOPICS, getTopicDisplay, resolveTopicForPrompt } from "@/lib/foundation/sentence-builder/topics";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+
+const TOPIC_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  Sparkles,
+  Coffee,
+  Briefcase,
+  Plane,
+  MessageCircle,
+  Users,
+  GraduationCap,
+  HeartPulse,
+};
+
+const SESSION_MODES: Array<{ id: ConversationSessionMode; label: string; desc: string }> = [
+  { id: "endless", label: "Endless", desc: "Tự do" },
+  { id: "quick", label: "Quick 6", desc: "6 turns" },
+  { id: "standard", label: "Standard 12", desc: "12 turns" },
+  { id: "deep", label: "Deep 20", desc: "20 turns" },
+];
 
 interface ModeItem {
   id: ConversationMode;
@@ -193,6 +225,16 @@ export default function ConversationModesPage() {
   const [conflict, setConflict] = useState("low");
   const [aiPrompt, setAiPrompt] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isTopicModalOpen, setIsTopicModalOpen] = useState(false);
+  const [customInputVal, setCustomInputVal] = useState("");
+  const {
+    selectedTopicId,
+    customTopicText,
+    setSelectedTopic,
+    sessionMode,
+    setSessionMode,
+    initSession,
+  } = useConversationStore();
 
   const selectedMode = MODES.find((m) => m.id === selectedModeId) || MODES[0];
 
@@ -201,6 +243,7 @@ export default function ConversationModesPage() {
       ? MODES
       : MODES.filter((m) => m.category === activeCategory);
 
+  const targetCounts: Record<ConversationSessionMode, number> = { endless: 0, quick: 6, standard: 12, deep: 20 };
   const buildSettings = (modeOverride?: ConversationMode): ConversationSettings => ({
     mode: modeOverride || selectedModeId,
     difficulty: difficulty as ConversationSettings["difficulty"],
@@ -210,9 +253,12 @@ export default function ConversationModesPage() {
     surpriseLevel: surprise as ConversationSettings["surpriseLevel"],
     conflictIntensity: conflict as ConversationSettings["conflictIntensity"],
     pressure: "normal",
-    topic: "auto",
+    topic: resolveTopicForPrompt(selectedTopicId, customTopicText),
     setting: "auto",
     aiPrompt: aiPrompt || undefined,
+    sessionMode,
+    targetCount: targetCounts[sessionMode],
+    prepTimeSec: 2.5,
   });
 
   const handleLaunchWorld = async (modeOverride?: ConversationMode) => {
@@ -221,6 +267,17 @@ export default function ConversationModesPage() {
     toast.info("Đang tạo kịch bản thế giới AI...", "Thiết kế nhân vật và mục tiêu phản xạ.");
     try {
       const s = buildSettings(modeOverride);
+      // Inject Spoken Memory (aligned SB/VN-EN/Survival/Drill)
+      let recentErrors: string[] = [];
+      let pedagogicalConstraint: string | undefined;
+      try {
+        const { getCompactErrorContextPack, buildErrorBankPedagogicalPrompt } = await import(
+          "@/lib/foundation/error-bank/error-bank.service"
+        );
+        const pack = getCompactErrorContextPack();
+        recentErrors = pack.topWeaknesses.map((w) => w.patternKey || w.labelVi).filter(Boolean);
+        pedagogicalConstraint = buildErrorBankPedagogicalPrompt() || undefined;
+      } catch {}
       const provider =
         settings.conversation.provider === "browser" ? "gemini" : settings.conversation.provider;
       const model = settings.conversation.model;
@@ -228,7 +285,11 @@ export default function ConversationModesPage() {
       const res = await fetch("/api/conversation/scenario", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ settings: s, provider, model }),
+        body: JSON.stringify({
+          settings: { ...s, recentErrors, pedagogicalConstraint },
+          provider,
+          model,
+        }),
       });
       const data = await res.json();
       if (data.scenario) {
@@ -256,6 +317,7 @@ export default function ConversationModesPage() {
         );
         setTurns([]);
         setSummary(null);
+        initSession(sessionMode);
         if (typeof window !== "undefined")
           localStorage.setItem("conversation_world_id", data.worldId);
         toast.success("Kịch bản sẵn sàng!", `Vào vai đối thoại: ${data.scenario.character.role}`);
@@ -281,12 +343,12 @@ export default function ConversationModesPage() {
       <header className="h-13 border-b border-border/80 bg-card/80 backdrop-blur-md px-3 sm:px-4 flex items-center justify-between gap-3 shrink-0 z-10">
         {/* Left: Back + Title + Badge */}
         <div className="flex items-center gap-2 min-w-0">
-          <Link href="/foundation">
+          <Link href="/">
             <Button
               variant="ghost"
               size="sm"
               className="size-8 p-0 rounded-xl hover:bg-secondary border border-transparent hover:border-border/60"
-              title="Quay lại"
+              title="Quay lại Trang chủ"
             >
               <ArrowLeft className="size-4" />
             </Button>
@@ -453,6 +515,48 @@ export default function ConversationModesPage() {
               </div>
             )}
 
+            {/* Topic selector (PRESET_TOPICS chuẩn SB/VN-EN/Survival/Drill) */}
+            <div className="space-y-1.5">
+              <span className="text-xs font-serif font-bold text-foreground block">
+                Chủ đề grounding
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomInputVal(customTopicText || "");
+                  setIsTopicModalOpen(true);
+                }}
+                className="w-full flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/30 text-foreground text-xs font-mono transition-all cursor-pointer group"
+              >
+                <Compass className="size-3.5 text-primary shrink-0 group-hover:rotate-45 transition-transform" />
+                <span className="truncate font-medium flex-1 text-left">{getTopicDisplay(resolveTopicForPrompt(selectedTopicId, customTopicText)).label}</span>
+                <ChevronDown className="size-3.5 text-muted-foreground shrink-0" />
+              </button>
+            </div>
+
+            {/* Session mode (endless/quick/standard/deep) */}
+            <div className="space-y-1.5">
+              <span className="text-xs font-serif font-bold text-foreground block">
+                Chế độ phiên
+              </span>
+              <div className="grid grid-cols-4 gap-1.5">
+                {SESSION_MODES.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => setSessionMode(m.id)}
+                    title={m.desc}
+                    className={`text-[11px] font-semibold py-1.5 px-1 rounded-xl border transition-all ${
+                      sessionMode === m.id
+                        ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                        : "border-border/70 text-muted-foreground hover:text-foreground bg-background"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Quick Parameters */}
             <div className="space-y-2">
               <span className="text-xs font-serif font-bold text-foreground block">
@@ -555,6 +659,95 @@ export default function ConversationModesPage() {
           </div>
         </div>
       </main>
+
+      {/* Topic Selector Dialog (chuẩn SB/VN-EN/Survival/Drill) */}
+      <Dialog open={isTopicModalOpen} onOpenChange={setIsTopicModalOpen}>
+        <DialogContent className="sm:max-w-xl rounded-3xl p-5 md:p-6 bg-card border border-border/80 shadow-2xl space-y-4">
+          <DialogHeader className="space-y-1">
+            <DialogTitle className="text-base md:text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
+              <Compass className="size-5 text-primary" />
+              <span>Chọn chủ đề grounding hội thoại</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Chủ đề dùng để neo setting/goal của scenario — không thay mode nhập vai.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[300px] overflow-y-auto pr-1">
+            {PRESET_TOPICS.map((topic) => {
+              const IconComp = TOPIC_ICONS[topic.icon] || Sparkles;
+              const isSelected = selectedTopicId === topic.id;
+              return (
+                <button
+                  key={topic.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedTopic(topic.id, "");
+                    setCustomInputVal("");
+                    setIsTopicModalOpen(false);
+                    toast.success("Đã chọn chủ đề", topic.labelVi);
+                  }}
+                  className={`flex items-center gap-2.5 p-2.5 rounded-2xl border transition-all cursor-pointer text-left btn-spring ${
+                    isSelected
+                      ? "border-primary bg-primary/10 ring-1 ring-primary/40 shadow-xs"
+                      : "border-border/70 bg-card hover:border-primary/40 hover:bg-muted/40"
+                  }`}
+                >
+                  <div
+                    className={`size-7 rounded-xl flex items-center justify-center shrink-0 ${
+                      isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    <IconComp className="size-3.5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-xs font-bold text-foreground block truncate">{topic.labelVi}</span>
+                    <span className="text-[10px] text-muted-foreground font-mono block truncate">{topic.labelEn}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <div className="p-3 rounded-2xl border border-border/70 bg-muted/20 space-y-2">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Wand2 className="size-3.5 text-primary" />
+              <span className="font-semibold text-foreground">Hoặc nhập bối cảnh tùy chỉnh:</span>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={customInputVal}
+                onChange={(e) => setCustomInputVal(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && customInputVal.trim()) {
+                    setSelectedTopic("custom", customInputVal.trim());
+                    setIsTopicModalOpen(false);
+                    toast.success("Đã chọn chủ đề tùy chỉnh", customInputVal.trim());
+                  }
+                }}
+                placeholder="Ví dụ: Đàm phán lương IT, Check-in khách sạn Tokyo..."
+                className="flex-1 h-9 px-3 text-xs rounded-xl bg-background border border-border/80 focus:outline-hidden focus:border-primary focus:ring-1 focus:ring-primary text-foreground placeholder:text-muted-foreground/60 transition-all"
+              />
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  if (customInputVal.trim()) {
+                    setSelectedTopic("custom", customInputVal.trim());
+                    setIsTopicModalOpen(false);
+                    toast.success("Đã chọn chủ đề tùy chỉnh", customInputVal.trim());
+                  } else {
+                    toast.info("Vui lòng nhập chủ đề trước khi áp dụng");
+                  }
+                }}
+                className="h-9 px-3 rounded-xl text-xs gap-1 font-semibold"
+              >
+                <Check className="size-3" />
+                <span>Áp dụng</span>
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -2,9 +2,6 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   sessionRepo,
   foundationRepo,
-  evaluationRepo,
-  progressRepo,
-  curriculumRepo,
   telemetryRepo,
   healthRepo,
 } from "@/lib/db/sqlite-db";
@@ -89,71 +86,7 @@ describe("Unified SQLite Database", () => {
     expect(fsSess?.status).toBe("completed");
   });
 
-  it("saves and retrieves speaking evaluations", () => {
-    const evalId = `eval_${Date.now()}`;
-    const sessId = `sess_${Date.now()}`;
-    evaluationRepo.save({
-      id: evalId,
-      session_id: sessId,
-      session_type: "vn_to_en",
-      overall_practice_score: 88,
-      dimensions: { fluency: 85, pronunciation: 90 },
-      confidence: { overall: 0.9 },
-      completeness: "sufficient",
-      evaluation: { feedback: "Good job!" },
-      snapshot: { metrics: {} },
-      evaluator_version: "4.0.0",
-      schema_version: 1,
-      generated_at: new Date().toISOString(),
-    });
-
-    const bySess = evaluationRepo.getBySession(sessId);
-    expect(bySess).not.toBeNull();
-    expect(bySess.overall_practice_score).toBe(88);
-    expect(bySess.dimensions.pronunciation).toBe(90);
-  });
-
-  it("handles progress analytics and milestones", () => {
-    const learnerId = `learner_${Date.now()}`;
-    progressRepo.recordSkillHistory({
-      learner_state_id: learnerId,
-      skill_id: "fluency",
-      mastery: 0.75,
-      confidence: 0.8,
-    });
-
-    const history = progressRepo.getSkillHistory(learnerId, "fluency");
-    expect(history.length).toBe(1);
-    expect(history[0].mastery).toBe(0.75);
-
-    progressRepo.recordMilestone({
-      learner_state_id: learnerId,
-      type: "first_perfect_score",
-      title: "First 90+ Score",
-      description: "Achieved over 90 on fluency",
-      significance: "major",
-    });
-
-    const milestones = progressRepo.getMilestones(learnerId);
-    expect(milestones.length).toBe(1);
-    expect(milestones[0].title).toBe("First 90+ Score");
-  });
-
-  it("saves and retrieves curriculum plans and telemetry", () => {
-    const planId = `plan_${Date.now()}`;
-    curriculumRepo.savePlan({
-      id: planId,
-      learner_state_id: "default_learner",
-      title: "Focus on Fluency",
-      objective: "Reduce speaking latency",
-      estimated_duration_minutes: 15,
-      primary_skill: "fluency",
-      expected_outcome: "Drop latency below 1.5s",
-    });
-
-    const retrievedPlan = curriculumRepo.getPlan(planId);
-    expect(retrievedPlan?.title).toBe("Focus on Fluency");
-
+  it("records and queries telemetry", () => {
     telemetryRepo.recordAiRequest({
       request_id: `req_${Date.now()}`,
       task: "scenario_generation",

@@ -452,12 +452,12 @@ export default function VocabularyContextPage() {
       <header className="h-13 border-b border-border/60 px-4 sm:px-6 flex items-center justify-between bg-card/60 backdrop-blur-md shrink-0 gap-3">
         {/* Left: Back + Title */}
         <div className="flex items-center gap-3 min-w-0">
-          <Link href="/foundation">
+          <Link href="/">
             <Button
               variant="ghost"
               size="sm"
               className="size-8 p-0 rounded-full hover:bg-muted shrink-0"
-              title="Thoát Studio (Esc)"
+              title="Thoát (Esc)"
             >
               <ArrowLeft className="size-4" />
             </Button>

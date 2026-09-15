@@ -783,8 +783,8 @@ export default function SessionPage() {
       <header className="h-13 border-b border-border/80 bg-card/80 backdrop-blur-md px-3 sm:px-4 flex items-center justify-between gap-2.5 shrink-0 z-10">
         {/* Left: Back + Icon + Title + Mode Switcher */}
         <div className="flex items-center gap-2 min-w-0">
-          <Link href="/foundation">
-            <Button variant="ghost" size="sm" className="size-7 p-0 rounded-xl" title="Quay lại">
+          <Link href="/">
+            <Button variant="ghost" size="sm" className="size-7 p-0 rounded-xl" title="Quay lại Trang chủ">
               <ArrowLeft className="size-3.5" />
             </Button>
           </Link>

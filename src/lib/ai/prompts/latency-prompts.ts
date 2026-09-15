@@ -32,12 +32,14 @@ RULES:
 export function buildLatencyTaskUserPrompt(params: {
   drillMode: "open_response" | "rapid_retrieval" | "timed_countdown" | "baseline_test";
   category?: string;
+  topic?: string;
   targetDifficulty: number;
   targetLatencyMs: number;
   recentPrompts?: string[];
 }): string {
   const filter = params.recentPrompts?.length ? ` Avoid repeating: ${params.recentPrompts.slice(-5).join(" | ")}.` : "";
-  return `Generate task for mode="${params.drillMode}", category="${params.category || "daily_conversation"}", diff=${params.targetDifficulty}/10, targetMs=${params.targetLatencyMs}.${filter} Output JSON only.`;
+  const topicInstruction = params.topic ? ` Topic context: "${params.topic}". Tailor the question/prompt, vocabulary, and sample response directly to this topic context.` : "";
+  return `Generate task for mode="${params.drillMode}", category="${params.category || "daily_conversation"}", diff=${params.targetDifficulty}/10, targetMs=${params.targetLatencyMs}.${topicInstruction}${filter} Output JSON only.`;
 }
 
 export const LATENCY_EVALUATOR_SYSTEM = `You are the Expert Response Latency Evaluator for Spoken Retrieval.

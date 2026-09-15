@@ -5,6 +5,7 @@ import { generateTextWithRouting } from "@/lib/ai";
 import { latencyTaskSchema } from "@/lib/validation/latency-schemas";
 import { LATENCY_GENERATOR_SYSTEM, buildLatencyTaskUserPrompt } from "@/lib/ai/prompts/latency-prompts";
 import { sampleBankTask, saveBankTask, recordUserExposure } from "@/lib/foundation/services/content-bank.service";
+import { resolveTopicForPrompt } from "@/lib/foundation/sentence-builder/topics";
 import type { LatencyTask, LatencyDrillMode } from "@/types/latency-training";
 
 export interface GenerateLatencyTaskOptions {
@@ -13,6 +14,7 @@ export interface GenerateLatencyTaskOptions {
   targetDifficulty?: number;
   targetLatencyMs?: number;
   recentPrompts?: string[];
+  topic?: string;
   provider?: string;
   model?: string;
   forceSource?: "bank" | "ai" | "auto";
@@ -83,9 +85,10 @@ export async function generateLatencyTask(
   const targetDifficulty = options.targetDifficulty || 3;
   const provider = options.provider || "gemini";
   const model = options.model || "auto";
+  const effectiveTopic = resolveTopicForPrompt(options.topic);
 
   if (provider === "mock") {
-    return getTestMockTask({ ...options, drillMode, targetLatencyMs, targetDifficulty });
+    return getTestMockTask({ ...options, drillMode, targetLatencyMs, targetDifficulty, topic: effectiveTopic });
   }
 
   // 1. Check Content Bank (Hybrid 70/30 Policy: 70% chance to fetch from Bank, skipped if forceSource === 'ai')
@@ -95,12 +98,13 @@ export async function generateLatencyTask(
       level: drillMode,
       difficulty: targetDifficulty,
       category: options.category,
+      topic: effectiveTopic,
       forceSource: options.forceSource,
     });
 
     if (bankSample) {
       recordUserExposure(bankSample.contentId, "latency").catch(() => {});
-      return { ...bankSample.task, source: "bank" };
+      return { ...bankSample.task, source: "bank", topic: effectiveTopic || bankSample.task.topic };
     }
   }
 
@@ -110,6 +114,7 @@ export async function generateLatencyTask(
   const userPrompt = buildLatencyTaskUserPrompt({
     drillMode,
     category: options.category,
+    topic: effectiveTopic,
     targetDifficulty,
     targetLatencyMs,
     recentPrompts: options.recentPrompts,
@@ -184,6 +189,9 @@ export async function generateLatencyTask(
       }
 
       parsed.source = "ai";
+      if (effectiveTopic) {
+        parsed.topic = effectiveTopic;
+      }
       const validated = latencyTaskSchema.safeParse(parsed);
       if (!validated.success) {
         if (process.env.NODE_ENV !== "production") {
@@ -223,11 +231,12 @@ export async function generateLatencyTask(
         module: "latency",
         level: drillMode,
         difficulty: targetDifficulty,
+        topic: effectiveTopic,
         forceSource: "bank",
       });
       if (fallbackBank) {
         recordUserExposure(fallbackBank.contentId, "latency").catch(() => {});
-        return { ...fallbackBank.task, source: "bank" };
+        return { ...fallbackBank.task, source: "bank", topic: effectiveTopic || fallbackBank.task.topic };
       }
     }
 
@@ -242,7 +251,7 @@ export async function generateLatencyTask(
     category: task.category || "daily_conversation",
     level: task.drillMode,
     difficulty: task.difficulty,
-    topic: "general",
+    topic: effectiveTopic || "general",
     payload: task,
     hashSourceText: task.promptText,
   })

@@ -73,6 +73,28 @@ export const conversationSummarySchema = z.object({
   characterState: characterStateSchema,
 });
 
+export const turnSayItBetterSchema = z.object({
+  professional: z.string(),
+  casual: z.string(),
+  idiomatic: z.string(),
+});
+
+export const turnEvaluatedErrorSchema = z.object({
+  type: z.enum(["grammar", "vocabulary", "pronunciation", "fluency", "omission", "strategy"]),
+  severity: z.enum(["minor", "major"]),
+  userText: z.string(),
+  correction: z.string(),
+  explanation: z.string(),
+  patternKey: z.string().optional(),
+});
+
+export const turnHesitationSchema = z.object({
+  wpm: z.number(),
+  durationMs: z.number(),
+  hesitationLevel: z.enum(["smooth", "moderate", "hesitant"]),
+  pauseEstimatedSec: z.number(),
+});
+
 export const conversationAIResponseSchema = z.object({
   responseText: z.string().min(1),
   stateUpdate: z.object({
@@ -99,12 +121,40 @@ export const conversationAIResponseSchema = z.object({
     coachTipVi: z.string().optional(),
     speechRateWpm: z.number().optional(),
     lexicalDiversityTtr: z.number().optional(),
+    meaningScore: z.number().min(0).max(100).optional(),
+    fluencyScore: z.number().min(0).max(100).optional(),
+    retrievalScore: z.number().min(0).max(100).optional(),
+    independenceScore: z.number().min(0).max(100).optional().default(100),
+    errors: z.array(turnEvaluatedErrorSchema).optional().default([]),
+    praisePoints: z.array(z.string()).optional().default([]),
+    actionableFeedback: z.string().optional().default(""),
+    sayItBetter: turnSayItBetterSchema.optional(),
+    naturalAlternatives: z
+      .array(z.object({ expression: z.string(), tone: z.string(), explanationVi: z.string().optional() }))
+      .optional()
+      .default([]),
+    isSayItBetterNeeded: z.boolean().optional().default(false),
+    hintTierUsed: z.number().min(0).max(4).optional().default(0),
+    attemptNumber: z.number().min(1).optional().default(1),
+    evaluationSource: z.enum(["fast_pass", "ai_llm", "deterministic"]).optional().default("ai_llm"),
+    hesitationMetrics: turnHesitationSchema.optional(),
+    isFastPass: z.boolean().optional().default(false),
   }).optional(),
   hints: z.object({
-    tier1Keywords: z.array(z.object({ term: z.string(), meaning: z.string() })).optional(),
-    tier2Starters: z.array(z.object({ starter: z.string(), meaning: z.string() })).optional(),
-    tier3FullAnswer: z.object({ en: z.string(), vi: z.string() }).optional(),
+    tier1Keywords: z.array(z.object({ term: z.string(), meaning: z.string(), penaltyWeight: z.number().min(0).max(1).optional() })).optional(),
+    tier2Starters: z.array(z.object({ starter: z.string(), meaning: z.string(), penaltyWeight: z.number().min(0).max(1).optional() })).optional(),
+    tier3FullAnswer: z.object({ en: z.string(), vi: z.string(), penaltyWeight: z.number().min(0).max(1).optional() }).optional(),
   }).optional(),
+});
+
+export const conversationTurnRequestSchema = z.object({
+  worldId: z.string().optional(),
+  transcript: z.string().min(1),
+  speechDurationMs: z.number().optional().default(2500),
+  hintTierUsed: z.number().min(0).max(4).optional().default(0),
+  attemptNumber: z.number().min(1).optional().default(1),
+  recentErrors: z.array(z.string()).optional().default([]),
+  pedagogicalConstraint: z.string().optional(),
 });
 
 export const conversationSettingsSchema = z.object({
@@ -120,4 +170,9 @@ export const conversationSettingsSchema = z.object({
   setting: z.string().optional(),
   surpriseMe: z.boolean().optional(),
   aiPrompt: z.string().optional(),
+  sessionMode: z.enum(["endless", "quick", "standard", "deep"]).optional().default("endless"),
+  targetCount: z.number().int().min(0).max(50).optional().default(0),
+  prepTimeSec: z.number().min(1).max(5).optional().default(2.5),
+  recentErrors: z.array(z.string()).optional().default([]),
+  pedagogicalConstraint: z.string().optional(),
 });

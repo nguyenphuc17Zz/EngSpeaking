@@ -75,6 +75,7 @@ export function buildVNToENTaskPrompt(params: {
   recentErrors?: string[];
   recentPrompts?: string[];
   topic?: string;
+  pedagogicalConstraint?: string;
 }): string {
   const modeInstruction =
     params.retrievalMode === "rapid_fire"
@@ -92,6 +93,7 @@ export function buildVNToENTaskPrompt(params: {
 - Context / Topic Situation: ${params.topic || "work_and_life"}
 - Anchor Instruction: Deeply ground the promptVi in this exact topic situation. If learner has recent errors, naturally embed that target into authentic Vietnamese situational dialogue without word-by-word translation.
 - Anti-Repetition Exclusion (DO NOT use or closely match): ${JSON.stringify(params.recentPrompts?.slice(-10) || [])}
+${params.pedagogicalConstraint ? `\n${params.pedagogicalConstraint}` : ""}
 
 Output pure JSON matching the schema.`;
 }

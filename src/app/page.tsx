@@ -4,12 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import {
   Mic,
-  GraduationCap,
-  Layers,
   MessageSquareText,
-  Activity,
   Zap,
-  TrendingUp,
   Settings,
   Flame,
   Clock,
@@ -23,14 +19,6 @@ import {
 export default function Home() {
   const modules = [
     {
-      title: "Lộ trình AI cá nhân",
-      desc: "Kế hoạch 10 phút tự động theo điểm nghẽn của bạn hôm nay",
-      href: "/curriculum",
-      icon: GraduationCap,
-      badge: "Đề xuất",
-      btnText: "Học ngay",
-    },
-    {
       title: "Phòng luyện nói Live",
       desc: "Vòng lặp khẩu ngữ tự do thời gian thực cùng gia sư AI",
       href: "/session",
@@ -39,12 +27,12 @@ export default function Home() {
       btnText: "Bắt đầu nói",
     },
     {
-      title: "Nền tảng & Speaking Drills",
-      desc: "22 bài tập: Từ vựng → Chunk → Cụm từ → Khẩu ngữ hoàn chỉnh",
-      href: "/foundation",
-      icon: Layers,
-      badge: "22 Drills",
-      btnText: "Luyện Drill",
+      title: "VN → EN Speaking",
+      desc: "Truy xuất trực tiếp từ ý niệm tiếng Việt sang tiếng Anh phản xạ",
+      href: "/foundation/vn-to-en",
+      icon: Target,
+      badge: "Phản xạ nhanh",
+      btnText: "Luyện ngay",
     },
     {
       title: "Hội thoại AI nhập vai",
@@ -54,29 +42,14 @@ export default function Home() {
       badge: "14 Scenarios",
       btnText: "Chọn kịch bản",
     },
-    {
-      title: "Chẩn đoán phản xạ 8 chiều",
-      desc: "Tìm điểm nghẽn truy xuất từ, phát âm và lỗi lặp thói quen",
-      href: "/diagnostics",
-      icon: Activity,
-      badge: "Chẩn đoán",
-      btnText: "Xem phân tích",
-    },
+
     {
       title: "Thử thách nâng cao",
-      desc: "25 module luyện phản xạ dưới áp lực, phản biện & đàm phán",
+      desc: "3 track (Phản xạ · Lập luận · Diễn thuyết) × 3 level L1-L3 liên thông Foundation",
       href: "/advanced",
       icon: Zap,
-      badge: "25 Modules",
+      badge: "3 Tracks",
       btnText: "Vào thử thách",
-    },
-    {
-      title: "Tiến độ & Cột mốc",
-      desc: "Biểu đồ xu hướng, báo cáo 7/30/90 ngày và Speaking Journey",
-      href: "/progress",
-      icon: TrendingUp,
-      badge: "Hành trình",
-      btnText: "Xem tiến độ",
     },
     {
       title: "Cài đặt & Âm thanh",
@@ -107,16 +80,16 @@ export default function Home() {
           </div>
 
           <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full md:w-auto">
-            <Link href="/curriculum" className="w-full sm:w-auto">
+            <Link href="/session" className="w-full sm:w-auto">
               <Button size="lg" className="w-full gap-2 font-semibold h-11 px-6 rounded-xl btn-spring shadow-xs">
-                <span>Bắt đầu 10' ngay</span>
+                <span>Bắt đầu luyện nói ngay</span>
                 <ArrowRight className="size-4" />
               </Button>
             </Link>
-            <Link href="/session" className="w-full sm:w-auto">
+            <Link href="/foundation/sentence-builder" className="w-full sm:w-auto">
               <Button size="lg" variant="outline" className="w-full gap-2 h-11 px-5 rounded-xl border-border/80 hover:bg-secondary/70 btn-spring">
-                <Mic className="size-4 text-primary" />
-                <span>Phòng luyện Live</span>
+                <Sparkles className="size-4 text-primary" />
+                <span>Sentence Builder</span>
               </Button>
             </Link>
           </div>
@@ -212,7 +185,7 @@ export default function Home() {
         </Card>
       </div>
 
-      {/* 8 Study Disciplines Grid (Warm Editorial Cards) */}
+      {/* Study Disciplines Grid (Warm Editorial Cards) */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="space-y-1">
@@ -220,11 +193,11 @@ export default function Home() {
               Chuyên đề Luyện tập & Phản xạ
             </h2>
             <p className="text-xs text-muted-foreground">
-              8 phương pháp khẩu ngữ chuyên sâu nâng tầm phản xạ tự nhiên
+              Các phương pháp khẩu ngữ chuyên sâu nâng tầm phản xạ tự nhiên
             </p>
           </div>
           <span className="text-xs font-mono text-muted-foreground hidden sm:inline-block">
-            8 Disciplines
+            5 Disciplines
           </span>
         </div>
 

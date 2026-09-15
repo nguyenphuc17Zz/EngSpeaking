@@ -108,7 +108,7 @@ export function LatencyPromptCard({
               <span>{(targetMs / 1000).toFixed(1)}s</span>
             </Badge>
             <Badge variant="secondary" className="text-[10px] font-mono capitalize">
-              {task.category.replace(/_/g, " ")}
+              {(task.topic || task.category).replace(/_/g, " ")}
             </Badge>
 
             {task.source === "ai" ? (
@@ -159,7 +159,7 @@ export function LatencyPromptCard({
               </Button>
             )}
             <span className="text-[10px] font-mono text-muted-foreground">
-              #{currentTaskIndex + 1}/{totalTasks}
+              {totalTasks > 0 ? `#${currentTaskIndex + 1}/${totalTasks}` : `Câu #${currentTaskIndex + 1}`}
             </span>
           </div>
         </div>

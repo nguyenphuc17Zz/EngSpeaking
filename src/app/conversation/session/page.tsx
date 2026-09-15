@@ -5,68 +5,94 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import {
-  Mic,
-  Square,
   Play,
   Volume2,
-  Keyboard,
   ArrowLeft,
   CheckCircle2,
   Heart,
   Shield,
-  Send,
-  Sparkles,
   Users,
   Target,
   MessageSquare,
   Radio,
   LifeBuoy,
-  Zap,
   Flame,
   Trophy,
 } from "lucide-react";
 import { useConversationStore } from "@/stores/conversation-store";
 import { useSettingsStore } from "@/stores/settings-store";
-import { useAudioRecorder } from "@/hooks/useAudioRecorder";
-import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import { useUnifiedSTT } from "@/hooks/useUnifiedSTT";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
-import { transcribeViaServer } from "@/lib/stt/service";
 import { sanitizeTextForTTS } from "@/lib/tts/browser";
 import { VoiceOrb, type VoiceOrbStatus } from "@/components/voice/VoiceOrb";
 import { StatusBadge } from "@/components/voice/StatusBadge";
 import { TurnList } from "@/components/conversation/TurnList";
+import { TurnFeedbackCard } from "@/components/conversation/TurnFeedbackCard";
 import { QuickHintsDrawer, type DynamicScaffoldingHints } from "@/components/voice/QuickHintsDrawer";
 import { SessionCompletedModal } from "@/components/voice/SessionCompletedModal";
+import { SpeakingController } from "@/components/foundation/sentence-builder/SpeakingController";
 import { GlobalAiSelector } from "@/components/common/GlobalAiSelector";
 import { soundEffects } from "@/lib/audio/audio-chimes";
 import { toast } from "@/lib/toast";
 import type { ConversationTurn, TurnPedagogy, SessionStatus } from "@/types/conversation";
 import type { PragmaticSpeechAct, SpeakingObjective } from "@/types/conversation-world";
+import { getTopicDisplay } from "@/lib/foundation/sentence-builder/topics";
 import {
   calculateSpeechRateWpm,
   calculateTypeTokenRatio,
   SmartVadStateController,
 } from "@/lib/audio/smart-vad.engine";
+import { independenceFromTier } from "@/lib/conversation/turn-fast-pass.service";
 import { cn } from "@/lib/utils";
 
 export default function ConversationSessionPage() {
   const router = useRouter();
-  const { world, turns, isThinking, setThinking, addTurn, setWorld } = useConversationStore();
+  const {
+    world,
+    turns,
+    isThinking,
+    setThinking,
+    addTurn,
+    setWorld,
+    sessionConfig,
+    sessionStartedAt,
+    isSessionCompleted,
+    sessionSummary,
+    sessionHistory,
+    selectedTopicId,
+    hintTier,
+    setHintTier,
+    attemptCount,
+    incrementAttempt,
+    autoStartMic,
+    setAutoStartMic,
+    prepCountdown,
+    setPrepCountdown,
+    isCountingDown,
+    setIsCountingDown,
+    adaptiveState,
+    skillMastery,
+    setIsEvaluating,
+    finishSessionManually,
+  } = useConversationStore();
   const settings = useSettingsStore();
-  const recorder = useAudioRecorder();
-  const speech = useSpeechRecognition("en-US");
+  const unifiedSTT = useUnifiedSTT({ lang: "en-US" });
+  const unifiedSTTRef = useRef(unifiedSTT);
+  unifiedSTTRef.current = unifiedSTT;
   const tts = useBrowserTTS();
 
   // ─── Interaction & UI State ───────────────────────────────────────────
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>("idle");
   const [isProcessing, setIsProcessing] = useState(false);
   const [textInput, setTextInput] = useState("");
-  const [showKeyboardInput, setShowKeyboardInput] = useState(false);
   const [showCompletedModal, setShowCompletedModal] = useState(false);
   const [worldId, setWorldId] = useState<string | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
+  const [pendingSpokenText, setPendingSpokenText] = useState<string | null>(null);
+  const [pendingDurationMs, setPendingDurationMs] = useState<number>(2500);
+  const [recordingDurationMs, setRecordingDurationMs] = useState(0);
+  const [lastTurnFeedback, setLastTurnFeedback] = useState<ConversationTurn | null>(null);
 
   // ─── Dynamic Hints & Timing Tracker ───────────────────────────────────
   const [dynamicHints, setDynamicHints] = useState<DynamicScaffoldingHints | null>(null);
@@ -75,7 +101,8 @@ export default function ConversationSessionPage() {
   const [speechStartMs, setSpeechStartMs] = useState<number>(0);
 
   // ─── Affective & Pragmatic Live State ──────────────────────────────────
-  const [handsFreeMode, setHandsFreeMode] = useState(false);
+  const handsFreeMode = autoStartMic;
+  const setHandsFreeMode = setAutoStartMic;
   const [activePragmaticAct, setActivePragmaticAct] = useState<PragmaticSpeechAct | null>(null);
   const [activePragmaticFeedback, setActivePragmaticFeedback] = useState<string | null>(null);
   const [unlockedObjectiveAlert, setUnlockedObjectiveAlert] = useState<SpeakingObjective | null>(null);
@@ -116,26 +143,29 @@ export default function ConversationSessionPage() {
 
 
 
-  // ─── Speaking Controls ────────────────────────────────────────────────
+  // ─── Speaking Controls (chuẩn SB/VN-EN/Survival/Drill: useUnifiedSTT + pending review) ──
+  const prepTimerRef = useRef<NodeJS.Timeout | null>(null);
   const handleStartSpeaking = useCallback(async () => {
+    if (prepTimerRef.current) {
+      clearInterval(prepTimerRef.current);
+      prepTimerRef.current = null;
+    }
+    setIsCountingDown(false);
+    setPrepCountdown(null);
+    setPendingSpokenText(null);
     soundEffects.playMicStart();
-    speech.resetTranscript();
+    unifiedSTTRef.current.resetTranscript();
     setSpeechStartMs(Date.now());
     setSessionStatus("recording");
     setIsLifelineVisible(false);
 
-    const sttProvider = settings.stt?.provider || "browser";
-
     try {
-      await recorder.start();
-      if (sttProvider === "browser") {
-        speech.startListening();
-      }
+      await unifiedSTTRef.current.startListening();
     } catch {
       toast.error("Lỗi Microphone", "Vui lòng cho phép truy cập micro.");
       setSessionStatus("listening");
     }
-  }, [recorder, speech, settings.stt?.provider]);
+  }, [setIsCountingDown, setPrepCountdown]);
 
   // ─── Barge-in Interruption Handler (<50ms audio mute) ────────────────
   const handleBargeIn = useCallback(() => {
@@ -146,7 +176,7 @@ export default function ConversationSessionPage() {
     handleStartSpeaking();
   }, [tts, handleStartSpeaking]);
 
-  // ─── Audio Synthesis Playback with Hands-Free Auto-Mic ────────────────
+  // ─── Audio Synthesis Playback with Hands-Free Auto-Mic (autoStartMic chuẩn) ──
   const speak = useCallback(
     async (text: string) => {
       tts.stop();
@@ -161,7 +191,7 @@ export default function ConversationSessionPage() {
         setSessionStatus("listening");
         setAiFinishedSpeechTime(Date.now());
 
-        if (handsFreeMode) {
+        if (autoStartMic) {
           setTimeout(() => {
             if (!isProcessing) {
               handleStartSpeaking();
@@ -170,198 +200,280 @@ export default function ConversationSessionPage() {
         }
       }
     },
-    [tts, handsFreeMode, isProcessing, handleStartSpeaking]
+    [tts, autoStartMic, isProcessing, handleStartSpeaking]
+  );
+
+  // Stop mic → pending review (không gửi ngay, chuẩn SB/VN-EN/Survival/Drill)
+  const handleStopRecord = useCallback(async () => {
+    if (!unifiedSTTRef.current.isListening) return;
+    soundEffects.playMicStop();
+    const durationMs = Math.max(800, Date.now() - speechStartMs);
+    try {
+      const { text: spokenText, blob } = await unifiedSTTRef.current.stopListening();
+      if (blob) {
+        (handleStopRecord as unknown as { _lastBlob?: Blob })._lastBlob = blob;
+      }
+      if (!spokenText) {
+        toast.info("Chưa nghe rõ", "Vui lòng nói lại hoặc gõ văn bản.");
+        return;
+      }
+      setPendingSpokenText(spokenText);
+      setPendingDurationMs(durationMs);
+    } catch {
+      toast.error("Lỗi xử lý", "Không thể dừng micro.");
+    }
+  }, [speechStartMs]);
+
+  const executeTurn = useCallback(
+    async (spokenText: string, speechDurationMs: number) => {
+      const trimmed = spokenText.trim();
+      if (!trimmed) {
+        toast.info("Chưa nghe rõ", "Vui lòng nói lại hoặc gõ văn bản.");
+        return;
+      }
+      setSessionStatus("thinking");
+      setIsProcessing(true);
+      setThinking(true);
+      setIsEvaluating(true);
+      setIsLifelineVisible(false);
+
+      try {
+        // Measured latency & speech metrics
+        const durationMs = speechDurationMs || 3500;
+        const latencyMs = Math.max(200, speechStartMs - aiFinishedSpeechTime);
+        const turnWpm = calculateSpeechRateWpm(trimmed, durationMs);
+        const turnTtr = calculateTypeTokenRatio(trimmed);
+
+        // Create audio URL from recorded blob for self-voice review
+        let audioBlobUrl: string | undefined = undefined;
+        const lastBlob = (handleStopRecord as unknown as { _lastBlob?: Blob })._lastBlob;
+        if (lastBlob) {
+          audioBlobUrl = URL.createObjectURL(lastBlob);
+          delete (handleStopRecord as unknown as { _lastBlob?: Blob })._lastBlob;
+        }
+
+        const userTurnId = `ct_user_${Date.now()}`;
+        const userTurnPedagogy: TurnPedagogy = {
+          latencyMs,
+          audioBlobUrl,
+          speechRateWpm: turnWpm,
+          lexicalDiversityTtr: turnTtr,
+          hintTierUsed: hintTier,
+          attemptNumber: attemptCount,
+        };
+        const userTurn: ConversationTurn = {
+          id: userTurnId,
+          role: "user",
+          text: trimmed,
+          timestamp: new Date().toISOString(),
+          durationMs,
+          pedagogy: userTurnPedagogy,
+        };
+
+        addTurn(userTurn);
+        setTextInput("");
+        setPendingSpokenText(null);
+
+        const provider =
+          settings.conversation.provider === "browser"
+            ? "gemini"
+            : settings.conversation.provider;
+        const model = settings.conversation.model;
+
+        const recentTurnsPayload = [...turns, userTurn].map((t) => ({
+          role: t.role,
+          text: t.text,
+        }));
+
+        // Inject Spoken Memory (aligned SB/VN-EN/Survival/Drill)
+        let pedagogicalConstraint: string | undefined;
+        try {
+          const { buildErrorBankPedagogicalPrompt } = await import(
+            "@/lib/foundation/error-bank/error-bank.service"
+          );
+          pedagogicalConstraint = buildErrorBankPedagogicalPrompt() || undefined;
+        } catch {}
+
+        const res = await fetch("/api/conversation/turn", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            worldId,
+            worldState: world,
+            transcript: trimmed,
+            recentTurns: recentTurnsPayload,
+            provider,
+            model,
+            durationMs,
+            timeToFirstWordMs: latencyMs,
+            speechDurationMs: durationMs,
+            hintTierUsed: hintTier,
+            attemptNumber: attemptCount,
+            pedagogicalConstraint,
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error?.message || "Không nhận được phản hồi từ AI.");
+        }
+
+        const aiResponse = data.response;
+        const aiReplyText = aiResponse?.responseText || "Could you tell me more about that?";
+        const ped = aiResponse?.pedagogy;
+
+        // Update pragmatic act & feedback
+        if (aiResponse?.pragmaticAct) {
+          setActivePragmaticAct(aiResponse.pragmaticAct);
+          setActivePragmaticFeedback(aiResponse.pragmaticFeedbackVi || null);
+        }
+
+        // Check if a hidden objective was unlocked
+        if (aiResponse?.unlockedObjective) {
+          setUnlockedObjectiveAlert(aiResponse.unlockedObjective);
+          soundEffects.playSuccessFanfare();
+          toast.success("🎉 MỤC TIÊU ẨN ĐÃ MỞ KHÓA!", aiResponse.unlockedObjective.description);
+        }
+
+        // Update user turn with full multi-dimensional pedagogical feedback
+        userTurn.pedagogy = {
+          ...userTurn.pedagogy,
+          grammarIssue: ped?.grammarIssue || null,
+          grammarFix: ped?.grammarFix || null,
+          nativeReformulation: ped?.nativeReformulation || trimmed,
+          turnScore: ped?.turnScore || 85,
+          coachTipVi: ped?.coachTipVi,
+          speechRateWpm: turnWpm,
+          lexicalDiversityTtr: turnTtr,
+          meaningScore: ped?.meaningScore,
+          fluencyScore: ped?.fluencyScore,
+          retrievalScore: ped?.retrievalScore,
+          independenceScore: ped?.independenceScore ?? independenceFromTier(hintTier),
+          errors: ped?.errors || [],
+          praisePoints: ped?.praisePoints || [],
+          actionableFeedback: ped?.actionableFeedback,
+          sayItBetter: ped?.sayItBetter,
+          naturalAlternatives: ped?.naturalAlternatives || [],
+          isSayItBetterNeeded: ped?.isSayItBetterNeeded,
+          hintTierUsed: hintTier,
+          attemptNumber: attemptCount,
+          evaluationSource: ped?.evaluationSource || "ai_llm",
+          hesitationMetrics: ped?.hesitationMetrics,
+          isFastPass: ped?.isFastPass,
+        };
+        setLastTurnFeedback({ ...userTurn });
+
+        // Record statistics
+        setSessionStats((prev) => ({
+          ...prev,
+          scores: [...prev.scores, ped?.turnScore || 85],
+          latencies: [...prev.latencies, latencyMs],
+          wpms: [...prev.wpms, turnWpm],
+          ttrs: [...prev.ttrs, turnTtr],
+          errorsCount: prev.errorsCount + (ped?.errors?.length ?? (ped?.grammarIssue ? 1 : 0)),
+        }));
+
+        // Update world state if returned
+        if (data.nextWorldState) {
+          setWorld(data.nextWorldState);
+        }
+
+        // Update dynamic hints for the AI character's next question
+        if (aiResponse?.hints) {
+          setDynamicHints(aiResponse.hints);
+        }
+
+        // Add AI assistant turn
+        soundEffects.playAIReady();
+        addTurn({
+          id: `ct_ai_${Date.now()}`,
+          role: "assistant",
+          text: aiReplyText,
+          timestamp: new Date().toISOString(),
+          provider,
+          model,
+        });
+
+        // Session target check (aligned SB/VN/Survival/Drill)
+        const userCount = turns.filter((t) => t.role === "user").length + 1;
+        if (
+          sessionConfig.mode !== "endless" &&
+          sessionConfig.targetCount > 0 &&
+          userCount >= sessionConfig.targetCount
+        ) {
+          finishSessionManually();
+          setShowCompletedModal(true);
+        }
+
+        await speak(aiReplyText);
+      } catch (err: unknown) {
+        toast.error("Lỗi đối thoại", err instanceof Error ? err.message : String(err));
+        setSessionStatus("listening");
+      } finally {
+        setIsProcessing(false);
+        setThinking(false);
+        setIsEvaluating(false);
+        setPendingSpokenText(null);
+      }
+    },
+    [
+      speechStartMs,
+      aiFinishedSpeechTime,
+      addTurn,
+      turns,
+      settings,
+      world,
+      worldId,
+      setWorld,
+      speak,
+      setThinking,
+      hintTier,
+      attemptCount,
+      sessionConfig,
+      finishSessionManually,
+      setIsEvaluating,
+    ]
   );
 
   const handleStopAndProcess = useCallback(async () => {
-    soundEffects.playMicStop();
-    // 1. ALWAYS unconditionally stop Web Speech API first
-    speech.stopListening();
+    await handleStopRecord();
+  }, [handleStopRecord]);
 
-    const sttProvider = settings.stt?.provider || "browser";
-    setSessionStatus("thinking");
-    setIsProcessing(true);
-    setThinking(true);
-    setIsLifelineVisible(false);
+  const handleConfirmSubmit = useCallback(async () => {
+    if (!pendingSpokenText) return;
+    await executeTurn(pendingSpokenText, pendingDurationMs);
+  }, [pendingSpokenText, pendingDurationMs, executeTurn]);
 
-    try {
-      const recording = await recorder.stop();
-      let spokenText = "";
+  const handleReRecord = useCallback(() => {
+    setPendingSpokenText(null);
+    handleStartSpeaking();
+  }, [handleStartSpeaking]);
 
-      if (sttProvider !== "browser" && recording?.blob) {
-        try {
-          const res = await transcribeViaServer(recording.blob, {
-            provider: sttProvider === "auto" ? "whisper-local" : sttProvider,
-            model: settings.stt?.model || "auto",
-            language: "en-US",
-          });
-          spokenText = res.text.trim();
-        } catch {
-          spokenText = speech.fullTranscript.trim() || speech.transcript.trim();
-        }
-      } else {
-        await new Promise((r) => setTimeout(r, 250));
-        spokenText =
-          speech.fullTranscript.trim() ||
-          speech.transcript.trim() ||
-          textInput.trim();
-      }
+  const handleResetLiveTranscript = useCallback(() => {
+    unifiedSTTRef.current.resetTranscript();
+    setPendingSpokenText(null);
+    toast.info("Đã xóa câu nói dở", "Tiếp tục nói lại từ đầu...");
+  }, []);
 
-      if (!spokenText) {
-        toast.info("Chưa nghe rõ", "Vui lòng nói lại hoặc gõ văn bản.");
-        setSessionStatus("listening");
-        setIsProcessing(false);
-        setThinking(false);
-        return;
-      }
+  const handleSayItBetter = useCallback(() => {
+    incrementAttempt(true);
+    setPendingSpokenText(null);
+    toast.info("Chế độ 'Say It Better'", "Hãy nhại lại câu bản xứ tự nhiên hơn!");
+    if (autoStartMic) handleStartSpeaking();
+  }, [incrementAttempt, autoStartMic, handleStartSpeaking]);
 
-      // Measured latency & speech metrics
-      const durationMs = recording?.durationMs || 3500;
-      const latencyMs = Math.max(200, speechStartMs - aiFinishedSpeechTime);
-      const turnWpm = calculateSpeechRateWpm(spokenText, durationMs);
-      const turnTtr = calculateTypeTokenRatio(spokenText);
+  const handlePracticeVariant = useCallback(
+    (variantText: string) => {
+      incrementAttempt(true);
+      setPendingSpokenText(null);
+      setTextInput(variantText);
+      toast.info("Luyện nói bản này", `Mẫu: "${variantText}". Hãy bấm mic để nói!`);
+      if (autoStartMic) handleStartSpeaking();
+    },
+    [incrementAttempt, autoStartMic, handleStartSpeaking]
+  );
 
-      // Create audio URL from recorded blob for self-voice review
-      let audioBlobUrl: string | undefined = undefined;
-      if (recording?.blob) {
-        audioBlobUrl = URL.createObjectURL(recording.blob);
-      }
-
-      const userTurnId = `ct_user_${Date.now()}`;
-      const userTurnPedagogy: TurnPedagogy = {
-        latencyMs,
-        audioBlobUrl,
-        speechRateWpm: turnWpm,
-        lexicalDiversityTtr: turnTtr,
-      };
-      const userTurn: ConversationTurn = {
-        id: userTurnId,
-        role: "user",
-        text: spokenText,
-        timestamp: new Date().toISOString(),
-        durationMs,
-        pedagogy: userTurnPedagogy,
-      };
-
-      addTurn(userTurn);
-      setTextInput("");
-
-      const provider =
-        settings.conversation.provider === "browser"
-          ? "gemini"
-          : settings.conversation.provider;
-      const model = settings.conversation.model;
-
-      const recentTurnsPayload = [...turns, userTurn].map((t) => ({
-        role: t.role,
-        text: t.text,
-      }));
-
-      const res = await fetch("/api/conversation/turn", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          worldId,
-          worldState: world,
-          transcript: spokenText,
-          recentTurns: recentTurnsPayload,
-          provider,
-          model,
-          durationMs,
-          timeToFirstWordMs: latencyMs,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error?.message || "Không nhận được phản hồi từ AI.");
-      }
-
-      const aiResponse = data.response;
-      const aiReplyText = aiResponse?.responseText || "Could you tell me more about that?";
-      const ped = aiResponse?.pedagogy;
-
-      // Update pragmatic act & feedback
-      if (aiResponse?.pragmaticAct) {
-        setActivePragmaticAct(aiResponse.pragmaticAct);
-        setActivePragmaticFeedback(aiResponse.pragmaticFeedbackVi || null);
-      }
-
-      // Check if a hidden objective was unlocked
-      if (aiResponse?.unlockedObjective) {
-        setUnlockedObjectiveAlert(aiResponse.unlockedObjective);
-        soundEffects.playSuccessFanfare();
-        toast.success("🎉 MỤC TIÊU ẨN ĐÃ MỞ KHÓA!", aiResponse.unlockedObjective.description);
-      }
-
-      // Update user turn with pedagogical feedback
-      userTurn.pedagogy = {
-        ...userTurn.pedagogy,
-        grammarIssue: ped?.grammarIssue || null,
-        grammarFix: ped?.grammarFix || null,
-        nativeReformulation: ped?.nativeReformulation || spokenText,
-        turnScore: ped?.turnScore || 85,
-        coachTipVi: ped?.coachTipVi,
-        speechRateWpm: turnWpm,
-        lexicalDiversityTtr: turnTtr,
-      };
-
-      // Record statistics
-      setSessionStats((prev) => ({
-        ...prev,
-        scores: [...prev.scores, ped?.turnScore || 85],
-        latencies: [...prev.latencies, latencyMs],
-        wpms: [...prev.wpms, turnWpm],
-        ttrs: [...prev.ttrs, turnTtr],
-        errorsCount: prev.errorsCount + (ped?.grammarIssue ? 1 : 0),
-      }));
-
-      // Update world state if returned
-      if (data.nextWorldState) {
-        setWorld(data.nextWorldState);
-      }
-
-      // Update dynamic hints for the AI character's next question
-      if (aiResponse?.hints) {
-        setDynamicHints(aiResponse.hints);
-      }
-
-      // Add AI assistant turn
-      soundEffects.playAIReady();
-      addTurn({
-        id: `ct_ai_${Date.now()}`,
-        role: "assistant",
-        text: aiReplyText,
-        timestamp: new Date().toISOString(),
-        provider,
-        model,
-      });
-
-      await speak(aiReplyText);
-    } catch (err: unknown) {
-      toast.error("Lỗi đối thoại", err instanceof Error ? err.message : String(err));
-      setSessionStatus("listening");
-    } finally {
-      setIsProcessing(false);
-      setThinking(false);
-    }
-  }, [
-    recorder,
-    speech,
-    textInput,
-    speechStartMs,
-    aiFinishedSpeechTime,
-    addTurn,
-    turns,
-    settings,
-    world,
-    worldId,
-    setWorld,
-    speak,
-    setThinking,
-  ]);
-
-  // Keyboard Hotkeys (Space to toggle speaking / Barge-in)
+  // Keyboard Hotkeys (chuẩn SB/VN-EN/Survival/Drill: Space/H/R/Enter/Backspace/Esc + Barge-in)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (["INPUT", "TEXTAREA"].includes((e.target as HTMLElement)?.tagName)) return;
@@ -370,15 +482,29 @@ export default function ConversationSessionPage() {
         if (sessionStatus === "speaking" || isAiSpeakingRef.current) {
           handleBargeIn();
         } else if (sessionStatus === "recording") {
-          handleStopAndProcess();
+          handleStopRecord();
+        } else if (pendingSpokenText) {
+          handleReRecord();
         } else if (["idle", "ready", "listening"].includes(sessionStatus)) {
           handleStartSpeaking();
         }
+      } else if (e.code === "Backspace" && unifiedSTTRef.current.isListening) {
+        e.preventDefault();
+        handleResetLiveTranscript();
+      } else if (e.code === "KeyH" && !isProcessing) {
+        e.preventDefault();
+        setHintTier(((hintTier + 1) % 5) as 0 | 1 | 2 | 3 | 4);
+      } else if (e.code === "Enter" && pendingSpokenText && !isProcessing) {
+        e.preventDefault();
+        handleConfirmSubmit();
+      } else if (e.code === "Escape") {
+        if (hintTier > 0) setHintTier(0);
+        else setPendingSpokenText(null);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [sessionStatus, handleBargeIn, handleStopAndProcess, handleStartSpeaking]);
+  }, [sessionStatus, handleBargeIn, handleStopRecord, handleStartSpeaking, pendingSpokenText, handleReRecord, handleConfirmSubmit, handleResetLiveTranscript, hintTier, setHintTier, isProcessing]);
 
   // ─── Initial World AI Greeting ─────────────────────────────────────────
   useEffect(() => {
@@ -451,7 +577,7 @@ export default function ConversationSessionPage() {
       silenceThresholdMs: 1200,
       onSilenceEndpoint: () => {
         if (sessionStatus === "recording" && !isProcessing) {
-          handleStopAndProcess();
+          handleStopRecord();
         }
       },
       onBargeIn: () => {
@@ -465,23 +591,23 @@ export default function ConversationSessionPage() {
       smartVadRef.current?.destroy();
       smartVadRef.current = null;
     };
-  }, [handsFreeMode, sessionStatus, isProcessing, handleStopAndProcess, handleBargeIn]);
+  }, [handsFreeMode, sessionStatus, isProcessing, handleStopRecord, handleBargeIn]);
 
   // ─── Interim Transcript Stream to Smart VAD ───────────────────────────
   useEffect(() => {
-    const liveText = speech.fullTranscript || speech.transcript || speech.interimTranscript;
+    const liveText = unifiedSTT.fullTranscript || unifiedSTT.transcript || unifiedSTT.interimTranscript;
     if (liveText) {
       setIsLifelineVisible(false);
       if (handsFreeMode && sessionStatus === "recording") {
         smartVadRef.current?.notifyInterimTranscript(liveText, isAiSpeakingRef.current);
       }
     }
-  }, [speech.transcript, speech.interimTranscript, speech.fullTranscript, handsFreeMode, sessionStatus]);
+  }, [unifiedSTT.transcript, unifiedSTT.interimTranscript, unifiedSTT.fullTranscript, handsFreeMode, sessionStatus]);
 
   // ─── Silence Hesitation Lifeline Tracker (>3.5s) ───────────────────────
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
-    if (sessionStatus === "listening" || (sessionStatus === "recording" && !speech.transcript)) {
+    if (sessionStatus === "listening" || (sessionStatus === "recording" && !unifiedSTT.transcript)) {
       interval = setInterval(() => {
         const elapsed = Date.now() - aiFinishedSpeechTime;
         setLifelineElapsedMs(elapsed);
@@ -496,7 +622,54 @@ export default function ConversationSessionPage() {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [sessionStatus, aiFinishedSpeechTime, speech.transcript, isLifelineVisible]);
+  }, [sessionStatus, aiFinishedSpeechTime, unifiedSTT.transcript, isLifelineVisible]);
+
+  // ─── Prep countdown for auto-start mic (SB/VN-EN/Survival/Drill aligned) ──
+  useEffect(() => {
+    if (!world || lastTurnFeedback || isSessionCompleted) {
+      if (prepTimerRef.current) clearInterval(prepTimerRef.current);
+      setIsCountingDown(false);
+      setPrepCountdown(null);
+      return;
+    }
+    if (prepTimerRef.current) clearInterval(prepTimerRef.current);
+    if (autoStartMic && sessionStatus === "listening") {
+      setIsCountingDown(true);
+      let count = Math.max(1, Math.round(adaptiveState.prepTimeSec ?? 2.5));
+      setPrepCountdown(count);
+      prepTimerRef.current = setInterval(() => {
+        count -= 1;
+        if (count <= 0) {
+          if (prepTimerRef.current) clearInterval(prepTimerRef.current);
+          setIsCountingDown(false);
+          setPrepCountdown(null);
+          handleStartSpeaking();
+        } else {
+          setPrepCountdown(count);
+        }
+      }, 1000);
+    } else {
+      setIsCountingDown(false);
+      setPrepCountdown(null);
+    }
+    return () => {
+      if (prepTimerRef.current) clearInterval(prepTimerRef.current);
+    };
+  }, [world?.scenario?.id, autoStartMic, sessionStatus, lastTurnFeedback, isSessionCompleted, adaptiveState.prepTimeSec, setIsCountingDown, setPrepCountdown]);
+
+  // ─── Recording duration tracker ───────────────────────────────────────
+  useEffect(() => {
+    let id: NodeJS.Timeout | null = null;
+    if (unifiedSTT.isListening) {
+      const start = Date.now();
+      id = setInterval(() => setRecordingDurationMs(Date.now() - start), 100);
+    } else {
+      setRecordingDurationMs(0);
+    }
+    return () => {
+      if (id) clearInterval(id);
+    };
+  }, [unifiedSTT.isListening]);
 
   const handleRefreshHints = useCallback(async () => {
     if (!world) return;
@@ -528,12 +701,6 @@ export default function ConversationSessionPage() {
       setIsLoadingHints(false);
     }
   }, [world, turns, settings]);
-
-  const handleTextSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!textInput.trim() || isProcessing) return;
-    handleStopAndProcess();
-  };
 
   const handleReplayLastAI = () => {
     const lastAITurn = [...turns].reverse().find((t) => t.role === "assistant");
@@ -606,16 +773,32 @@ export default function ConversationSessionPage() {
           <Badge variant="outline" className="text-[10px] font-mono h-5 hidden md:inline-flex">
             {world?.scenario?.mode || "roleplay"}
           </Badge>
+          <Badge variant="outline" className="text-[10px] font-mono h-5 hidden lg:inline-flex border-primary/30 text-primary">
+            {getTopicDisplay(world?.scenario?.topic || selectedTopicId).label}
+          </Badge>
         </div>
 
-        {/* Center: Turn Counter + Live Timer */}
+        {/* Center: Turn Counter + Session Progress + Live Timer */}
         <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="text-[10px] font-mono h-5">
-            Lượt {turns.length}
-          </Badge>
+          {isCountingDown && prepCountdown !== null ? (
+            <Badge className="text-[10px] font-mono h-5 bg-primary/15 text-primary border border-primary/30 animate-pulse">
+              Nói sau {prepCountdown}s...
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="text-[10px] font-mono h-5">
+              {sessionConfig.mode === "endless"
+                ? `Lượt ${turns.length}`
+                : `Lượt ${turns.filter((t) => t.role === "user").length}/${sessionConfig.targetCount}`}
+            </Badge>
+          )}
           <Badge variant="outline" className="text-[10px] font-mono h-5 text-muted-foreground">
             ⏱ {formatTimer(elapsedSec)}
           </Badge>
+          {skillMastery.streakCount > 1 && (
+            <Badge className="text-[10px] font-mono h-5 bg-amber-500/10 text-amber-600 border border-amber-500/30 hidden sm:inline-flex">
+              🔥 Streak {skillMastery.streakCount}
+            </Badge>
+          )}
         </div>
 
         {/* Right: Hands-Free Toggle + AI Selector + End Session */}
@@ -649,7 +832,10 @@ export default function ConversationSessionPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setShowCompletedModal(true)}
+            onClick={() => {
+              finishSessionManually();
+              setShowCompletedModal(true);
+            }}
             className="h-7 px-2.5 rounded-xl text-xs font-bold gap-1 border-border/80"
           >
             <CheckCircle2 className="size-3 text-emerald-500" />
@@ -750,24 +936,48 @@ export default function ConversationSessionPage() {
             <div className="px-3.5 py-1.5 bg-primary/10 border-t border-primary/25 shrink-0 flex items-center gap-2">
               <span className="size-2 rounded-full bg-red-500 animate-ping shrink-0" />
               <p className="text-xs font-mono text-primary truncate">
-                {speech.fullTranscript || speech.transcript || "Đang lắng nghe bạn nói..."}
+                {unifiedSTT.fullTranscript || unifiedSTT.transcript || "Đang lắng nghe bạn nói..."}
               </p>
+            </div>
+          )}
+
+          {/* Last turn Say It Better strip */}
+          {lastTurnFeedback?.pedagogy?.sayItBetter && (
+            <div className="px-3 py-2 border-t border-border/40 shrink-0 flex items-center gap-2 text-[11px] overflow-x-auto">
+              <span className="font-bold text-primary shrink-0">Say It Better:</span>
+              {[
+                lastTurnFeedback.pedagogy.sayItBetter.casual,
+                lastTurnFeedback.pedagogy.sayItBetter.professional,
+                lastTurnFeedback.pedagogy.sayItBetter.idiomatic,
+              ]
+                .filter(Boolean)
+                .slice(0, 3)
+                .map((v, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handlePracticeVariant(v)}
+                    className="px-2 py-0.5 rounded-lg bg-primary/10 hover:bg-primary/20 border border-primary/30 truncate max-w-[220px]"
+                    title="Bấm để luyện nói bản này"
+                  >
+                    &ldquo;{v}&rdquo;
+                  </button>
+                ))}
             </div>
           )}
         </div>
 
-        {/* RIGHT (5 cols): Voice Hub + Embedded Scaffolding */}
+        {/* RIGHT (5 cols): Voice Hub + SpeakingController + Scaffolding */}
         <div className="lg:col-span-5 h-full flex flex-col gap-2.5 sm:gap-3 min-h-0 overflow-hidden">
-          {/* Voice Hub (Upper Section) */}
-          <div className="shrink-0 p-3.5 rounded-3xl border border-border/80 bg-gradient-to-b from-card via-card to-primary/5 flex flex-col items-center justify-center text-center relative overflow-hidden shadow-xs">
-            <VoiceOrb status={sessionStatus} size="sm" className="my-1" />
-            <div className="mb-2">
+          {/* Voice Hub (Upper Section, compact) */}
+          <div className="shrink-0 p-3 rounded-3xl border border-border/80 bg-gradient-to-b from-card via-card to-primary/5 flex flex-col items-center justify-center text-center relative overflow-hidden shadow-xs">
+            <VoiceOrb status={sessionStatus as VoiceOrbStatus} size="sm" className="my-1" />
+            <div className="mb-1">
               <StatusBadge status={sessionStatus} />
             </div>
 
             {/* Hesitation Lifeline Prompt Strip */}
             {isLifelineVisible && (
-              <div className="w-full mb-2.5 p-2 rounded-xl bg-primary/10 border border-primary/25 text-left space-y-1.5 animate-in fade-in zoom-in-95 duration-200">
+              <div className="w-full mb-2 p-2 rounded-xl bg-primary/10 border border-primary/25 text-left space-y-1.5 animate-in fade-in zoom-in-95 duration-200">
                 <div className="flex items-center justify-between text-[11px] font-bold text-primary">
                   <span className="flex items-center gap-1">
                     <LifeBuoy className="size-3 animate-spin" />
@@ -801,67 +1011,71 @@ export default function ConversationSessionPage() {
               </div>
             )}
 
-            {/* Speaking Controller Buttons */}
             <div className="w-full flex items-center justify-center gap-1.5">
-              <Button
-                variant={sessionStatus === "recording" ? "destructive" : "default"}
-                size="lg"
-                onClick={sessionStatus === "recording" ? handleStopAndProcess : handleStartSpeaking}
-                disabled={isProcessing}
-                className="flex-1 h-10 rounded-xl font-bold text-xs gap-1.5 shadow-xs transition-all"
-              >
-                {sessionStatus === "recording" ? (
-                  <>
-                    <Square className="size-3.5" />
-                    <span>Dừng & Chấm Điểm</span>
-                    <kbd className="text-[9px] font-mono px-1 py-0.5 bg-white/20 rounded">Space</kbd>
-                  </>
-                ) : (
-                  <>
-                    <Mic className="size-3.5" />
-                    <span>{sessionStatus === "speaking" ? "Ngắt lời AI" : "Bắt Đầu Nói"}</span>
-                    <kbd className="text-[9px] font-mono px-1 py-0.5 bg-primary-foreground/20 rounded">Space</kbd>
-                  </>
-                )}
-              </Button>
-
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleReplayLastAI}
-                className="h-10 px-2.5 rounded-xl border-border/80 text-muted-foreground hover:text-foreground"
+                className="h-8 px-2.5 rounded-xl border-border/80 text-muted-foreground hover:text-foreground"
                 title="Nghe lại câu cuối của AI"
               >
                 <Volume2 className="size-4" />
               </Button>
-
               <Button
-                variant="outline"
+                variant={sessionStatus === "speaking" ? "destructive" : "outline"}
                 size="sm"
-                onClick={() => setShowKeyboardInput(!showKeyboardInput)}
-                className={`h-10 px-2.5 rounded-xl border-border/80 ${
-                  showKeyboardInput ? "bg-primary/10 text-primary border-primary/40" : ""
-                }`}
-                title="Gõ phím thay thế"
+                onClick={handleBargeIn}
+                disabled={sessionStatus !== "speaking"}
+                className="h-8 px-2.5 rounded-xl text-xs font-bold"
+                title="Ngắt lời AI (Barge-in)"
               >
-                <Keyboard className="size-4" />
+                Ngắt lời AI
               </Button>
+              <span className="text-[10px] font-mono text-muted-foreground hidden sm:inline">
+                [H]: gợi ý ({hintTier}/4) · Mastery {skillMastery.overallMastery}%
+              </span>
             </div>
+          </div>
 
-            {/* Fallback Keyboard Input Form */}
-            {showKeyboardInput && (
-              <form onSubmit={handleTextSubmit} className="w-full mt-2 flex gap-1.5">
-                <Textarea
-                  value={textInput}
-                  onChange={(e) => setTextInput(e.target.value)}
-                  placeholder="Gõ câu trả lời tiếng Anh..."
-                  rows={2}
-                  className="text-xs bg-background rounded-xl resize-none p-2"
-                />
-                <Button type="submit" size="sm" className="h-full rounded-xl px-2.5 font-bold" disabled={isProcessing}>
-                  <Send className="size-3.5" />
-                </Button>
-              </form>
+          {/* SpeakingController chuẩn (pending review) */}
+          <div className="shrink-0 min-h-[280px]">
+            {lastTurnFeedback && !pendingSpokenText && sessionStatus !== "recording" ? (
+              <TurnFeedbackCard
+                turn={lastTurnFeedback}
+                onRetry={() => {
+                  setLastTurnFeedback(null);
+                  incrementAttempt(false);
+                  if (autoStartMic) handleStartSpeaking();
+                }}
+                onContinue={() => setLastTurnFeedback(null)}
+                onSayItBetter={handleSayItBetter}
+                onPracticeVariant={handlePracticeVariant}
+              />
+            ) : (
+              <SpeakingController
+                compact
+                status={
+                  isProcessing || unifiedSTT.isTranscribing
+                    ? "processing"
+                    : unifiedSTT.isListening
+                      ? "recording"
+                      : "idle"
+                }
+                isListening={unifiedSTT.isListening}
+                liveTranscript={unifiedSTT.fullTranscript}
+                durationMs={recordingDurationMs || unifiedSTT.audioRecorder.durationMs}
+                autoStartMic={autoStartMic}
+                onToggleAutoStartMic={setAutoStartMic}
+                onStartRecord={handleStartSpeaking}
+                onStopRecord={handleStopRecord}
+                onSubmitTextFallback={(text) => executeTurn(text, 2500)}
+                onOpenHints={() => setHintTier(((hintTier + 1) % 5) as 0 | 1 | 2 | 3 | 4)}
+                isEvaluating={isProcessing || unifiedSTT.isTranscribing}
+                onResetLiveTranscript={handleResetLiveTranscript}
+                pendingText={pendingSpokenText}
+                onConfirmSubmit={handleConfirmSubmit}
+                onReRecord={handleReRecord}
+              />
             )}
           </div>
 
@@ -872,6 +1086,8 @@ export default function ConversationSessionPage() {
               hints={dynamicHints}
               isLoadingHints={isLoadingHints}
               onRefreshHints={handleRefreshHints}
+              currentHintTier={hintTier}
+              onSelectHintTier={(t) => setHintTier(t as 0 | 1 | 2 | 3 | 4)}
               onSelectHint={(text) => {
                 setTextInput(text);
                 toast.success("Đã nạp mẫu câu!", text);
@@ -881,20 +1097,50 @@ export default function ConversationSessionPage() {
         </div>
       </main>
 
-      {/* ── SESSION COMPLETED MODAL ── */}
+      {/* ── Footer shortcuts (chuẩn SB/VN-EN/Survival/Drill) ── */}
+      <footer className="px-3 sm:px-4 py-1.5 border-t border-border/40 flex items-center justify-between text-[11px] font-mono text-muted-foreground shrink-0">
+        <div className="flex items-center gap-3 overflow-x-auto">
+          <span>[Space]: {pendingSpokenText ? "Thu âm lại" : unifiedSTT.isListening ? "Dừng" : lastTurnFeedback ? "Nói lại" : "Thu âm"}</span>
+          <span>•</span>
+          <span>[Backspace]: Xoá nói lại</span>
+          <span>•</span>
+          <span>[H]: Gợi ý ({hintTier}/4)</span>
+          {pendingSpokenText && !isProcessing && (
+            <>
+              <span>•</span>
+              <span className="text-primary font-bold">[Enter]: Nộp bài</span>
+            </>
+          )}
+        </div>
+        <div className="hidden sm:flex items-center gap-2 shrink-0">
+          <span>Mastery: {skillMastery.overallMastery}%</span>
+          <span>·</span>
+          <span>Độ khó: {adaptiveState.currentDifficulty}/10</span>
+        </div>
+      </footer>
+
+      {/* ── SESSION COMPLETED MODAL (ưu tiên summary thật từ store) ── */}
       <SessionCompletedModal
-        open={showCompletedModal}
+        open={showCompletedModal || isSessionCompleted}
         onOpenChange={setShowCompletedModal}
         sessionTitle={world?.scenario?.topic || "Thế Giới Nhập Vai"}
         durationMinutes={durationMin}
-        turnsCount={turns.length}
-        avgTtfwMs={avgLatency}
-        overallScore={avgScore}
-        errorsDetected={sessionStats.errorsCount}
-        wpm={avgWpm}
-        ttrRatio={avgTtr}
-        twistResolved={!!unlockedObjectiveAlert}
-        cefrEstimate={cefrEstimate}
+        turnsCount={sessionSummary?.totalTurns ?? turns.length}
+        avgTtfwMs={sessionSummary?.averageLatencyMs ?? avgLatency}
+        overallScore={sessionSummary?.averageOverallScore ?? avgScore}
+        grammarScore={undefined}
+        fluencyScore={undefined}
+        vocabularyScore={undefined}
+        errorsDetected={sessionSummary?.totalErrorsCount ?? sessionStats.errorsCount}
+        wpm={sessionSummary?.averageWpm ?? avgWpm}
+        ttrRatio={sessionSummary?.averageTtr ?? avgTtr}
+        twistResolved={sessionSummary?.twistResolved ?? !!unlockedObjectiveAlert}
+        cefrEstimate={sessionSummary?.cefrBandEstimate ?? cefrEstimate}
+        firstAttemptAccuracy={sessionSummary?.firstAttemptAccuracy}
+        averageIndependence={sessionSummary?.averageIndependence}
+        masteryDelta={sessionSummary?.masteryDelta}
+        topWeakness={sessionSummary?.topWeaknessIdentified}
+        recommendedNextAction={sessionSummary?.recommendedNextAction}
         onRestart={() => router.push("/conversation")}
       />
     </div>

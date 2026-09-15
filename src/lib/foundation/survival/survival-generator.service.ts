@@ -21,6 +21,8 @@ import {
   SEED_SURVIVAL_SCENARIOS,
 } from "./seed-survival";
 import { generateTabooVariations } from "./aristotelian-evaluator.engine";
+import { resolveTopicForPrompt } from "@/lib/foundation/sentence-builder/topics";
+import { difficultyNumberToLabel } from "./adaptive-engine";
 export {
   SEED_CIRCUMLOCUTION_TASKS,
   SEED_SURVIVAL_SCENARIOS,
@@ -55,6 +57,12 @@ function cleanJson(text: string): unknown {
 
 export async function generateCircumlocutionTask(options: {
   difficulty?: "easy" | "medium" | "hard";
+  targetDifficulty?: number;
+  topic?: string;
+  prepTimeSec?: number;
+  recentPrompts?: string[];
+  recentErrors?: string[];
+  pedagogicalConstraint?: string;
   provider?: string;
   model?: string;
   forceSource?: "bank" | "ai" | "auto";
@@ -62,14 +70,28 @@ export async function generateCircumlocutionTask(options: {
   const provider = options.provider || "gemini";
   const model = options.model && options.model !== "auto" ? options.model : "gemini-3.5-flash-lite";
 
+  const diff = options.difficulty || difficultyNumberToLabel(options.targetDifficulty ?? 5);
+  const numDiff = Math.min(
+    10,
+    Math.max(1, Math.round(options.targetDifficulty ?? (diff === "easy" ? 3 : diff === "hard" ? 8 : 5)))
+  );
+  const effectiveTopic = resolveTopicForPrompt(options.topic);
+  const prepTimeSec = options.prepTimeSec ?? (numDiff <= 3 ? 3.0 : numDiff <= 6 ? 2.5 : 2.0);
+
   if (provider === "mock") {
     const selected = SEED_CIRCUMLOCUTION_TASKS[Math.floor(Math.random() * SEED_CIRCUMLOCUTION_TASKS.length)];
-    return { ...selected, id: `circ_${Date.now()}_${Math.random().toString(36).slice(2, 6)}` };
+    return {
+      ...selected,
+      id: `circ_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      difficultyOverall: numDiff,
+      topic: options.topic && options.topic !== "random" ? options.topic : selected.topic || "general",
+      prepTimeSec,
+      skills: selected.skills && selected.skills.length > 0 ? selected.skills : ["circumlocution", "spoken_retrieval", "genus_differentia"],
+      source: "seed",
+    };
   }
 
   // 1. Check Content Bank (Hybrid 70/30 Policy)
-  const diff = options.difficulty || "medium";
-  const numDiff = diff === "easy" ? 3 : diff === "medium" ? 5 : 8;
   if (options.forceSource !== "ai") {
     const bankSample = await sampleBankTask<CircumlocutionTask>({
       module: "survival_circumlocution",
@@ -95,9 +117,15 @@ export async function generateCircumlocutionTask(options: {
     "Social & Emotional Concepts",
   ];
   const chosenDomain = domains[Math.floor(Math.random() * domains.length)];
+  const avoidList = (options.recentPrompts || []).slice(-8).join(" | ").slice(0, 400);
 
-  const userPrompt = `Generate an authentic Circumlocution Speaking task in domain "${chosenDomain}" with difficulty "${options.difficulty || "medium"}".
-The learner must describe this concept without using the forbidden target word. Return strict JSON.`;
+  const userPrompt = `Generate an authentic Circumlocution Speaking task in domain "${chosenDomain}" with difficulty "${diff}" (${numDiff}/10).
+Topic grounding: "${effectiveTopic}". Invent a fresh target word fitting this topic when possible.
+Avoid repeating these recent targets: ${avoidList || "(none)"}.
+${options.recentErrors?.length ? `Learner recurring errors to reinforce: ${options.recentErrors.slice(0, 5).join(", ")}.` : ""}
+${options.pedagogicalConstraint ? `\n${options.pedagogicalConstraint}` : ""}
+The learner must describe this concept without using the forbidden target word.
+Set difficultyOverall=${numDiff}, topic="${effectiveTopic}", prepTimeSec=${prepTimeSec}. Return strict JSON.`;
 
   let lastErrorMsg = "";
 
@@ -168,15 +196,31 @@ The learner must describe this concept without using the forbidden target word. 
         parsed.semanticKeyAnchors = combined.length > 0 ? combined : ["use", "item", "function"];
       }
 
+      parsed.difficulty = diff;
+      parsed.difficultyOverall = numDiff;
+      parsed.topic = typeof parsed.topic === "string" && parsed.topic ? parsed.topic : effectiveTopic;
+      parsed.prepTimeSec = typeof parsed.prepTimeSec === "number" ? parsed.prepTimeSec : prepTimeSec;
+      if (!Array.isArray(parsed.skills) || parsed.skills.length === 0) {
+        parsed.skills = ["circumlocution", "spoken_retrieval", "genus_differentia"];
+      }
+
       // Sanitize 5-tier hints
+      const penaltyByTier = [0, 0.1, 0.25, 0.5, 0.85];
       if (!Array.isArray(parsed.tierHints) || parsed.tierHints.length === 0) {
         parsed.tierHints = [
-          { tier: 0, title: "Không gợi ý", content: "Tự diễn giải trong 5 giây mà không dùng từ cấm." },
-          { tier: 1, title: "Chức năng", content: hObj.functionHint || "Chức năng chính" },
-          { tier: 2, title: "Chủng loại", content: hObj.categoryHint || "Chủng loại/vị trí" },
-          { tier: 3, title: "Khung câu", content: hObj.starterHint ? `${hObj.starterHint} ______` : "It is a kind of..." },
-          { tier: 4, title: "Câu mẫu", content: Array.isArray(parsed.sampleExplanations) && parsed.sampleExplanations[0] ? String(parsed.sampleExplanations[0]) : "Sample explanation..." },
+          { tier: 0, title: "Không gợi ý", content: "Tự diễn giải trong 5 giây mà không dùng từ cấm.", penaltyWeight: 0 },
+          { tier: 1, title: "Chức năng", content: hObj.functionHint || "Chức năng chính", penaltyWeight: 0.1 },
+          { tier: 2, title: "Chủng loại", content: hObj.categoryHint || "Chủng loại/vị trí", penaltyWeight: 0.25 },
+          { tier: 3, title: "Khung câu", content: hObj.starterHint ? `${hObj.starterHint} ______` : "It is a kind of...", penaltyWeight: 0.5 },
+          { tier: 4, title: "Câu mẫu", content: Array.isArray(parsed.sampleExplanations) && parsed.sampleExplanations[0] ? String(parsed.sampleExplanations[0]) : "Sample explanation...", penaltyWeight: 0.85 },
         ];
+      } else {
+        parsed.tierHints = (parsed.tierHints as any[]).map((h: any) => ({
+          tier: Number(h.tier ?? 0),
+          title: String(h.title || `T${h.tier ?? 0}`),
+          content: String(h.content || ""),
+          penaltyWeight: typeof h.penaltyWeight === "number" ? h.penaltyWeight : penaltyByTier[Number(h.tier ?? 0)] ?? 0,
+        }));
       }
 
       // Sanitize sampleExplanations
@@ -257,6 +301,12 @@ The learner must describe this concept without using the forbidden target word. 
 
 export async function generateSurvivalScenarioTask(options: {
   context?: string;
+  targetDifficulty?: number;
+  topic?: string;
+  prepTimeSec?: number;
+  recentPrompts?: string[];
+  recentErrors?: string[];
+  pedagogicalConstraint?: string;
   provider?: string;
   model?: string;
   forceSource?: "bank" | "ai" | "auto";
@@ -264,9 +314,24 @@ export async function generateSurvivalScenarioTask(options: {
   const provider = options.provider || "gemini";
   const model = options.model && options.model !== "auto" ? options.model : "gemini-3.5-flash-lite";
 
+  const numDiff = Math.min(10, Math.max(1, Math.round(options.targetDifficulty ?? 5)));
+  const effectiveTopic = resolveTopicForPrompt(options.topic);
+  const prepTimeSec = options.prepTimeSec ?? (numDiff <= 3 ? 2.5 : numDiff <= 6 ? 2.0 : 1.5);
+
   if (provider === "mock") {
     const selected = SEED_SURVIVAL_SCENARIOS[Math.floor(Math.random() * SEED_SURVIVAL_SCENARIOS.length)];
-    return { ...selected, id: `scen_${Date.now()}_${Math.random().toString(36).slice(2, 6)}` };
+    return {
+      ...selected,
+      id: `scen_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      difficultyOverall: numDiff,
+      topic: options.topic && options.topic !== "random" ? options.topic : selected.topic || "general",
+      prepTimeSec,
+      skills:
+        selected.skills && selected.skills.length > 0
+          ? selected.skills
+          : [String(selected.recommendedSkill || "buying_time"), "spoken_retrieval"],
+      source: "seed",
+    };
   }
 
   // 1. Check Content Bank (Hybrid 70/30 Policy)
@@ -293,9 +358,15 @@ export async function generateSurvivalScenarioTask(options: {
     "Phone & Video Call (audio cutting out, need 5 seconds to find info)",
   ];
   const chosenContext = options.context || contexts[Math.floor(Math.random() * contexts.length)];
+  const avoidList = (options.recentPrompts || []).slice(-8).join(" | ").slice(0, 400);
 
-  const userPrompt = `Generate an authentic Real-Life Survival Communication Scenario in context: "${chosenContext}".
-Create a real problem where the speaker must immediately react and repair the conversation within 5 seconds. Return strict JSON.`;
+  const userPrompt = `Generate an authentic Real-Life Survival Communication Scenario in context: "${chosenContext}" (${numDiff}/10).
+Topic grounding: "${effectiveTopic}". Prefer a fresh situation fitting this topic.
+Avoid repeating these recent prompts: ${avoidList || "(none)"}.
+${options.recentErrors?.length ? `Learner recurring errors to reinforce: ${options.recentErrors.slice(0, 5).join(", ")}.` : ""}
+${options.pedagogicalConstraint ? `\n${options.pedagogicalConstraint}` : ""}
+Create a real problem where the speaker must immediately react and repair the conversation within 5 seconds.
+Set difficultyOverall=${numDiff}, topic="${effectiveTopic}", prepTimeSec=${prepTimeSec}. Return strict JSON.`;
 
   let lastErrorMsg = "";
 
@@ -324,14 +395,30 @@ Create a real problem where the speaker must immediately react and repair the co
         ? (parsed.suggestedRepairPhrases as string[])
         : ["Sorry, could you repeat that please?"];
 
-      // Sanitize 4-tier stepper hints
+      parsed.topic = typeof parsed.topic === "string" && parsed.topic ? parsed.topic : effectiveTopic;
+      parsed.prepTimeSec = typeof parsed.prepTimeSec === "number" ? parsed.prepTimeSec : prepTimeSec;
+      parsed.difficultyOverall = typeof parsed.difficultyOverall === "number" ? parsed.difficultyOverall : numDiff;
+      if (!Array.isArray(parsed.skills) || parsed.skills.length === 0) {
+        parsed.skills = [String(parsed.recommendedSkill || "buying_time"), "spoken_retrieval"];
+      }
+
+      // Sanitize 5-tier hints (aligned with SB/VN-EN)
+      const penaltyByTier = [0, 0.1, 0.25, 0.5, 0.85];
       if (!Array.isArray(parsed.tierHints) || parsed.tierHints.length === 0) {
         parsed.tierHints = [
-          { tier: 0, title: "Không gợi ý", content: "Tự phản xạ và xử lý tình huống ngay lập tức." },
-          { tier: 1, title: "Chiến lược", content: "Dùng câu đệm xin nhắc lại hoặc làm rõ ý." },
-          { tier: 2, title: "Mẫu mở đầu", content: phrases[0] ? `${phrases[0].slice(0, 20)}...` : "Could you..." },
-          { tier: 3, title: "Câu mẫu", content: phrases[0] || "Sorry, I didn't catch that. Could you say it again?" },
+          { tier: 0, title: "Không gợi ý", content: "Tự phản xạ và xử lý tình huống ngay lập tức.", penaltyWeight: 0 },
+          { tier: 1, title: "Chiến lược", content: "Dùng câu đệm xin nhắc lại hoặc làm rõ ý.", penaltyWeight: 0.1 },
+          { tier: 2, title: "Cụm từ cứu cánh", content: phrases[0] ? `${phrases[0].slice(0, 20)}...` : "Could you...", penaltyWeight: 0.25 },
+          { tier: 3, title: "Khung câu ứng biến", content: phrases[0] ? `${phrases[0].slice(0, 30)} ______ ?` : "Could you ______ ?", penaltyWeight: 0.5 },
+          { tier: 4, title: "Câu mẫu", content: phrases[0] || "Sorry, I didn't catch that. Could you say it again?", penaltyWeight: 0.85 },
         ];
+      } else {
+        parsed.tierHints = (parsed.tierHints as any[]).map((h: any) => ({
+          tier: Number(h.tier ?? 0),
+          title: String(h.title || `T${h.tier ?? 0}`),
+          content: String(h.content || ""),
+          penaltyWeight: typeof h.penaltyWeight === "number" ? h.penaltyWeight : penaltyByTier[Number(h.tier ?? 0)] ?? 0,
+        }));
       }
 
       // Sanitize suggestedVocabulary

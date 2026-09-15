@@ -15,6 +15,7 @@ export interface GenerateVNTaskOptions {
   weakSkills?: string[];
   recentErrors?: string[];
   recentPrompts?: string[];
+  pedagogicalConstraint?: string;
   topic?: string;
   provider?: string;
   model?: string;
@@ -211,6 +212,7 @@ export async function generateVNToENTask(
     weakSkills: options.weakSkills,
     recentErrors: options.recentErrors,
     recentPrompts: options.recentPrompts,
+    pedagogicalConstraint: options.pedagogicalConstraint,
     topic: effectiveTopic,
   });
 

@@ -2,11 +2,18 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { toast } from "@/lib/toast";
 import {
   Zap,
@@ -24,7 +31,78 @@ import {
   Play,
   RefreshCw,
   Settings2,
+  Compass,
+  ChevronDown,
+  Wand2,
+  Check,
+  Trophy,
+  Coffee,
+  Briefcase,
+  Plane,
+  Utensils,
+  ShoppingBag,
+  Laptop,
+  MessageCircle,
+  HeartPulse,
+  GraduationCap,
+  Shuffle,
 } from "lucide-react";
+
+import {
+  PRESET_TOPICS,
+  getTopicDisplay,
+} from "@/lib/foundation/sentence-builder/topics";
+
+const TOPIC_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  Sparkles,
+  Coffee,
+  Briefcase,
+  Plane,
+  Utensils,
+  ShoppingBag,
+  Laptop,
+  MessageCircle,
+  HeartPulse,
+  GraduationCap,
+  Shuffle,
+};
+
+const DRILL_MODES: Array<{
+  id: LatencyDrillMode;
+  label: string;
+  sub: string;
+  targetDesc: string;
+  icon: React.ComponentType<{ className?: string }>;
+}> = [
+  {
+    id: "open_response",
+    label: "Open Response",
+    sub: "Câu hỏi mở tự nhiên",
+    targetDesc: "~3.0s target",
+    icon: Target,
+  },
+  {
+    id: "rapid_retrieval",
+    label: "Rapid Fire",
+    sub: "Phản xạ chớp nhoáng",
+    targetDesc: "<1.8s target",
+    icon: Flame,
+  },
+  {
+    id: "timed_countdown",
+    label: "Timed Countdown",
+    sub: "Bậc thang đếm lùi",
+    targetDesc: "Rút ngắn dần",
+    icon: Clock,
+  },
+  {
+    id: "baseline_test",
+    label: "Baseline Test",
+    sub: "Đo chuẩn mốc phản xạ",
+    targetDesc: "10 câu chuẩn hóa",
+    icon: BarChart3,
+  },
+];
 
 import { useLatencyStore } from "@/stores/latency-store";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -40,6 +118,7 @@ import { SpeakingController } from "@/components/foundation/sentence-builder/Spe
 import type { LatencyDrillMode } from "@/types/latency-training";
 
 export default function LatencyTrainingPage() {
+  const router = useRouter();
   const {
     currentTask,
     isGenerating,
@@ -49,6 +128,7 @@ export default function LatencyTrainingPage() {
     currentDrillMode,
     targetCount,
     currentTaskIndex,
+    completedTasksCount,
     isSessionCompleted,
     sessionSummary,
     lastEvaluation,
@@ -56,17 +136,25 @@ export default function LatencyTrainingPage() {
     generationError,
     clearGenerationError,
     initSession,
+    setDrillMode,
+    finishSessionManually,
     generateNewTaskWithAI,
     processEvaluation,
     advanceToNextTask,
     resetSession,
+    selectedTopicId,
+    customTopicText,
+    setSelectedTopic,
   } = useLatencyStore();
 
   const unifiedSTT = useUnifiedSTT({ lang: "en-US" });
   const unifiedSTTRef = useRef(unifiedSTT);
   unifiedSTTRef.current = unifiedSTT;
 
-  const [hasStartedSession, setHasStartedSession] = useState(false);
+  const [isTopicModalOpen, setIsTopicModalOpen] = useState(false);
+  const [isDrillModalOpen, setIsDrillModalOpen] = useState(false);
+  const [customInputVal, setCustomInputVal] = useState(customTopicText || "");
+
   const [promptDisplayTime, setPromptDisplayTime] = useState<number>(Date.now());
   const [elapsedMs, setElapsedMs] = useState(0);
   const [speechStartTimestamp, setSpeechStartTimestamp] = useState<number | null>(null);
@@ -82,16 +170,22 @@ export default function LatencyTrainingPage() {
   const stopwatchRef = useRef<NodeJS.Timeout | null>(null);
   const speechDurationRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Initialize Mode
-  const handleStartMode = async (mode: LatencyDrillMode, count?: number) => {
-    setCurrentHintTier(0);
-    setHasStartedSession(true);
-    await initSession(mode, count);
-  };
+  // Zero-Lobby: Automatically initialize Endless Mode on first mount if no task
+  useEffect(() => {
+    if (!currentTask && !isGenerating && !generationError) {
+      initSession("open_response", 0);
+    }
+  }, [currentTask, isGenerating, generationError, initSession]);
+
+  useEffect(() => {
+    if (selectedTopicId === "custom") {
+      setCustomInputVal(customTopicText || "");
+    }
+  }, [selectedTopicId, customTopicText]);
 
   // Stopwatch routine for measuring response latency
   useEffect(() => {
-    if (!hasStartedSession || !currentTask || lastEvaluation || isSessionCompleted) {
+    if (!currentTask || lastEvaluation || isSessionCompleted) {
       if (stopwatchRef.current) clearInterval(stopwatchRef.current);
       return;
     }
@@ -112,7 +206,7 @@ export default function LatencyTrainingPage() {
     return () => {
       if (stopwatchRef.current) clearInterval(stopwatchRef.current);
     };
-  }, [currentTask?.id, lastEvaluation, isSessionCompleted, hasStartedSession]);
+  }, [currentTask?.id, lastEvaluation, isSessionCompleted]);
 
   // Speech Duration Tracker while recording
   useEffect(() => {
@@ -290,11 +384,38 @@ export default function LatencyTrainingPage() {
 
   // Exit Studio
   const handleExitStudio = () => {
+    if (stopwatchRef.current) clearInterval(stopwatchRef.current);
+    if (unifiedSTTRef.current.isListening) {
+      unifiedSTTRef.current.stopListening().catch(() => {});
+    }
     resetSession();
     setIsEvaluating(false);
     setPendingSpokenText(null);
-    setHasStartedSession(false);
     setCurrentHintTier(0);
+    router.push("/");
+  };
+
+  // Finish session manually & view results
+  const handleFinishSession = () => {
+    if (completedTasksCount === 0 && !currentTask) {
+      toast.info("Bạn chưa hoàn thành câu nào trong buổi tập này.");
+      return;
+    }
+    finishSessionManually();
+  };
+
+  // Switch drill mode
+  const handleModeChange = async (mode: LatencyDrillMode) => {
+    if (mode === currentDrillMode) {
+      setIsDrillModalOpen(false);
+      return;
+    }
+    setIsDrillModalOpen(false);
+    setCurrentHintTier(0);
+    setPendingSpokenText(null);
+    await setDrillMode(mode);
+    const modeLabel = DRILL_MODES.find((m) => m.id === mode)?.label || mode;
+    toast.success("Đã chuyển chế độ", modeLabel);
   };
 
   // Keyboard Shortcuts Handler
@@ -305,7 +426,7 @@ export default function LatencyTrainingPage() {
       // Space: Toggle Mic / Re-record / Retry
       if (e.code === "Space") {
         e.preventDefault();
-        if (hasStartedSession && currentTask && !lastEvaluation) {
+        if (currentTask && !lastEvaluation) {
           if (unifiedSTTRef.current.isListening) {
             handleStopRecord();
           } else if (pendingSpokenText) {
@@ -359,7 +480,7 @@ export default function LatencyTrainingPage() {
         e.preventDefault();
         if (currentHintTier > 0) {
           setCurrentHintTier(0);
-        } else if (hasStartedSession) {
+        } else {
           handleExitStudio();
         }
       }
@@ -368,7 +489,6 @@ export default function LatencyTrainingPage() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
-    hasStartedSession,
     currentTask,
     lastEvaluation,
     currentHintTier,
@@ -379,9 +499,11 @@ export default function LatencyTrainingPage() {
     handleConfirmSubmit,
     handleReRecord,
     handleContinueTask,
+    handleSkipOrNextTask,
   ]);
 
   const liveText = unifiedSTT.fullTranscript || unifiedSTT.transcript;
+  const currentModeInfo = DRILL_MODES.find((m) => m.id === currentDrillMode) || DRILL_MODES[0];
 
   // ==================== 0. ERROR STATE (AI generation failed) ====================
   if (generationError && !currentTask) {
@@ -400,7 +522,7 @@ export default function LatencyTrainingPage() {
           <Button
             onClick={() => {
               clearGenerationError();
-              handleStartMode(currentDrillMode, targetCount);
+              initSession(currentDrillMode, 0);
             }}
             className="gap-2 rounded-xl btn-spring"
           >
@@ -415,400 +537,473 @@ export default function LatencyTrainingPage() {
           </Link>
           <Button
             variant="ghost"
-            onClick={() => {
-              clearGenerationError();
-              setHasStartedSession(false);
-            }}
+            onClick={handleExitStudio}
             className="rounded-xl"
           >
-            Quay lại trang chính
+            Quay lại trang chủ
           </Button>
         </div>
       </div>
     );
   }
 
-  // ==================== 1. STUDIO MODE (Professional 3-Column Split) ====================
-  if (hasStartedSession && (currentTask || isGenerating)) {
-    return (
-      <div className="w-full h-full max-h-[calc(100vh-5.5rem)] flex flex-col overflow-hidden text-foreground rounded-3xl border border-border/80 bg-card shadow-xs">
-        {/* Studio Top Header Bar */}
-        <header className="h-13 border-b border-border/80 bg-card/95 backdrop-blur-md px-3 sm:px-5 flex items-center justify-between gap-2 shrink-0 z-10">
-          <div className="flex items-center gap-2.5">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleExitStudio}
-              className="h-8 px-2.5 rounded-xl text-xs font-semibold gap-1.5 text-muted-foreground hover:text-foreground hover:bg-muted"
-              title="Thoát phòng tập (Esc)"
-            >
-              <ArrowLeft className="size-4" />
-              <span className="hidden sm:inline">Rời Studio</span>
-            </Button>
+  // ==================== 1. ZERO-LOBBY STUDIO VIEW ====================
+  return (
+    <div className="w-full h-full max-h-[calc(100vh-5.5rem)] flex flex-col overflow-hidden text-foreground rounded-3xl border border-border/80 bg-card shadow-xs">
+      {/* Studio Top Header Bar */}
+      <header className="h-13 border-b border-border/80 bg-card/95 backdrop-blur-md px-3 sm:px-5 flex items-center justify-between gap-2 shrink-0 z-10">
+        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleExitStudio}
+            className="h-8 px-2.5 rounded-xl text-xs font-semibold gap-1.5 text-muted-foreground hover:text-foreground hover:bg-muted shrink-0"
+            title="Thoát phòng tập (Esc)"
+          >
+            <ArrowLeft className="size-4" />
+            <span className="hidden sm:inline">Rời Studio</span>
+          </Button>
 
-            <div className="h-4 w-px bg-border/60 hidden sm:block" />
+          <div className="h-4 w-px bg-border/60 hidden sm:block shrink-0" />
 
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                <Zap className="size-3.5 text-amber-500 fill-amber-500" />
-                <span>Response Latency Gym</span>
-              </span>
-              <Badge
-                variant="outline"
-                className="text-[10px] font-mono capitalize border-amber-500/30 text-amber-600 dark:text-amber-400 hidden md:inline-flex"
-              >
-                {currentDrillMode.replace(/_/g, " ")}
-              </Badge>
-            </div>
-          </div>
+          {/* Topic Selector Button */}
+          <button
+            type="button"
+            onClick={() => setIsTopicModalOpen(true)}
+            className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-xl border border-border/70 hover:border-primary/50 bg-muted/40 hover:bg-muted text-xs font-semibold text-foreground transition-all cursor-pointer shadow-2xs shrink-0 max-w-[130px] sm:max-w-[180px]"
+            title="Đổi chủ đề / ngữ cảnh luyện phản xạ"
+          >
+            <Compass className="size-3.5 text-primary shrink-0" />
+            <span className="truncate">
+              {
+                getTopicDisplay(
+                  selectedTopicId === "custom" && customTopicText
+                    ? `custom_scenario: ${customTopicText}`
+                    : currentTask?.topic || selectedTopicId
+                ).label
+              }
+            </span>
+            <ChevronDown className="size-3 text-muted-foreground shrink-0 ml-0.5" />
+          </button>
 
-          {/* Right Header: Next Task Button + Progress Bar + AI Engine Selector */}
-          <div className="flex items-center gap-2">
-            {/* Next Task Action Button */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSkipOrNextTask}
-              disabled={isGenerating || isEvaluating}
-              className="h-8 px-2.5 rounded-xl font-bold text-xs gap-1.5 border-amber-500/40 bg-amber-500/5 hover:bg-amber-500 hover:text-white text-amber-600 dark:text-amber-400 transition-all shadow-2xs btn-spring"
-              title="Đổi sang câu hỏi tiếp theo (Phím R)"
-            >
-              <Sparkles className={`size-3.5 ${isGenerating ? "animate-spin" : ""}`} />
-              <span>Câu tiếp theo</span>
-              <span className="text-[9px] font-mono opacity-60 hidden sm:inline">[R]</span>
-            </Button>
+          {/* Drill Mode Switcher Button */}
+          <button
+            type="button"
+            onClick={() => setIsDrillModalOpen(true)}
+            className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-semibold transition-all cursor-pointer shadow-2xs shrink-0"
+            title="Chuyển chế độ luyện phản xạ tốc độ"
+          >
+            <currentModeInfo.icon className="size-3.5 text-amber-500" />
+            <span className="hidden md:inline">{currentModeInfo.label}</span>
+            <ChevronDown className="size-3 opacity-60 ml-0.5" />
+          </button>
 
-            <div className="text-right hidden sm:block font-mono text-xs">
-              <span className="text-muted-foreground">Tiến độ: </span>
-              <span className="font-bold text-foreground">
-                {currentTaskIndex + 1}/{targetCount}
-              </span>
-            </div>
-            <div className="w-16 sm:w-24">
-              <Progress
-                value={((currentTaskIndex + 1) / targetCount) * 100}
-                className="h-1.5 rounded-full"
-              />
-            </div>
-
+          <div className="hidden lg:block shrink-0">
             <GlobalAiSelector size="sm" />
           </div>
-        </header>
+        </div>
 
-        {/* Generation Error Banner */}
-        {generationError && (
-          <div className="bg-destructive/10 border-b border-destructive/30 px-4 py-2 flex items-center justify-between text-xs text-destructive shrink-0">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="size-4 shrink-0" />
-              <span>{generationError}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
+        {/* Right Header: Next Task Button + Progress Bar + Finish Button */}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="lg:hidden">
+            <GlobalAiSelector size="sm" />
+          </div>
+
+          {/* Next Task Action Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSkipOrNextTask}
+            disabled={isGenerating || isEvaluating}
+            className="h-8 px-2.5 rounded-xl font-bold text-xs gap-1.5 border-amber-500/40 bg-amber-500/5 hover:bg-amber-500 hover:text-white text-amber-600 dark:text-amber-400 transition-all shadow-2xs btn-spring"
+            title="Đổi sang câu hỏi tiếp theo (Phím R)"
+          >
+            <Sparkles className={`size-3.5 ${isGenerating ? "animate-spin" : ""}`} />
+            <span className="hidden sm:inline">Câu tiếp</span>
+            <span className="text-[9px] font-mono opacity-60 hidden md:inline">[R]</span>
+          </Button>
+
+          {/* Progress Indicator */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono font-bold text-foreground">
+              {targetCount > 0
+                ? `${currentTaskIndex + 1}/${targetCount}`
+                : `Câu #${currentTaskIndex + 1}`}
+            </span>
+            {targetCount === 0 ? (
+              <Badge
                 variant="outline"
-                onClick={() => useLatencyStore.getState().fetchFirstTask()}
-                className="h-6 px-2 text-[11px] border-destructive/30 hover:bg-destructive/10 text-destructive"
+                className="text-[10px] font-mono border-amber-500/30 text-amber-600 dark:text-amber-400 hidden sm:inline-flex"
               >
-                Thử lại ngay
-              </Button>
-              <Link href="/settings">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-6 px-2 text-[11px] text-destructive hover:bg-destructive/10"
-                >
-                  Kiểm tra API Key
-                </Button>
-              </Link>
+                Đã xong {completedTasksCount}
+              </Badge>
+            ) : (
+              <div className="w-16 sm:w-20">
+                <Progress
+                  value={((currentTaskIndex + 1) / targetCount) * 100}
+                  className="h-1.5 rounded-full"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Finish & View Results Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleFinishSession}
+            disabled={isGenerating || isEvaluating}
+            className="h-8 px-2.5 rounded-xl font-bold text-xs gap-1.5 border-amber-500/40 bg-amber-500/10 hover:bg-amber-500 hover:text-white text-amber-600 dark:text-amber-400 transition-all shadow-2xs btn-spring"
+            title="Kết thúc buổi tập và xem báo cáo tổng kết"
+          >
+            <Trophy className="size-3.5" />
+            <span className="hidden sm:inline">Kết thúc & Xem kết quả</span>
+            <span className="sm:hidden">Nghỉ tập</span>
+          </Button>
+        </div>
+      </header>
+
+      {/* Generation Error Banner */}
+      {generationError && (
+        <div className="bg-destructive/10 border-b border-destructive/30 px-4 py-2 flex items-center justify-between text-xs text-destructive shrink-0">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="size-4 shrink-0" />
+            <span>{generationError}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => useLatencyStore.getState().fetchFirstTask()}
+              className="h-6 px-2 text-[11px] border-destructive/30 hover:bg-destructive/10 text-destructive"
+            >
+              Thử lại ngay
+            </Button>
+            <Link href="/settings">
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={clearGenerationError}
-                className="size-6 p-0 text-destructive"
+                className="h-6 px-2 text-[11px] text-destructive hover:bg-destructive/10"
               >
-                <X className="size-3" />
+                Kiểm tra API Key
+              </Button>
+            </Link>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={clearGenerationError}
+              className="size-6 p-0 text-destructive"
+            >
+              <X className="size-3" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Studio Main Body: Professional 3-Column Split */}
+      <main className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-2.5 lg:gap-3 p-2.5 sm:p-3.5 overflow-hidden">
+        {/* Column 1 (4 cols): Prompt & Millisecond Stopwatch Gauge */}
+        <section className="lg:col-span-4 h-full overflow-hidden flex flex-col min-h-0">
+          {currentTask ? (
+            <LatencyPromptCard
+              task={currentTask}
+              currentTaskIndex={currentTaskIndex}
+              totalTasks={targetCount}
+              isRecording={unifiedSTT.isListening}
+              elapsedMs={elapsedMs}
+              rapidStreak={adaptiveState.rapidStreak}
+              staircaseTargetMs={adaptiveState.currentTargetLatencyMs}
+              onNextTask={handleSkipOrNextTask}
+              isGeneratingNext={isGenerating}
+              onRegenerateWithAI={generateNewTaskWithAI}
+              isRegeneratingAI={isRegeneratingAI}
+            />
+          ) : (
+            <Card className="rounded-3xl border border-border/80 bg-card p-6 h-full flex flex-col items-center justify-center text-center space-y-4">
+              <Loader2 className="size-8 text-amber-500 animate-spin" />
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-foreground">
+                  AI đang chuẩn bị câu hỏi phản xạ tiếp theo...
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Đo độ trễ chính xác từ mốc hiển thị đầu tiên.
+                </p>
+              </div>
+            </Card>
+          )}
+        </section>
+
+        {/* Column 2 (5 cols): Buffer Phrases, Model Answer & Progressive Hints */}
+        <section className="lg:col-span-5 h-full overflow-hidden flex flex-col min-h-0">
+          {currentTask && (
+            <LatencyContextCard
+              task={currentTask}
+              currentHintTier={currentHintTier}
+              onSelectHintTier={setCurrentHintTier}
+            />
+          )}
+        </section>
+
+        {/* Column 3 (3 cols): Compact Speaking Controller or Feedback */}
+        <section className="lg:col-span-3 h-full overflow-hidden flex flex-col min-h-0">
+          {!lastEvaluation ? (
+            <SpeakingController
+              compact
+              status={unifiedSTT.isListening ? "recording" : "idle"}
+              isListening={unifiedSTT.isListening}
+              liveTranscript={liveText}
+              durationMs={recordingDurationMs}
+              autoStartMic={autoStartMic}
+              onToggleAutoStartMic={setAutoStartMic}
+              onStartRecord={handleStartRecord}
+              onStopRecord={handleStopRecord}
+              onSubmitTextFallback={(text) => {
+                submitAttemptForEvaluation(text, 2000, 2000);
+              }}
+              onOpenHints={() => setCurrentHintTier((prev) => (prev >= 4 ? 1 : prev + 1))}
+              isEvaluating={isEvaluating}
+              onResetLiveTranscript={() => {
+                unifiedSTTRef.current.resetTranscript();
+                setPendingSpokenText(null);
+              }}
+              pendingText={pendingSpokenText}
+              onConfirmSubmit={handleConfirmSubmit}
+              onReRecord={handleReRecord}
+            />
+          ) : (
+            <LatencyFeedbackCard
+              evaluation={lastEvaluation}
+              onContinue={handleContinueTask}
+              onRetry={() => {
+                useLatencyStore.setState({ lastEvaluation: null });
+                setPendingSpokenText(null);
+                setCurrentHintTier(0);
+              }}
+            />
+          )}
+        </section>
+      </main>
+
+      {/* Studio Footer Keybindings Dock */}
+      <footer className="h-9 border-t border-border/40 bg-card/80 px-4 flex items-center justify-between text-[11px] text-muted-foreground shrink-0 select-none">
+        <div className="flex items-center gap-3 overflow-x-auto py-1">
+          <span className="flex items-center gap-1 font-mono">
+            <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
+              Space
+            </kbd>
+            <span>{lastEvaluation ? "Nói lại" : pendingSpokenText ? "Thu âm lại" : "Nói / Dừng"}</span>
+          </span>
+          <span className="flex items-center gap-1 font-mono hidden sm:inline-flex">
+            <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
+              Backspace
+            </kbd>
+            <span>Xóa nói lại</span>
+          </span>
+          <span className="flex items-center gap-1 font-mono">
+            <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
+              H
+            </kbd>
+            <span>Đổi gợi ý</span>
+          </span>
+          {pendingSpokenText && !isEvaluating ? (
+            <span className="flex items-center gap-1 font-mono text-primary font-bold">
+              <kbd className="px-1.5 py-0.5 rounded bg-primary text-primary-foreground border text-[10px] font-bold">
+                Enter
+              </kbd>
+              <span>Nộp bài chấm điểm</span>
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 font-mono hidden md:inline-flex">
+              <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
+                Enter
+              </kbd>
+              <span>Câu tiếp</span>
+            </span>
+          )}
+          <span className="flex items-center gap-1 font-mono">
+            <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
+              Esc
+            </kbd>
+            <span>Đóng gợi ý / Thoát</span>
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5 font-mono text-[10px]">
+          <span className="size-2 rounded-full bg-amber-500 animate-pulse" />
+          <span className="hidden md:inline">Response Latency Active</span>
+        </div>
+      </footer>
+
+      {/* In-Studio Topic Selector Dialog */}
+      <Dialog open={isTopicModalOpen} onOpenChange={setIsTopicModalOpen}>
+        <DialogContent className="sm:max-w-xl rounded-3xl p-5 md:p-6 bg-card border border-border/80 shadow-2xl space-y-4">
+          <DialogHeader className="space-y-1">
+            <DialogTitle className="text-base md:text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
+              <Compass className="size-5 text-primary" />
+              <span>Đổi chủ đề luyện tập phản xạ</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Chọn một ngữ cảnh có sẵn hoặc tự gõ bất kỳ tình huống nào bạn muốn AI tạo câu hỏi phản xạ.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Preset Topics Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[300px] overflow-y-auto pr-1">
+            {PRESET_TOPICS.map((topic) => {
+              const IconComp = TOPIC_ICONS[topic.icon] || Sparkles;
+              const isSelected = selectedTopicId === topic.id;
+
+              return (
+                <button
+                  key={topic.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedTopic(topic.id, "");
+                    setCustomInputVal("");
+                    setIsTopicModalOpen(false);
+                    toast.success("Đã chọn chủ đề", topic.labelVi);
+                  }}
+                  className={`flex items-center gap-2.5 p-2.5 rounded-2xl border transition-all cursor-pointer text-left btn-spring ${
+                    isSelected
+                      ? "border-primary bg-primary/10 ring-1 ring-primary/40 shadow-xs"
+                      : "border-border/70 bg-card hover:border-primary/40 hover:bg-muted/40"
+                  }`}
+                >
+                  <div
+                    className={`size-7 rounded-xl flex items-center justify-center shrink-0 ${
+                      isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    <IconComp className="size-3.5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-xs font-bold text-foreground block truncate">
+                      {topic.labelVi}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground font-mono block truncate">
+                      {topic.labelEn}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Custom Topic Input */}
+          <div className="p-3 rounded-2xl border border-border/70 bg-muted/20 space-y-2">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Wand2 className="size-3.5 text-primary" />
+              <span className="font-semibold text-foreground">Hoặc nhập bối cảnh tùy chỉnh:</span>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={customInputVal}
+                onChange={(e) => setCustomInputVal(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && customInputVal.trim()) {
+                    setSelectedTopic("custom", customInputVal.trim());
+                    setIsTopicModalOpen(false);
+                    toast.success("Đã chọn chủ đề tùy chỉnh", customInputVal.trim());
+                  }
+                }}
+                placeholder="Ví dụ: Đặt khách sạn ở Tokyo, Mua trà sữa ít ngọt, Phỏng vấn xin việc..."
+                className="flex-1 h-9 px-3 text-xs rounded-xl bg-background border border-border/80 focus:outline-hidden focus:border-primary focus:ring-1 focus:ring-primary text-foreground placeholder:text-muted-foreground/60 transition-all"
+              />
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  if (customInputVal.trim()) {
+                    setSelectedTopic("custom", customInputVal.trim());
+                    setIsTopicModalOpen(false);
+                    toast.success("Đã chọn chủ đề tùy chỉnh", customInputVal.trim());
+                  } else {
+                    toast.info("Vui lòng nhập chủ đề trước khi áp dụng");
+                  }
+                }}
+                className="h-9 px-3 rounded-xl text-xs gap-1 font-semibold"
+              >
+                <Check className="size-3" />
+                <span>Áp dụng</span>
               </Button>
             </div>
           </div>
-        )}
+        </DialogContent>
+      </Dialog>
 
-        {/* Studio Main Body: Professional 3-Column Split */}
-        <main className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-2.5 lg:gap-3 p-2.5 sm:p-3.5 overflow-hidden">
-          {/* Column 1 (4 cols): Prompt & Millisecond Stopwatch Gauge */}
-          <section className="lg:col-span-4 h-full overflow-hidden flex flex-col min-h-0">
-            {currentTask ? (
-              <LatencyPromptCard
-                task={currentTask}
-                currentTaskIndex={currentTaskIndex}
-                totalTasks={targetCount}
-                isRecording={unifiedSTT.isListening}
-                elapsedMs={elapsedMs}
-                rapidStreak={adaptiveState.rapidStreak}
-                staircaseTargetMs={adaptiveState.currentTargetLatencyMs}
-                onNextTask={handleSkipOrNextTask}
-                isGeneratingNext={isGenerating}
-                onRegenerateWithAI={generateNewTaskWithAI}
-                isRegeneratingAI={isRegeneratingAI}
-              />
-            ) : (
-              <Card className="rounded-3xl border border-border/80 bg-card p-6 h-full flex flex-col items-center justify-center text-center space-y-4">
-                <Loader2 className="size-8 text-amber-500 animate-spin" />
-                <div className="space-y-1">
-                  <h3 className="text-sm font-bold text-foreground">AI đang chuẩn bị câu hỏi tiếp theo...</h3>
-                  <p className="text-xs text-muted-foreground">Đo độ trễ chính xác từ mốc hiển thị đầu tiên.</p>
-                </div>
-              </Card>
-            )}
-          </section>
+      {/* In-Studio Drill Mode Selector Dialog */}
+      <Dialog open={isDrillModalOpen} onOpenChange={setIsDrillModalOpen}>
+        <DialogContent className="sm:max-w-md rounded-3xl p-5 md:p-6 bg-card border border-border/80 shadow-2xl space-y-4">
+          <DialogHeader className="space-y-1">
+            <DialogTitle className="text-base md:text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
+              <Zap className="size-5 text-amber-500 fill-amber-500" />
+              <span>Chọn kiểu bài tập phản xạ</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Thay đổi áp lực thời gian và mục tiêu độ trễ để rèn luyện các tầng phản xạ khác nhau.
+            </DialogDescription>
+          </DialogHeader>
 
-          {/* Column 2 (5 cols): Buffer Phrases, Model Answer & Progressive Hints */}
-          <section className="lg:col-span-5 h-full overflow-hidden flex flex-col min-h-0">
-            {currentTask && (
-              <LatencyContextCard
-                task={currentTask}
-                currentHintTier={currentHintTier}
-                onSelectHintTier={setCurrentHintTier}
-              />
-            )}
-          </section>
+          <div className="space-y-2.5 pt-1">
+            {DRILL_MODES.map((mode) => {
+              const IconComp = mode.icon;
+              const isSelected = currentDrillMode === mode.id;
 
-          {/* Column 3 (3 cols): Compact Speaking Controller or Feedback */}
-          <section className="lg:col-span-3 h-full overflow-hidden flex flex-col min-h-0">
-            {!lastEvaluation ? (
-              <SpeakingController
-                compact
-                status={unifiedSTT.isListening ? "recording" : "idle"}
-                isListening={unifiedSTT.isListening}
-                liveTranscript={liveText}
-                durationMs={recordingDurationMs}
-                autoStartMic={autoStartMic}
-                onToggleAutoStartMic={setAutoStartMic}
-                onStartRecord={handleStartRecord}
-                onStopRecord={handleStopRecord}
-                onSubmitTextFallback={(text) => {
-                  submitAttemptForEvaluation(text, 2000, 2000);
-                }}
-                onOpenHints={() => setCurrentHintTier((prev) => (prev >= 4 ? 1 : prev + 1))}
-                isEvaluating={isEvaluating}
-                onResetLiveTranscript={() => {
-                  unifiedSTTRef.current.resetTranscript();
-                  setPendingSpokenText(null);
-                }}
-                pendingText={pendingSpokenText}
-                onConfirmSubmit={handleConfirmSubmit}
-                onReRecord={handleReRecord}
-              />
-            ) : (
-              <LatencyFeedbackCard
-                evaluation={lastEvaluation}
-                onContinue={handleContinueTask}
-                onRetry={() => {
-                  useLatencyStore.setState({ lastEvaluation: null });
-                  setPendingSpokenText(null);
-                  setCurrentHintTier(0);
-                }}
-              />
-            )}
-          </section>
-        </main>
+              return (
+                <button
+                  key={mode.id}
+                  type="button"
+                  onClick={() => handleModeChange(mode.id)}
+                  className={`w-full flex items-center justify-between p-3.5 rounded-2xl border transition-all cursor-pointer text-left btn-spring ${
+                    isSelected
+                      ? "border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/40 shadow-xs"
+                      : "border-border/70 bg-card hover:border-amber-500/40 hover:bg-muted/40"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`size-9 rounded-xl flex items-center justify-center shrink-0 ${
+                        isSelected
+                          ? "bg-amber-500 text-white"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      <IconComp className="size-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-foreground block">
+                        {mode.label}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground block">
+                        {mode.sub}
+                      </span>
+                    </div>
+                  </div>
 
-        {/* Studio Footer Keybindings Dock */}
-        <footer className="h-9 border-t border-border/40 bg-card/80 px-4 flex items-center justify-between text-[11px] text-muted-foreground shrink-0 select-none">
-          <div className="flex items-center gap-3 overflow-x-auto py-1">
-            <span className="flex items-center gap-1 font-mono">
-              <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
-                Space
-              </kbd>
-              <span>{lastEvaluation ? "Nói lại" : pendingSpokenText ? "Thu âm lại" : "Nói / Dừng"}</span>
-            </span>
-            <span className="flex items-center gap-1 font-mono hidden sm:inline-flex">
-              <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
-                Backspace
-              </kbd>
-              <span>Xóa nói lại</span>
-            </span>
-            <span className="flex items-center gap-1 font-mono">
-              <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
-                H
-              </kbd>
-              <span>Đổi tầng gợi ý</span>
-            </span>
-            {pendingSpokenText && !isEvaluating ? (
-              <span className="flex items-center gap-1 font-mono text-primary font-bold">
-                <kbd className="px-1.5 py-0.5 rounded bg-primary text-primary-foreground border text-[10px] font-bold">
-                  Enter
-                </kbd>
-                <span>Nộp bài chấm điểm</span>
-              </span>
-            ) : (
-              <span className="flex items-center gap-1 font-mono hidden md:inline-flex">
-                <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
-                  Enter
-                </kbd>
-                <span>Câu tiếp</span>
-              </span>
-            )}
-            <span className="flex items-center gap-1 font-mono">
-              <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
-                Esc
-              </kbd>
-              <span>Đóng gợi ý / Thoát</span>
-            </span>
+                  <Badge
+                    variant={isSelected ? "default" : "outline"}
+                    className="text-[10px] font-mono shrink-0"
+                  >
+                    {mode.targetDesc}
+                  </Badge>
+                </button>
+              );
+            })}
           </div>
+        </DialogContent>
+      </Dialog>
 
-          <div className="flex items-center gap-1.5 font-mono text-[10px]">
-            <span className="size-2 rounded-full bg-amber-500 animate-pulse" />
-            <span className="hidden md:inline">Response Latency Active</span>
-          </div>
-        </footer>
-
-        {/* Completion Summary Modal */}
-        <LatencySummaryModal
-          isOpen={isSessionCompleted}
-          summary={sessionSummary}
-          onRestart={() => {
-            resetSession();
-            setHasStartedSession(false);
-          }}
-        />
-      </div>
-    );
-  }
-
-  // ==================== 2. LOBBY & DASHBOARD VIEW (Before starting session) ====================
-  return (
-    <div className="space-y-8 pb-16 animate-in fade-in-0 duration-300 max-w-4xl mx-auto px-2 sm:px-4">
-      {/* Top Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-        <div className="flex items-center gap-2.5">
-          <Link href="/foundation">
-            <Button variant="ghost" size="sm" className="size-9 p-0 rounded-full">
-              <ArrowLeft className="size-4" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-base sm:text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
-              <Zap className="size-4 text-amber-500 fill-amber-500" />
-              <span>Response Latency Training (Phòng Tập Tốc Độ Phản Xạ)</span>
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              Rèn phản xạ tự động dưới 2.5s — Chuyển dịch từ Slow + Correct sang Fast + Correct
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <GlobalAiSelector size="sm" />
-        </div>
-      </div>
-
-      {/* Hero Banner */}
-      <div className="p-5 sm:p-6 rounded-3xl border border-amber-500/20 bg-gradient-to-br from-amber-500/10 via-card to-background shadow-xs">
-        <h2 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
-          Luyện phản xạ tốc độ (Latency Drills)
-        </h2>
-      </div>
-
-      {/* Baseline Test Card */}
-      <Card className="rounded-3xl border-2 border-primary/40 bg-gradient-to-br from-card via-card to-primary/10 p-6 space-y-4 shadow-sm relative overflow-hidden">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="size-12 rounded-2xl bg-primary/15 text-primary flex items-center justify-center font-bold shrink-0">
-              <BarChart3 className="size-6" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-foreground">
-                Baseline Latency Test (Kiểm tra mốc phản xạ)
-              </h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                10 câu hỏi chuẩn hóa để đo lường Median Latency và thiết lập mục tiêu cá nhân hóa.
-              </p>
-            </div>
-          </div>
-
-          <Button
-            size="lg"
-            onClick={() => handleStartMode("baseline_test", 10)}
-            className="rounded-2xl font-bold gap-1.5 shadow-md shadow-primary/25 btn-spring shrink-0 w-full sm:w-auto"
-          >
-            <span>Làm bài Test (10 câu)</span>
-            <ArrowRight className="size-4" />
-          </Button>
-        </div>
-      </Card>
-
-      {/* 3 Main Drill Modes */}
-      <div className="space-y-4">
-        <h2 className="text-sm font-bold text-foreground uppercase tracking-wider">
-          Chế độ luyện tập:
-        </h2>
-
-        <div className="grid sm:grid-cols-3 gap-4">
-          {/* Open Response */}
-          <Card
-            onClick={() => handleStartMode("open_response", 8)}
-            className="rounded-3xl border border-border/80 bg-card hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-all cursor-pointer p-5 space-y-3 btn-spring shadow-xs"
-          >
-            <div className="size-10 rounded-2xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
-              <Target className="size-5" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-foreground">Open Response</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Câu hỏi mở thực tế, rèn phản xạ tự nhiên không đóng băng tư duy.
-              </p>
-            </div>
-            <Badge variant="secondary" className="text-[10px] font-mono">
-              8 câu • ~3.0s target
-            </Badge>
-          </Card>
-
-          {/* Rapid Retrieval */}
-          <Card
-            onClick={() => handleStartMode("rapid_retrieval", 12)}
-            className="rounded-3xl border-2 border-amber-500/40 bg-gradient-to-br from-card via-card to-amber-500/5 hover:border-amber-500 transition-all cursor-pointer p-5 space-y-3 btn-spring shadow-sm relative overflow-hidden"
-          >
-            <div className="absolute top-3 right-3">
-              <Badge className="text-[9px] font-bold bg-amber-500 text-white">Khuyên dùng</Badge>
-            </div>
-            <div className="size-10 rounded-2xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
-              <Flame className="size-5" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-foreground">Rapid Retrieval</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Chuỗi phản xạ câu ngắn liên hoàn ép tốc độ dưới 1.8 giây.
-              </p>
-            </div>
-            <Badge
-              variant="outline"
-              className="text-[10px] font-mono text-amber-600 dark:text-amber-400 border-amber-500/30"
-            >
-              12 câu • Phản xạ tức thì
-            </Badge>
-          </Card>
-
-          {/* Timed Countdown */}
-          <Card
-            onClick={() => handleStartMode("timed_countdown", 10)}
-            className="rounded-3xl border border-border/80 bg-card hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-all cursor-pointer p-5 space-y-3 btn-spring shadow-xs"
-          >
-            <div className="size-10 rounded-2xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
-              <Clock className="size-5" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-foreground">Timed Countdown</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Áp lực bậc thang đếm lùi rút ngắn dần từ 3.0s xuống 1.5s.
-              </p>
-            </div>
-            <Badge variant="secondary" className="text-[10px] font-mono">
-              10 câu • Bậc thang thời gian
-            </Badge>
-          </Card>
-        </div>
-      </div>
+      {/* Completion Summary Modal */}
+      <LatencySummaryModal
+        isOpen={isSessionCompleted}
+        summary={sessionSummary}
+        onRestart={() => {
+          resetSession();
+          initSession(currentDrillMode, 0);
+        }}
+      />
     </div>
   );
 }

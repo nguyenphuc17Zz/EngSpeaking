@@ -158,3 +158,19 @@ export interface ChunkChainEvaluationResult {
   coachFeedbackVi: string;
   idealCombinedSpeech: string;
 }
+
+export interface ChunkSessionSummary {
+  sessionId: string;
+  startedAt: string;
+  completedAt: string;
+  totalTasks: number;
+  averageScore: number;
+  averageLatencyMs: number;
+  fastRecallCount: number;
+  blocksUsedTotal: number;
+  strategyDistribution: Record<string, number>;
+  history: Array<{
+    task: ChunkChainTask | ChunkTrainingTask;
+    evaluation: ChunkChainEvaluationResult | ChunkEvaluationResult;
+  }>;
+}

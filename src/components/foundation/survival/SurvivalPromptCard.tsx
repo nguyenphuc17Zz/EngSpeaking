@@ -37,6 +37,12 @@ interface SurvivalPromptCardProps {
   onRegenerateAI?: () => void;
   isRegeneratingAI?: boolean;
   onNextTask?: () => void;
+  // SB/VN-EN aligned session header
+  currentTaskIndex?: number;
+  totalTasks?: number;
+  prepCountdown?: number | null;
+  isCountingDown?: boolean;
+  rapidStreak?: number;
 }
 
 export function SurvivalPromptCard({
@@ -47,6 +53,11 @@ export function SurvivalPromptCard({
   onRegenerateAI,
   isRegeneratingAI = false,
   onNextTask,
+  currentTaskIndex = 0,
+  totalTasks = 0,
+  prepCountdown = null,
+  isCountingDown = false,
+  rapidStreak = 0,
 }: SurvivalPromptCardProps) {
   const tts = useBrowserTTS();
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -89,6 +100,28 @@ export function SurvivalPromptCard({
             <Badge variant="outline" className="text-xs font-mono border-border/80">
               {mode === "circumlocution" ? circumTask?.category : scenarioTask?.contextTitleVi}
             </Badge>
+
+            <Badge
+              variant="outline"
+              className={`text-[10px] font-mono px-1.5 py-0 ${
+                (mode === "circumlocution" ? circumTask?.difficulty : "medium") === "easy"
+                  ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10"
+                  : (mode === "circumlocution" ? circumTask?.difficulty : "medium") === "hard"
+                    ? "border-red-500/40 text-red-600 dark:text-red-400 bg-red-500/10"
+                    : "border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10"
+              }`}
+            >
+              {(mode === "circumlocution" ? circumTask?.difficulty : "medium") || "medium"} ·{" "}
+              {mode === "circumlocution"
+                ? (circumTask?.difficultyOverall ?? 5)
+                : (scenarioTask?.difficultyOverall ?? 5)}
+              /10
+            </Badge>
+            {rapidStreak > 1 && (
+              <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10px] font-mono">
+                🔥 Streak {rapidStreak}
+              </Badge>
+            )}
 
             {mode === "circumlocution" && circumTask?.source === "ai" && (
               <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 gap-1 font-normal text-xs">
@@ -140,11 +173,23 @@ export function SurvivalPromptCard({
                 <ArrowRight className="size-2.5" />
               </Button>
             )}
+            <span className="text-[10px] font-mono text-muted-foreground">
+              #{currentTaskIndex + 1}{totalTasks > 0 ? `/${totalTasks}` : ""}
+            </span>
             <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-amber-600 dark:text-amber-400 bg-amber-500/15 px-2.5 py-0.5 rounded-full">
               <Clock className="size-3" />
               <span>{countdownSeconds}s</span>
             </div>
           </div>
+        </div>
+
+        {/* Topic line (SB/VN-EN aligned) */}
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground shrink-0">
+          <Tag className="size-3 text-primary" />
+          <span className="font-mono truncate">
+            Chủ đề:{" "}
+            {(mode === "circumlocution" ? circumTask?.topic : scenarioTask?.topic) || "Giao tiếp tự nhiên"}
+          </span>
         </div>
 
         {/* Scrollable Main Content */}
@@ -345,6 +390,34 @@ export function SurvivalPromptCard({
               </div>
             </div>
           )}
+        </div>
+
+        {/* Bottom prep timer bar (SB/VN-EN aligned) */}
+        <div className="pt-1.5 border-t border-border/40 flex items-center justify-between text-[10px] text-muted-foreground shrink-0 font-mono">
+          {isCountingDown && prepCountdown !== null ? (
+            <div className="flex items-center gap-1 text-primary font-bold animate-pulse">
+              <Clock className="size-3" />
+              <span>Chuẩn bị nói: {prepCountdown}s...</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1">
+              <Clock className="size-3" />
+              <span>
+                Chuẩn bị:{" "}
+                {mode === "circumlocution"
+                  ? (circumTask?.prepTimeSec ?? 2.5)
+                  : (scenarioTask?.prepTimeSec ?? 2.0)}
+                s
+              </span>
+            </div>
+          )}
+          <span>
+            Độ khó:{" "}
+            {mode === "circumlocution"
+              ? (circumTask?.difficultyOverall ?? 5)
+              : (scenarioTask?.difficultyOverall ?? 5)}
+            /10
+          </span>
         </div>
       </CardContent>
     </Card>

@@ -160,7 +160,7 @@ export default function VNToENPage() {
     setIsEvaluating(false);
     setPendingSpokenText(null);
     resetSession();
-    router.push("/foundation");
+    router.push("/");
   };
 
   // Finish Endless Practice Session Manually & View Report
@@ -511,11 +511,11 @@ export default function VNToENPage() {
             variant="ghost"
             onClick={() => {
               clearGenerationError();
-              router.push("/foundation");
+              router.push("/");
             }}
             className="rounded-xl"
           >
-            Về trang Foundation
+            Về Trang chủ
           </Button>
         </div>
       </div>

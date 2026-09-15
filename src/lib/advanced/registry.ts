@@ -14,6 +14,8 @@ export function listModuleTypes(): AdvancedTrainingType[] {
   return Array.from(registry.keys()) as AdvancedTrainingType[];
 }
 
+// Legacy 25 block-modules kept for backward-compat (old /api/advanced/session + history).
+// New Studio uses 3 tracks × 3 levels (see track-map.ts); skillTag reuses these 25 ids for analytics.
 // Auto-register all modules lazily
 let initialized = false;
 export async function ensureRegistry(): Promise<void> {

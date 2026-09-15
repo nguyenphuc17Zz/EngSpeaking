@@ -60,6 +60,9 @@ export interface ScenarioBlueprint {
   userGoal: string;
   aiGoal: string;
   difficulty: number; // 1-10 scalar
+  difficultyOverall?: number; // 1-10 alias aligned with Survival/Drill
+  prepTimeSec?: number;
+  skills?: string[];
   difficultyLabel?: DifficultyLevel;
   context: string;
   conflict?: string;
@@ -118,10 +121,16 @@ export interface ConversationSettings {
   surpriseLevel: SurpriseLevel;
   conflictIntensity: ConflictIntensity;
   pressure: ConversationPressure;
-  topic?: string; // "auto" or specific
+  topic?: string; // PRESET_TOPICS id | custom_scenario: ... | "auto"
   setting?: string;
   surpriseMe?: boolean;
   aiPrompt?: string; // for ai_generated §16
+  // SB/VN-EN/Survival/Drill aligned session model
+  sessionMode?: "endless" | "quick" | "standard" | "deep";
+  targetCount?: number;
+  prepTimeSec?: number;
+  recentErrors?: string[];
+  pedagogicalConstraint?: string;
 }
 
 export interface ConversationAIResponse {
@@ -152,11 +161,34 @@ export interface ConversationAIResponse {
     coachTipVi?: string;
     speechRateWpm?: number;
     lexicalDiversityTtr?: number;
+    // SB/VN-EN/Survival/Drill aligned scores
+    meaningScore?: number;
+    fluencyScore?: number;
+    retrievalScore?: number;
+    independenceScore?: number;
+    errors?: Array<{
+      type: "grammar" | "vocabulary" | "pronunciation" | "fluency" | "omission" | "strategy";
+      severity: "minor" | "major";
+      userText: string;
+      correction: string;
+      explanation: string;
+      patternKey?: string;
+    }>;
+    praisePoints?: string[];
+    actionableFeedback?: string;
+    sayItBetter?: { professional: string; casual: string; idiomatic: string };
+    naturalAlternatives?: Array<{ expression: string; tone: string; explanationVi?: string }>;
+    isSayItBetterNeeded?: boolean;
+    hintTierUsed?: number;
+    attemptNumber?: number;
+    evaluationSource?: "fast_pass" | "ai_llm" | "deterministic";
+    hesitationMetrics?: { wpm: number; durationMs: number; hesitationLevel: "smooth" | "moderate" | "hesitant"; pauseEstimatedSec: number };
+    isFastPass?: boolean;
   };
   hints?: {
-    tier1Keywords?: Array<{ term: string; meaning: string }>;
-    tier2Starters?: Array<{ starter: string; meaning: string }>;
-    tier3FullAnswer?: { en: string; vi: string };
+    tier1Keywords?: Array<{ term: string; meaning: string; penaltyWeight?: number }>;
+    tier2Starters?: Array<{ starter: string; meaning: string; penaltyWeight?: number }>;
+    tier3FullAnswer?: { en: string; vi: string; penaltyWeight?: number };
   };
 }
 
