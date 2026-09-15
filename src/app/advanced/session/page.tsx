@@ -87,7 +87,7 @@ export default function AdvancedSessionPage() {
   const [elapsedSec, setElapsedSec] = useState(0);
 
   // ─── Live Voice OS & Cognitive Pressure Blitz State ──────────────────
-  const [handsFreeMode, setHandsFreeMode] = useState(true);
+  const [handsFreeMode, setHandsFreeMode] = useState(false);
   const [blitzRemainingMs, setBlitzRemainingMs] = useState<number>(0);
   const [isLifelineVisible, setIsLifelineVisible] = useState(false);
   const [aiFinishedSpeechTime, setAiFinishedSpeechTime] = useState<number>(Date.now());

@@ -103,6 +103,7 @@ export interface RetrySession {
   isSelfCorrected: boolean;
   isSimplified: boolean;
   totalRepairLatencyMs: number;
+  topic?: string;
   createdAt: string;
   completedAt?: string;
 }
@@ -116,4 +117,27 @@ export interface SpokenRepairMetric {
   firstRetrySuccessRate: number; // % (resolvedOnFirstRetry / totalRequiringRetry)
   averageRepairAttempts: number;
   recentRepairedPatterns: string[];
+}
+
+export interface RepairSessionHistoryItem {
+  challengeTitle: string;
+  originalSentence: string;
+  betterSentence: string;
+  isResolved: boolean;
+  attemptsCount: number;
+  isSelfCorrection: boolean;
+}
+
+export interface RepairSessionSummary {
+  sessionId: string;
+  startedAt: string;
+  completedAt: string;
+  totalChallenges: number;
+  resolvedCount: number;
+  firstAttemptSuccessCount: number;
+  firstAttemptAccuracy: number; // %
+  selfCorrectionCount: number;
+  recoveryRate: number; // %
+  averageLatencyMs: number;
+  history: RepairSessionHistoryItem[];
 }

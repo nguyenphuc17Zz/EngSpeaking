@@ -14,7 +14,7 @@ export default function CurriculumHistoryPage() {
     <Card>
       <CardHeader><CardTitle className="text-base">Plan History (§114)</CardTitle></CardHeader>
       <CardContent className="space-y-2">
-        {plans.length === 0 ? <p className="text-sm text-muted-foreground">Chưa có plan nào (khi không có DB, history rỗng — plans được lưu khi Supabase configured).</p> : (
+        {plans.length === 0 ? <p className="text-sm text-muted-foreground">Chưa có plan nào được lưu trong database SQLite cục bộ.</p> : (
           plans.map((p) => (
             <div key={p.id} className="flex items-center justify-between rounded border p-3">
               <div className="text-sm">

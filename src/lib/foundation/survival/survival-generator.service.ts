@@ -70,16 +70,18 @@ export async function generateCircumlocutionTask(options: {
   // 1. Check Content Bank (Hybrid 70/30 Policy)
   const diff = options.difficulty || "medium";
   const numDiff = diff === "easy" ? 3 : diff === "medium" ? 5 : 8;
-  const bankSample = await sampleBankTask<CircumlocutionTask>({
-    module: "survival_circumlocution",
-    level: diff,
-    difficulty: numDiff,
-    forceSource: options.forceSource,
-  });
+  if (options.forceSource !== "ai") {
+    const bankSample = await sampleBankTask<CircumlocutionTask>({
+      module: "survival_circumlocution",
+      level: diff,
+      difficulty: numDiff,
+      forceSource: options.forceSource,
+    });
 
-  if (bankSample) {
-    recordUserExposure(bankSample.contentId, "survival_circumlocution").catch(() => {});
-    return bankSample.task;
+    if (bankSample) {
+      recordUserExposure(bankSample.contentId, "survival_circumlocution").catch(() => {});
+      return { ...bankSample.task, source: "bank" };
+    }
   }
 
   const domains = [
@@ -108,7 +110,7 @@ The learner must describe this concept without using the forbidden target word. 
           messages: [{ role: "user", content: userPrompt }],
           systemInstruction: CIRCUMLOCUTION_TASK_SYSTEM,
           temperature: 0.7,
-          maxOutputTokens: 550,
+          maxOutputTokens: 1000,
         },
       });
 
@@ -118,6 +120,7 @@ The learner must describe this concept without using the forbidden target word. 
       if (!parsed.id) {
         parsed.id = `circ_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
       }
+      parsed.source = "ai";
 
       // Ensure hints object exists
       if (!parsed.hints || typeof parsed.hints !== "object") {
@@ -226,7 +229,7 @@ The learner must describe this concept without using the forbidden target word. 
     });
     if (fallbackBank) {
       recordUserExposure(fallbackBank.contentId, "survival_circumlocution").catch(() => {});
-      return fallbackBank.task;
+      return { ...fallbackBank.task, source: "bank" };
     }
 
     throw new Error(
@@ -267,15 +270,17 @@ export async function generateSurvivalScenarioTask(options: {
   }
 
   // 1. Check Content Bank (Hybrid 70/30 Policy)
-  const bankSample = await sampleBankTask<SurvivalScenarioTask>({
-    module: "survival_scenario",
-    topic: options.context,
-    forceSource: options.forceSource,
-  });
+  if (options.forceSource !== "ai") {
+    const bankSample = await sampleBankTask<SurvivalScenarioTask>({
+      module: "survival_scenario",
+      topic: options.context,
+      forceSource: options.forceSource,
+    });
 
-  if (bankSample) {
-    recordUserExposure(bankSample.contentId, "survival_scenario").catch(() => {});
-    return bankSample.task;
+    if (bankSample) {
+      recordUserExposure(bankSample.contentId, "survival_scenario").catch(() => {});
+      return { ...bankSample.task, source: "bank" };
+    }
   }
 
   const contexts = [
@@ -303,7 +308,7 @@ Create a real problem where the speaker must immediately react and repair the co
           messages: [{ role: "user", content: userPrompt }],
           systemInstruction: SURVIVAL_SCENARIO_SYSTEM,
           temperature: 0.7,
-          maxOutputTokens: 480, // Reduced from 1400 to 480 for speed and rate-limit safety
+          maxOutputTokens: 1000,
         },
       });
 
@@ -313,6 +318,7 @@ Create a real problem where the speaker must immediately react and repair the co
       if (!parsed.id) {
         parsed.id = `scen_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
       }
+      parsed.source = "ai";
 
       const phrases = Array.isArray(parsed.suggestedRepairPhrases)
         ? (parsed.suggestedRepairPhrases as string[])
@@ -363,7 +369,7 @@ Create a real problem where the speaker must immediately react and repair the co
     });
     if (fallbackBank) {
       recordUserExposure(fallbackBank.contentId, "survival_scenario").catch(() => {});
-      return fallbackBank.task;
+      return { ...fallbackBank.task, source: "bank" };
     }
 
     throw new Error(

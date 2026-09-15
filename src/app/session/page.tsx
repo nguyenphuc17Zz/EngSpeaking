@@ -202,7 +202,7 @@ export default function SessionPage() {
   const [speechStartMs, setSpeechStartMs] = useState<number>(0);
 
   // ─── Live Conversational OS State ─────────────────────────────────────
-  const [handsFreeMode, setHandsFreeMode] = useState(true);
+  const [handsFreeMode, setHandsFreeMode] = useState(false);
   const [activeTwist, setActiveTwist] = useState<ConversationalTwist | null>(null);
   const [activeTwistFeedback, setActiveTwistFeedback] = useState<string | null>(null);
   const [isLifelineVisible, setIsLifelineVisible] = useState(false);

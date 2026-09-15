@@ -159,16 +159,18 @@ export async function generateChunkChainTask(options: {
   }
 
   // 2. Check Content Bank (Hybrid 70/30 Policy)
-  const bankSample = await sampleBankTask<ChunkChainTask>({
-    module: "chunk_chain",
-    level: options.strategy || strategyDef.strategy,
-    topic: options.topic,
-    forceSource: options.forceSource,
-  });
+  if (options.forceSource !== "ai") {
+    const bankSample = await sampleBankTask<ChunkChainTask>({
+      module: "chunk_chain",
+      level: options.strategy || strategyDef.strategy,
+      topic: options.topic,
+      forceSource: options.forceSource,
+    });
 
-  if (bankSample) {
-    recordUserExposure(bankSample.contentId, "chunk_chain").catch(() => {});
-    return bankSample.task;
+    if (bankSample) {
+      recordUserExposure(bankSample.contentId, "chunk_chain").catch(() => {});
+      return { ...bankSample.task, source: "bank" };
+    }
   }
 
   // 3. Synthesize Rich Context-Infused LLM Prompt from DAG
@@ -195,7 +197,7 @@ export async function generateChunkChainTask(options: {
           messages: [{ role: "user", content: userPrompt }],
           systemInstruction: CHUNK_CHAIN_GENERATOR_SYSTEM,
           temperature: 0.7,
-          maxOutputTokens: 650,
+          maxOutputTokens: 1000,
         },
       });
 
@@ -205,6 +207,7 @@ export async function generateChunkChainTask(options: {
       if (!parsed.id) {
         parsed.id = `chain_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
       }
+      parsed.source = "ai";
 
       // Metadata synthesis
       parsed.pragmaticStrategy = parsed.pragmaticStrategy || strategyDef.strategy;
@@ -317,7 +320,7 @@ export async function generateChunkChainTask(options: {
     });
     if (fallbackBank) {
       recordUserExposure(fallbackBank.contentId, "chunk_chain").catch(() => {});
-      return fallbackBank.task;
+      return { ...fallbackBank.task, source: "bank" };
     }
 
     throw new Error(
@@ -375,7 +378,7 @@ Make sure situationVi is in natural Vietnamese and promptText is an authentic qu
           messages: [{ role: "user", content: userPrompt }],
           systemInstruction: CHUNK_TASK_GENERATOR_SYSTEM,
           temperature: 0.7,
-          maxOutputTokens: 450,
+          maxOutputTokens: 800,
         },
       });
 
@@ -385,6 +388,7 @@ Make sure situationVi is in natural Vietnamese and promptText is an authentic qu
       if (!parsed.id) {
         parsed.id = `chunk_task_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
       }
+      parsed.source = "ai";
       parsed.chunk = chunk;
       parsed.stage = stage;
       parsed.expectedChunkUsage = chunk.canonicalChunk;

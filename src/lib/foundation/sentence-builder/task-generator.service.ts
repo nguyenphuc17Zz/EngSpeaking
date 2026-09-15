@@ -5,6 +5,7 @@ import { generateTextWithRouting } from "@/lib/ai";
 import { sentenceBuilderTaskSchema } from "@/lib/validation/sentence-builder-schemas";
 import { TASK_GENERATOR_SYSTEM, buildTaskGeneratorUserPrompt } from "@/lib/ai/prompts/sentence-builder-prompts";
 import { sampleBankTask, saveBankTask, recordUserExposure } from "@/lib/foundation/services/content-bank.service";
+import { resolveTopicForPrompt } from "./topics";
 import type {
   SentenceBuilderTask,
   SentenceBuilderControlLevel,
@@ -64,7 +65,7 @@ function getTestMockTask(options: GenerateTaskOptions): SentenceBuilderTask {
     skills: ["sentence_construction"],
     grammarTargets: ["present_simple"],
     vocabularyTargets: ["coffee", "drink"],
-    topic: "daily_life",
+    topic: options.topic || "daily_life",
     prepTimeSec: 3.0,
   };
 }
@@ -102,18 +103,23 @@ export async function generateSentenceBuilderTask(
     return getTestMockTask({ ...options, controlLevel, targetDifficulty });
   }
 
-  // 1. Check Content Bank (Hybrid 70/30 Policy: 70% chance to fetch from Bank)
-  const bankSample = await sampleBankTask<SentenceBuilderTask>({
-    module: "sentence_builder",
-    level: controlLevel,
-    difficulty: targetDifficulty,
-    topic: options.topic,
-    forceSource: options.forceSource,
-  });
+  // Resolve dynamic / infinite / custom topic
+  const effectiveTopic = resolveTopicForPrompt(options.topic);
 
-  if (bankSample) {
-    recordUserExposure(bankSample.contentId, "sentence_builder").catch(() => {});
-    return bankSample.task;
+  // 1. Check Content Bank (Hybrid 70/30 Policy: 70% chance to fetch from Bank, skipped if forceSource === 'ai')
+  if (options.forceSource !== "ai") {
+    const bankSample = await sampleBankTask<SentenceBuilderTask>({
+      module: "sentence_builder",
+      level: controlLevel,
+      difficulty: targetDifficulty,
+      topic: options.topic && options.topic !== "random" ? options.topic : undefined,
+      forceSource: options.forceSource,
+    });
+
+    if (bankSample) {
+      recordUserExposure(bankSample.contentId, "sentence_builder").catch(() => {});
+      return { ...bankSample.task, source: "bank" };
+    }
   }
 
   // 2. Dynamic AI Generation (30% novel LLM generation or when bank misses)
@@ -121,7 +127,7 @@ export async function generateSentenceBuilderTask(
     controlLevel,
     taskType: options.taskType,
     targetDifficulty,
-    topic: options.topic,
+    topic: effectiveTopic,
     pedagogicalConstraint: options.pedagogicalConstraint,
   });
 
@@ -137,7 +143,7 @@ export async function generateSentenceBuilderTask(
           messages: [{ role: "user", content: userPrompt }],
           systemInstruction: TASK_GENERATOR_SYSTEM,
           temperature: 0.7,
-          maxOutputTokens: 450, // Reduced from 1000 to 450 to stay well under Groq 8000 TPM limit
+          maxOutputTokens: 1000, // Sufficient tokens to ensure complete valid JSON output without cut-offs
         },
       });
 
@@ -239,6 +245,10 @@ export async function generateSentenceBuilderTask(
           .filter((it: { term: string }) => Boolean(it.term));
       }
 
+      if (!parsed.topic || parsed.topic === "general") {
+        parsed.topic = effectiveTopic || "daily_life";
+      }
+      parsed.source = "ai";
       const validated = sentenceBuilderTaskSchema.safeParse(parsed);
       if (!validated.success) {
         lastErrorMsg = `Dữ liệu bài tập AI không đúng cấu trúc schema: ${validated.error.message.slice(0, 200)}`;
@@ -268,17 +278,19 @@ export async function generateSentenceBuilderTask(
     task = await attemptGenerate();
   }
 
-  // Emergency Fallback to Content Bank on AI rate limits/outages
+  // Emergency Fallback to Content Bank on AI rate limits/outages (only if not forceSource === 'ai')
   if (!task) {
-    const fallbackBank = await sampleBankTask<SentenceBuilderTask>({
-      module: "sentence_builder",
-      level: controlLevel,
-      difficulty: targetDifficulty,
-      forceSource: "bank",
-    });
-    if (fallbackBank) {
-      recordUserExposure(fallbackBank.contentId, "sentence_builder").catch(() => {});
-      return fallbackBank.task;
+    if (options.forceSource !== "ai") {
+      const fallbackBank = await sampleBankTask<SentenceBuilderTask>({
+        module: "sentence_builder",
+        level: controlLevel,
+        difficulty: targetDifficulty,
+        forceSource: "bank",
+      });
+      if (fallbackBank) {
+        recordUserExposure(fallbackBank.contentId, "sentence_builder").catch(() => {});
+        return { ...fallbackBank.task, source: "bank" };
+      }
     }
 
     throw new Error(

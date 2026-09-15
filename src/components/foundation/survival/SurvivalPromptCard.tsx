@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/lib/toast";
+import { cn } from "@/lib/utils";
 import {
   ShieldAlert,
   AlertTriangle,
@@ -16,6 +17,7 @@ import {
   Check,
   Tag,
   Key,
+  ArrowRight,
 } from "lucide-react";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 import { sanitizeTextForTTS } from "@/lib/tts/browser";
@@ -32,6 +34,9 @@ interface SurvivalPromptCardProps {
   countdownSeconds: number;
   currentHintTier: number;
   onSelectHintTier: (tier: number) => void;
+  onRegenerateAI?: () => void;
+  isRegeneratingAI?: boolean;
+  onNextTask?: () => void;
 }
 
 export function SurvivalPromptCard({
@@ -39,6 +44,9 @@ export function SurvivalPromptCard({
   circumTask,
   scenarioTask,
   countdownSeconds,
+  onRegenerateAI,
+  isRegeneratingAI = false,
+  onNextTask,
 }: SurvivalPromptCardProps) {
   const tts = useBrowserTTS();
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -65,7 +73,7 @@ export function SurvivalPromptCard({
       <CardContent className="p-4 md:p-5 flex flex-col h-full space-y-3 overflow-hidden">
         {/* Top Meta Header */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-2.5 shrink-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {mode === "circumlocution" ? (
               <Badge className="bg-primary/90 text-primary-foreground font-mono text-xs font-bold gap-1 px-2.5 py-0.5 rounded-full">
                 <ShieldAlert className="size-3.5" />
@@ -81,11 +89,61 @@ export function SurvivalPromptCard({
             <Badge variant="outline" className="text-xs font-mono border-border/80">
               {mode === "circumlocution" ? circumTask?.category : scenarioTask?.contextTitleVi}
             </Badge>
+
+            {mode === "circumlocution" && circumTask?.source === "ai" && (
+              <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 gap-1 font-normal text-xs">
+                <Sparkles className="size-2.5 text-emerald-500" />
+                AI Generated
+              </Badge>
+            )}
+            {mode === "circumlocution" && circumTask?.source === "bank" && (
+              <Badge variant="outline" className="border-blue-500/40 text-blue-600 dark:text-blue-400 bg-blue-500/10 gap-1 font-normal text-xs">
+                Từ ngân hàng
+              </Badge>
+            )}
+            {mode === "scenarios" && scenarioTask?.source === "ai" && (
+              <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 gap-1 font-normal text-xs">
+                <Sparkles className="size-2.5 text-emerald-500" />
+                AI Generated
+              </Badge>
+            )}
+            {mode === "scenarios" && scenarioTask?.source === "bank" && (
+              <Badge variant="outline" className="border-blue-500/40 text-blue-600 dark:text-blue-400 bg-blue-500/10 gap-1 font-normal text-xs">
+                Từ ngân hàng
+              </Badge>
+            )}
           </div>
 
-          <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-amber-600 dark:text-amber-400 bg-amber-500/15 px-3 py-0.5 rounded-full">
-            <Clock className="size-3.5" />
-            <span>Phản xạ: {countdownSeconds}s</span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {onRegenerateAI && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onRegenerateAI}
+                disabled={isRegeneratingAI}
+                className="h-6 px-2 rounded-lg text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 hover:border-emerald-500 gap-1 shrink-0 cursor-pointer shadow-2xs btn-spring"
+                title="Tạo thử thách mới bằng AI"
+              >
+                <Sparkles className={cn("size-2.5 text-emerald-500", isRegeneratingAI && "animate-spin")} />
+                <span>{isRegeneratingAI ? "AI đang tạo..." : "Tạo mới bằng AI"}</span>
+              </Button>
+            )}
+            {onNextTask && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onNextTask}
+                className="h-6 px-2 rounded-lg text-[10px] font-bold text-primary border-primary/30 hover:bg-primary/10 hover:border-primary gap-1 shrink-0 cursor-pointer shadow-2xs btn-spring"
+                title="Đổi thử thách tiếp theo [R]"
+              >
+                <span>Tiếp theo</span>
+                <ArrowRight className="size-2.5" />
+              </Button>
+            )}
+            <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-amber-600 dark:text-amber-400 bg-amber-500/15 px-2.5 py-0.5 rounded-full">
+              <Clock className="size-3" />
+              <span>{countdownSeconds}s</span>
+            </div>
           </div>
         </div>
 

@@ -41,6 +41,7 @@ export default function SurvivalSpeakingPage() {
     currentCircumTask,
     currentScenarioTask,
     isGenerating,
+    isRegeneratingAI,
     isEvaluating,
     generationError,
     lastEvaluation,
@@ -49,6 +50,7 @@ export default function SurvivalSpeakingPage() {
     clearGenerationError,
     fetchNextCircumTask,
     fetchNextScenarioTask,
+    generateNewTaskWithAI,
     processEvaluation,
     resetSessionStats,
     getSessionSummary,
@@ -503,6 +505,9 @@ export default function SurvivalSpeakingPage() {
                 countdownSeconds={countdownSeconds}
                 currentHintTier={currentHintTier}
                 onSelectHintTier={setCurrentHintTier}
+                onRegenerateAI={generateNewTaskWithAI}
+                isRegeneratingAI={isRegeneratingAI}
+                onNextTask={handleContinue}
               />
             )}
           </div>

@@ -15,6 +15,12 @@ import {
   recordErrorsFromEvaluation,
   getStoredErrors,
 } from "@/lib/foundation/sentence-builder/error-bank.service";
+import {
+  PRESET_TOPICS,
+  resolveTopicForPrompt,
+  getTopicDisplay,
+  getRandomTopicPrompt,
+} from "@/lib/foundation/sentence-builder/topics";
 import type { SentenceBuilderTask, SentenceBuilderEvaluation } from "@/types/sentence-builder";
 
 describe("Sentence Builder (Function 1) Domain & Engine", () => {
@@ -260,5 +266,57 @@ describe("Sentence Builder (Function 1) Domain & Engine", () => {
     expect(zpdNovice).toBeLessThan(zpdExpert);
     expect(zpdNovice).toBeGreaterThanOrEqual(1);
     expect(zpdExpert).toBeLessThanOrEqual(10);
+  });
+
+  it("handles boundless infinite topics, presets, and custom user scenarios", async () => {
+    // 1. Preset topics are populated
+    expect(PRESET_TOPICS.length).toBeGreaterThanOrEqual(8);
+    const hasRandom = PRESET_TOPICS.some((t) => t.id === "random");
+    expect(hasRandom).toBe(true);
+
+    // 2. Random topic resolution returns non-empty vivid prompt
+    const randomTopic = resolveTopicForPrompt("random");
+    expect(typeof randomTopic).toBe("string");
+    expect(randomTopic.length).toBeGreaterThan(5);
+
+    // 3. Custom scenario resolution
+    const customPrompt = resolveTopicForPrompt("custom", "Order iced matcha latte with oat milk");
+    expect(customPrompt).toContain("custom_scenario: Order iced matcha latte with oat milk");
+
+    // 4. Topic display helper
+    const customDisplay = getTopicDisplay("custom_scenario: Order coffee");
+    expect(customDisplay.isCustom).toBe(true);
+    expect(customDisplay.label).toBe("Order coffee");
+
+    const presetDisplay = getTopicDisplay("travel");
+    expect(presetDisplay.label).toContain("Du lịch");
+
+    // 5. Generator preserves custom topic in mock mode
+    const customTask = await generateSentenceBuilderTask({
+      topic: "custom_scenario: Bargaining at weekend market",
+      provider: "mock",
+    });
+    expect(customTask.topic).toBe("custom_scenario: Bargaining at weekend market");
+  });
+
+  it("supports Endless Practice Mode without stopping at artificial boundaries and allows manual finish", async () => {
+    const { useSentenceBuilderStore } = await import("@/stores/sentence-builder-store");
+
+    // 1. Initialize endless mode
+    await useSentenceBuilderStore.getState().initSession("endless");
+    expect(useSentenceBuilderStore.getState().sessionConfig.mode).toBe("endless");
+
+    // 2. Advance through multiple tasks without forced completion
+    for (let i = 0; i < 6; i++) {
+      useSentenceBuilderStore.getState().advanceToNextTask();
+    }
+    expect(useSentenceBuilderStore.getState().isSessionCompleted).toBe(false);
+    expect(useSentenceBuilderStore.getState().currentTaskIndex).toBe(6);
+
+    // 3. User manually finishes session
+    useSentenceBuilderStore.getState().finishSessionManually();
+    expect(useSentenceBuilderStore.getState().isSessionCompleted).toBe(true);
+    expect(useSentenceBuilderStore.getState().sessionSummary).not.toBeNull();
+    expect(useSentenceBuilderStore.getState().sessionSummary?.mode).toBe("endless");
   });
 });

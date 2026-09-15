@@ -7,6 +7,8 @@ import type {
   TargetedCorrection,
   RepairEvaluationResult,
   SpokenRepairMetric,
+  RepairSessionSummary,
+  RepairSessionHistoryItem,
 } from "@/types/retry-loop";
 import { createRetrySession, recordRetryAttemptInSession } from "@/lib/foundation/retry-loop/retry-engine";
 import { computeFastPassRepair } from "@/lib/foundation/retry-loop/fast-pass-repair.service";
@@ -21,9 +23,23 @@ interface RetryLoopStoreState {
   generationError: string | null;
   metrics: SpokenRepairMetric;
 
+  // Topic & Endless Studio State
+  selectedTopicId: string;
+  customTopicText: string;
+  currentChallengeIndex: number;
+  completedChallengesCount: number;
+  sessionStartTime: number;
+  isSessionCompleted: boolean;
+  sessionSummary: RepairSessionSummary | null;
+  sessionHistory: RepairSessionHistoryItem[];
+
   // Actions
+  setSelectedTopic: (topicId: string, customText?: string) => void;
+  finishSessionManually: () => void;
+  resetSession: () => void;
+  closeSummaryModal: () => void;
   clearGenerationError: () => void;
-  generateAiRepairChallenge: (category?: string) => Promise<void>;
+  generateAiRepairChallenge: (category?: string, topicOverride?: string) => Promise<void>;
 
   startRepairSession: (params: {
     originalTaskId: string;
@@ -69,10 +85,89 @@ export const useRetryLoopStore = create<RetryLoopStoreState>()(
       generationError: null,
       metrics: INITIAL_METRICS,
 
+      // Endless & Topic State
+      selectedTopicId: "random",
+      customTopicText: "",
+      currentChallengeIndex: 0,
+      completedChallengesCount: 0,
+      sessionStartTime: Date.now(),
+      isSessionCompleted: false,
+      sessionSummary: null,
+      sessionHistory: [],
+
+      setSelectedTopic: (topicId: string, customText?: string) => {
+        set({
+          selectedTopicId: topicId,
+          customTopicText: customText || "",
+        });
+      },
+
       clearGenerationError: () => set({ generationError: null }),
 
+      closeSummaryModal: () => set({ isSessionCompleted: false }),
+
+      resetSession: () => {
+        set({
+          activeSession: null,
+          lastRepairResult: null,
+          currentChallengeIndex: 0,
+          completedChallengesCount: 0,
+          sessionStartTime: Date.now(),
+          isSessionCompleted: false,
+          sessionSummary: null,
+          sessionHistory: [],
+        });
+      },
+
+      finishSessionManually: () => {
+        const { sessionHistory, sessionStartTime, activeSession } = get();
+
+        // If current active session not in history yet, append it
+        let history = [...sessionHistory];
+        if (
+          activeSession &&
+          !history.some((h) => h.originalSentence === activeSession.originalTranscript)
+        ) {
+          history.push({
+            challengeTitle: activeSession.targetCorrection.whatToFix || activeSession.originalPrompt,
+            originalSentence: activeSession.originalTranscript,
+            betterSentence: activeSession.targetCorrection.betterSentence,
+            isResolved: activeSession.isResolved,
+            attemptsCount: activeSession.currentAttemptNumber,
+            isSelfCorrection: activeSession.isSelfCorrected,
+          });
+        }
+
+        const totalChallenges = history.length;
+        const resolvedCount = history.filter((h) => h.isResolved).length;
+        const firstAttemptSuccessCount = history.filter((h) => h.isResolved && h.attemptsCount === 1).length;
+        const selfCorrectionCount = history.filter((h) => h.isSelfCorrection).length;
+        const recoveryRate = totalChallenges > 0 ? Math.round((resolvedCount / totalChallenges) * 100) : 100;
+        const firstAttemptAccuracy =
+          totalChallenges > 0 ? Math.round((firstAttemptSuccessCount / totalChallenges) * 100) : 100;
+
+        const summary: RepairSessionSummary = {
+          sessionId: `repair_session_${Date.now()}`,
+          startedAt: new Date(sessionStartTime || Date.now()).toISOString(),
+          completedAt: new Date().toISOString(),
+          totalChallenges,
+          resolvedCount,
+          firstAttemptSuccessCount,
+          firstAttemptAccuracy,
+          selfCorrectionCount,
+          recoveryRate,
+          averageLatencyMs: 1400,
+          history,
+        };
+
+        set({
+          isSessionCompleted: true,
+          sessionSummary: summary,
+        });
+      },
+
       // Generate a fresh AI Spoken Repair Challenge on the fly
-      generateAiRepairChallenge: async (category) => {
+      generateAiRepairChallenge: async (category, topicOverride) => {
         set({ isGeneratingChallenge: true, generationError: null, lastRepairResult: null });
 
         let provider = "gemini";
@@ -87,6 +182,13 @@ export const useRetryLoopStore = create<RetryLoopStoreState>()(
             "auto";
         } catch {}
 
+        const currentTopicId = topicOverride || get().selectedTopicId;
+        const currentCustomText = get().customTopicText;
+        const effectiveTopic =
+          currentCustomText && currentCustomText.trim().length > 0
+            ? `custom_scenario: ${currentCustomText.trim()}`
+            : currentTopicId;
+
         try {
           const res = await fetch("/api/foundation/retry-loop/generate", {
             method: "POST",
@@ -96,6 +198,7 @@ export const useRetryLoopStore = create<RetryLoopStoreState>()(
               provider,
               model,
               recentPatterns: get().metrics.recentRepairedPatterns,
+              topic: effectiveTopic,
             }),
           });
 
@@ -127,12 +230,15 @@ export const useRetryLoopStore = create<RetryLoopStoreState>()(
             originalTranscript: ch.erroneousSentence,
             targetCorrection: targetedCorrection,
           });
+          session.topic = ch.topic || effectiveTopic;
 
           const currentMetrics = get().metrics;
+          const prevIndex = get().currentChallengeIndex;
           set({
             activeSession: session,
             isGeneratingChallenge: false,
             generationError: null,
+            currentChallengeIndex: get().activeSession ? prevIndex + 1 : prevIndex,
             metrics: {
               ...currentMetrics,
               totalErrorsRequiringRetry: currentMetrics.totalErrorsRequiringRetry + 1,
@@ -254,11 +360,34 @@ export const useRetryLoopStore = create<RetryLoopStoreState>()(
               : metrics.recentRepairedPatterns,
           };
 
+          // Track Session History
+          const historyItem: RepairSessionHistoryItem = {
+            challengeTitle: activeSession.targetCorrection.whatToFix || activeSession.originalPrompt,
+            originalSentence: activeSession.originalTranscript,
+            betterSentence: activeSession.targetCorrection.betterSentence,
+            isResolved: evalResult.isSuccessful,
+            attemptsCount: activeSession.currentAttemptNumber,
+            isSelfCorrection: evalResult.selfCorrectionDetected || false,
+          };
+          const existingHistory = get().sessionHistory;
+          const existingIdx = existingHistory.findIndex((h) => h.originalSentence === historyItem.originalSentence);
+          const updatedHistory = [...existingHistory];
+          if (existingIdx >= 0) {
+            updatedHistory[existingIdx] = historyItem;
+          } else {
+            updatedHistory.push(historyItem);
+          }
+          const wasAlreadyResolved = existingIdx >= 0 && existingHistory[existingIdx].isResolved;
+          const newlyResolved = evalResult.isSuccessful && !wasAlreadyResolved;
+          const updatedCompletedCount = get().completedChallengesCount + (newlyResolved ? 1 : 0);
+
           set({
             activeSession: updatedSession,
             lastRepairResult: evalResult,
             isEvaluatingRepair: false,
             metrics: updatedMetrics,
+            sessionHistory: updatedHistory,
+            completedChallengesCount: updatedCompletedCount,
           });
 
           return evalResult;
@@ -324,11 +453,34 @@ export const useRetryLoopStore = create<RetryLoopStoreState>()(
                 : metrics.recentRepairedPatterns,
             };
 
+            // Track Session History
+            const historyItem: RepairSessionHistoryItem = {
+              challengeTitle: activeSession.targetCorrection.whatToFix || activeSession.originalPrompt,
+              originalSentence: activeSession.originalTranscript,
+              betterSentence: activeSession.targetCorrection.betterSentence,
+              isResolved: evalResult.isSuccessful,
+              attemptsCount: activeSession.currentAttemptNumber,
+              isSelfCorrection: evalResult.selfCorrectionDetected || false,
+            };
+            const existingHistory = get().sessionHistory;
+            const existingIdx = existingHistory.findIndex((h) => h.originalSentence === historyItem.originalSentence);
+            const updatedHistory = [...existingHistory];
+            if (existingIdx >= 0) {
+              updatedHistory[existingIdx] = historyItem;
+            } else {
+              updatedHistory.push(historyItem);
+            }
+            const wasAlreadyResolved = existingIdx >= 0 && existingHistory[existingIdx].isResolved;
+            const newlyResolved = evalResult.isSuccessful && !wasAlreadyResolved;
+            const updatedCompletedCount = get().completedChallengesCount + (newlyResolved ? 1 : 0);
+
             set({
               activeSession: updatedSession,
               lastRepairResult: evalResult,
               isEvaluatingRepair: false,
               metrics: updatedMetrics,
+              sessionHistory: updatedHistory,
+              completedChallengesCount: updatedCompletedCount,
             });
 
             return evalResult;
@@ -392,8 +544,12 @@ export const useRetryLoopStore = create<RetryLoopStoreState>()(
       closeActiveSession: () => set({ activeSession: null, lastRepairResult: null }),
     }),
     {
-      name: "retry_loop_store_v1",
-      partialize: (s) => ({ metrics: s.metrics }),
+      name: "retry_loop_store_v2",
+      partialize: (s) => ({
+        metrics: s.metrics,
+        selectedTopicId: s.selectedTopicId,
+        customTopicText: s.customTopicText,
+      }),
     }
   )
 );

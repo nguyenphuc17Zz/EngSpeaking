@@ -101,9 +101,13 @@ OUTPUT FORMAT: STRICT JSON ONLY. NO MARKDOWN.
 export function buildRepairChallengeUserPrompt(params: {
   category?: string;
   recentPatterns?: string[];
+  topic?: string;
 }): string {
+  const topicContext = params.topic
+    ? `\n- Topic / Context: "${params.topic}". Ensure the situation, the erroneous spoken sentence, and the corrected version are deeply rooted in this specific context.`
+    : "";
   return `Generate 1 realistic spoken repair challenge for a Vietnamese learner.
-- Category preference: ${params.category || "any high-frequency spoken mistake"}
+- Category preference: ${params.category || "any high-frequency spoken mistake"}${topicContext}
 - Avoid repeating patterns: ${JSON.stringify(params.recentPatterns || [])}
 Return strict JSON only.`;
 }

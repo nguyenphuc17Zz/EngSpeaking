@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { summarizeConversation } from "@/lib/conversation/engines/summarizer";
-import { createServerClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { getAppDb } from "@/lib/db/sqlite-db";
 
 export async function POST(req: Request) {
   let body: unknown;
@@ -14,11 +14,15 @@ export async function POST(req: Request) {
   };
   if (!olderTurns) return NextResponse.json({ error: { message: "Thiếu olderTurns" } }, { status: 400 });
   const summary = await summarizeConversation(olderTurns, { existingSummaryJson, provider, model });
-  if (worldId && isSupabaseConfigured()) {
-    const supabase = createServerClient();
-    if (supabase) {
-      try { await supabase.from("conversation_summaries").upsert({ world_id: worldId, summary, updated_at: new Date().toISOString() }); } catch {}
-    }
+  if (worldId) {
+    try {
+      const db = getAppDb();
+      db.prepare(`
+        INSERT OR REPLACE INTO conversation_summaries (world_id, summary, updated_at)
+        VALUES (?, ?, ?)
+      `).run(worldId, JSON.stringify(summary), new Date().toISOString());
+    } catch {}
   }
   return NextResponse.json({ summary });
 }
+

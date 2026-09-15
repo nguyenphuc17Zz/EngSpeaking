@@ -21,6 +21,7 @@ interface ChunkStoreState {
   selectedStrategy: PragmaticStrategyType | "all";
 
   isGenerating: boolean;
+  isRegeneratingAI: boolean;
   isEvaluating: boolean;
   generationError: string | null;
 
@@ -31,7 +32,8 @@ interface ChunkStoreState {
   setMode: (mode: "chain_builder" | "single_chunk") => void;
   setSelectedStrategy: (strategy: PragmaticStrategyType | "all") => void;
   loadLibrary: () => void;
-  fetchNextChainTask: (options?: string | { topic?: string; strategy?: PragmaticStrategyType; domain?: any }) => Promise<void>;
+  fetchNextChainTask: (options?: string | { topic?: string; strategy?: PragmaticStrategyType; domain?: any; forceSource?: "bank" | "ai" | "auto" }) => Promise<void>;
+  generateNewTaskWithAI: () => Promise<void>;
   fetchNextSingleTask: (chunk?: ChunkRecord) => Promise<void>;
   clearGenerationError: () => void;
   saveCustomChunk: (canonicalChunk: string, meaningVi: string, type?: string) => void;
@@ -52,6 +54,7 @@ export const useChunkStore = create<ChunkStoreState>()(
       selectedStrategy: "all",
 
       isGenerating: false,
+      isRegeneratingAI: false,
       isEvaluating: false,
       generationError: null,
 
@@ -94,6 +97,7 @@ export const useChunkStore = create<ChunkStoreState>()(
             ? currentSelectedStrategy
             : undefined;
         const domain = typeof options === "object" ? options?.domain : undefined;
+        const forceSource = typeof options === "object" ? options?.forceSource : undefined;
 
         let provider = "gemini";
         let model = "auto";
@@ -111,7 +115,7 @@ export const useChunkStore = create<ChunkStoreState>()(
           const res = await fetch("/api/foundation/chunks/generate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mode: "chain_builder", topic, strategy, domain, provider, model }),
+            body: JSON.stringify({ mode: "chain_builder", topic, strategy, domain, provider, model, forceSource }),
           });
           const data = await res.json();
           if (data.task) {
@@ -127,6 +131,19 @@ export const useChunkStore = create<ChunkStoreState>()(
             isGenerating: false,
             generationError: e?.message || "Lỗi kết nối khi gọi AI tạo bài tập.",
           });
+        }
+      },
+
+      generateNewTaskWithAI: async () => {
+        set({ isRegeneratingAI: true, lastChainEvaluation: null, lastSingleEvaluation: null, generationError: null });
+        try {
+          if (get().mode === "chain_builder") {
+            await get().fetchNextChainTask({ forceSource: "ai" });
+          } else {
+            await get().fetchNextSingleTask();
+          }
+        } finally {
+          set({ isRegeneratingAI: false });
         }
       },
 

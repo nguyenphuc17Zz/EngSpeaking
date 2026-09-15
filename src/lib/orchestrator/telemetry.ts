@@ -28,15 +28,11 @@ const MAX_LOG = 500;
 export function recordTelemetry(r: TelemetryRecord): void {
   memoryLog.push(r);
   if (memoryLog.length > MAX_LOG) memoryLog.shift();
-  // Also persist via Supabase if configured (fire-and-forget)
+  // Also persist via SQLite
   try {
     if (typeof window === "undefined") {
-      // server: try supabase insert (best effort)
-      import("@/lib/supabase/client").then(({ createServerClient, isSupabaseConfigured }) => {
-        if (!isSupabaseConfigured()) return;
-        const supabase = createServerClient();
-        if (!supabase) return;
-        supabase.from("ai_requests").insert({
+      import("@/lib/db/sqlite-db").then(({ telemetryRepo }) => {
+        telemetryRepo.recordAiRequest({
           request_id: r.requestId,
           task: r.task,
           provider_id: r.providerId,
@@ -49,7 +45,8 @@ export function recordTelemetry(r: TelemetryRecord): void {
           input_tokens: r.usage?.inputTokens,
           output_tokens: r.usage?.outputTokens,
           total_tokens: r.usage?.totalTokens,
-        }).then(() => {});
+          error_code: r.errorCode,
+        });
       }).catch(() => {});
     }
   } catch {}

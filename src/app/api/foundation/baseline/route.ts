@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateBaselineTasks, evaluateBaseline } from "@/lib/foundation/services/baseline.service";
 import { toUserMessage } from "@/lib/errors/codes";
-import { createServerClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { foundationRepo } from "@/lib/db/sqlite-db";
 
 export async function POST(req: Request) {
   let body: unknown;
@@ -29,29 +29,21 @@ export async function POST(req: Request) {
       const result = await evaluateBaseline(tasks, { provider, model });
       const baseline = { id: `baseline_${Date.now()}`, createdAt: new Date().toISOString(), ...result };
 
-      // Persist if Supabase configured (anonymous)
-      if (isSupabaseConfigured()) {
-        const supabase = createServerClient();
-        if (supabase) {
-          try {
-            await supabase.from("foundation_baselines").insert({
-              id: baseline.id,
-              created_at: baseline.createdAt,
-              overall: result.overall,
-              level_suggestion: result.levelSuggestion,
-              response_speed: result.responseSpeed,
-              sentence_production: result.sentenceProduction,
-              fluency: result.fluency,
-              vocabulary_retrieval: result.vocabularyRetrieval,
-              grammar_in_speech: result.grammarInSpeech,
-              confidence: result.confidence,
-              expansion_ability: result.expansionAbility,
-              recovery_ability: result.recoveryAbility,
-              tasks: baseline.tasks,
-            });
-          } catch {}
-        }
-      }
+      foundationRepo.saveBaseline({
+        id: baseline.id,
+        created_at: baseline.createdAt,
+        overall: result.overall,
+        level_suggestion: result.levelSuggestion,
+        response_speed: result.responseSpeed,
+        sentence_production: result.sentenceProduction,
+        fluency: result.fluency,
+        vocabulary_retrieval: result.vocabularyRetrieval,
+        grammar_in_speech: result.grammarInSpeech,
+        confidence: result.confidence,
+        expansion_ability: result.expansionAbility,
+        recovery_ability: result.recoveryAbility,
+        tasks: baseline.tasks,
+      });
 
       return NextResponse.json({ baseline });
     } catch (e: unknown) {
@@ -64,9 +56,7 @@ export async function POST(req: Request) {
 
 // GET latest baseline
 export async function GET() {
-  if (!isSupabaseConfigured()) return NextResponse.json({ baselines: [] });
-  const supabase = createServerClient();
-  if (!supabase) return NextResponse.json({ baselines: [] });
-  const { data } = await supabase.from("foundation_baselines").select("*").order("created_at", { ascending: false }).limit(5);
-  return NextResponse.json({ baselines: data || [] });
+  const latest = foundationRepo.getLatestBaseline();
+  return NextResponse.json({ baselines: latest ? [latest] : [] });
 }
+

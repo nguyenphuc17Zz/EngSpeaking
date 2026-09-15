@@ -77,6 +77,7 @@ export const chunkChainTaskSchema = z.object({
       })
     )
     .optional(),
+  source: z.enum(["ai", "bank"]).optional(),
 });
 
 export const chunkTrainingTaskSchema = z.object({
@@ -108,6 +109,7 @@ export const chunkTrainingTaskSchema = z.object({
       })
     )
     .optional(),
+  source: z.enum(["ai", "bank"]).optional(),
 });
 
 export const chunkEvaluationSchema = z.object({

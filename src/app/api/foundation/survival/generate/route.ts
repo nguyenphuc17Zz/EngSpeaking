@@ -7,13 +7,13 @@ import {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { mode = "circumlocution", difficulty, context, provider, model } = body;
+    const { mode = "circumlocution", difficulty, context, provider, model, forceSource } = body;
 
     if (mode === "circumlocution") {
-      const task = await generateCircumlocutionTask({ difficulty, provider, model });
+      const task = await generateCircumlocutionTask({ difficulty, provider, model, forceSource });
       return NextResponse.json({ success: true, mode: "circumlocution", task });
     } else {
-      const task = await generateSurvivalScenarioTask({ context, provider, model });
+      const task = await generateSurvivalScenarioTask({ context, provider, model, forceSource });
       return NextResponse.json({ success: true, mode: "scenarios", task });
     }
   } catch (error: unknown) {

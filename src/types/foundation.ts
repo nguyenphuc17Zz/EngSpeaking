@@ -200,7 +200,7 @@ export const SPEECH_BANK_CATEGORIES: Array<Omit<SpeechBankCategory, "entries">> 
   { id: "my_experiences", label: "My experiences", prompt: "Trải nghiệm" },
 ];
 
-// For API row mapping (Supabase snake_case)
+// For API row mapping (snake_case)
 export interface FoundationSessionRow {
   id: string;
   exercise_id: string;

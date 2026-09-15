@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateScenario, scenarioFingerprint } from "@/lib/conversation/services/scenario.service";
 import { conversationSettingsSchema } from "@/lib/validation/conversation-schemas";
-import { createServerClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { getAppDb } from "@/lib/db/sqlite-db";
 import { toUserMessage } from "@/lib/errors/codes";
 
 export async function POST(req: Request) {
@@ -21,23 +21,25 @@ export async function POST(req: Request) {
     const blueprint = await generateScenario(settings as import("@/types/conversation-world").ConversationSettings, { provider, model });
     const fingerprint = scenarioFingerprint(blueprint);
 
-    // Duplicate avoidance check §65 — if fingerprint recent, regenerate once
-    if (isSupabaseConfigured()) {
-      const supabase = createServerClient();
-      if (supabase) {
-        const { data: existing } = await supabase.from("conversation_worlds").select("id").eq("fingerprint", fingerprint).limit(1);
-        if (existing && existing.length > 0) {
-          // Regenerate once
-          const retry = await generateScenario({ ...(settings as import("@/types/conversation-world").ConversationSettings), topic: `${(settings as import("@/types/conversation-world").ConversationSettings).topic || "auto"} variation ${Date.now() % 1000}` }, { provider, model });
-          const retryFp = scenarioFingerprint(retry);
-          // persist retry
-          const { data: inserted } = await supabase.from("conversation_worlds").insert({ id: retry.id, mode: retry.mode, scenario_blueprint: retry, settings, fingerprint: retryFp, schema_version: 1 }).select().single();
-          return NextResponse.json({ scenario: retry, worldId: inserted?.id || retry.id, fingerprint: retryFp, duplicate: false });
-        }
-        // Persist
-        await supabase.from("conversation_worlds").insert({ id: blueprint.id, mode: blueprint.mode, scenario_blueprint: blueprint, settings, fingerprint, schema_version: 1 });
+    // Duplicate avoidance check & persist via SQLite
+    try {
+      const db = getAppDb();
+      const existing = db.prepare("SELECT id FROM conversation_worlds WHERE fingerprint = ? LIMIT 1").get(fingerprint);
+      if (existing) {
+        const retry = await generateScenario({ ...(settings as import("@/types/conversation-world").ConversationSettings), topic: `${(settings as import("@/types/conversation-world").ConversationSettings).topic || "auto"} variation ${Date.now() % 1000}` }, { provider, model });
+        const retryFp = scenarioFingerprint(retry);
+        db.prepare(`
+          INSERT INTO conversation_worlds (id, mode, scenario_blueprint, settings, fingerprint, schema_version, created_at)
+          VALUES (?, ?, ?, ?, ?, 1, ?)
+        `).run(retry.id, retry.mode, JSON.stringify(retry), JSON.stringify(settings), retryFp, new Date().toISOString());
+        return NextResponse.json({ scenario: retry, worldId: retry.id, fingerprint: retryFp, duplicate: false });
       }
-    }
+
+      db.prepare(`
+        INSERT INTO conversation_worlds (id, mode, scenario_blueprint, settings, fingerprint, schema_version, created_at)
+        VALUES (?, ?, ?, ?, ?, 1, ?)
+      `).run(blueprint.id, blueprint.mode, JSON.stringify(blueprint), JSON.stringify(settings), fingerprint, new Date().toISOString());
+    } catch {}
 
     return NextResponse.json({ scenario: blueprint, worldId: blueprint.id, fingerprint, duplicate: false });
   } catch (e: unknown) {
@@ -48,9 +50,8 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const limit = Math.min(parseInt(url.searchParams.get("limit") || "10", 10) || 10, 50);
-  if (!isSupabaseConfigured()) return NextResponse.json({ worlds: [] });
-  const supabase = createServerClient();
-  if (!supabase) return NextResponse.json({ worlds: [] });
-  const { data } = await supabase.from("conversation_worlds").select("*").order("created_at", { ascending: false }).limit(limit);
-  return NextResponse.json({ worlds: data || [] });
+  const db = getAppDb();
+  const worlds = db.prepare("SELECT * FROM conversation_worlds ORDER BY created_at DESC LIMIT ?").all(limit);
+  return NextResponse.json({ worlds: worlds || [] });
 }
+

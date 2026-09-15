@@ -39,6 +39,38 @@ describe("Universal Content Banking & Hybrid 70/30 Engine", () => {
   });
 
   it("retrieves pre-seeded tasks with forceSource: 'bank'", async () => {
+    // Seed one dynamic sentence_builder item to test bank storage & retrieval
+    await saveBankTask({
+      module: "sentence_builder",
+      category: "daily_life",
+      level: "controlled",
+      difficulty: 3,
+      topic: "daily_routine",
+      hashSourceText: "Tôi thường đọc sách vào buổi tối.",
+      payload: {
+        id: "sb_test_reading",
+        taskType: "sentence_completion",
+        controlLevel: "controlled",
+        instruction: "Hoàn thành câu:",
+        promptVi: "Tôi thường đọc sách vào buổi tối.",
+        targetIntent: "I usually read books in the evening.",
+        expectedResponses: ["I usually read books in the evening."],
+        requiredElements: ["usually", "read books", "evening"],
+        scaffold: { level: 1, template: "I usually ___ in the evening.", keywords: ["read", "books"], starter: "I usually...", constraints: [] },
+        hints: [
+          { tier: 0, title: "None", content: "Say now", penaltyWeight: 0 },
+          { tier: 1, title: "Keywords", content: "read books", penaltyWeight: 0.1 },
+          { tier: 2, title: "Pattern", content: "I usually ___", penaltyWeight: 0.25 },
+          { tier: 3, title: "Starter", content: "I usually...", penaltyWeight: 0.5 },
+          { tier: 4, title: "Model", content: "I usually read books in the evening.", penaltyWeight: 0.85 },
+        ],
+        difficulty: { overall: 3, grammarComplexity: 2, retrievalDemand: 0.5, lengthScore: 2 },
+        skills: ["sentence_construction"],
+        topic: "daily_routine",
+        prepTimeSec: 3.0,
+      },
+    });
+
     const sbResult = await sampleBankTask<{ id: string; targetIntent: string }>({
       module: "sentence_builder",
       forceSource: "bank",

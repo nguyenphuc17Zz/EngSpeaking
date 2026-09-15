@@ -9,12 +9,14 @@ import {
   saveBankTask,
   getFallbackBankTask,
 } from "@/lib/foundation/services/content-bank.service";
+import { resolveTopicForPrompt } from "@/lib/foundation/sentence-builder/topics";
 import { z } from "zod";
 
 export type RepairChallenge = z.infer<typeof repairChallengeSchema>;
 
 export interface GenerateRepairChallengeParams {
   category?: string;
+  topic?: string;
   provider?: string;
   model?: string;
   recentPatterns?: string[];
@@ -24,7 +26,12 @@ export interface GenerateRepairChallengeParams {
 }
 
 function cleanJson(raw: string): unknown {
-  const withoutFence = raw
+  if (!raw) return null;
+  const withoutReasoning = raw
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/<thought>[\s\S]*?<\/thought>/gi, "")
+    .trim();
+  const withoutFence = withoutReasoning
     .replace(/^```json\s*/i, "")
     .replace(/^```\s*/i, "")
     .replace(/\s*```$/, "")
@@ -32,11 +39,18 @@ function cleanJson(raw: string): unknown {
   try {
     return JSON.parse(withoutFence);
   } catch {
-    const m = withoutFence.match(/\{[\s\S]*\}/);
-    if (m) {
+    const firstBrace = withoutFence.indexOf("{");
+    const lastBrace = withoutFence.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      const candidate = withoutFence.slice(firstBrace, lastBrace + 1);
       try {
-        return JSON.parse(m[0]);
-      } catch {}
+        return JSON.parse(candidate);
+      } catch {
+        const withoutTrailingCommas = candidate.replace(/,\s*([}\]])/g, "$1");
+        try {
+          return JSON.parse(withoutTrailingCommas);
+        } catch {}
+      }
     }
     return null;
   }
@@ -46,6 +60,7 @@ export function getDeterministicChallenge(): RepairChallenge {
   return {
     id: `repair_mock_${Date.now()}`,
     category: "grammar",
+    topic: "workplace",
     situationVi: "Bạn đang chia sẻ về lịch trình ngày hôm qua với đồng nghiệp",
     targetIntent: "Nói rằng: 'Hôm qua tôi đã đi làm muộn vì bị kẹt xe.'",
     erroneousSentence: "Yesterday I go to work late because traffic jam.",
@@ -84,27 +99,35 @@ export async function generateRepairChallenge(
     return getDeterministicChallenge();
   }
 
-  // 1. Content Bank 70/30 Policy Lookup
-  try {
-    const cached = await sampleBankTask<RepairChallenge>({
-      module: "retry_loop_repair",
-      category: params.category || "grammar",
-      userId: params.userId,
-      forceSource: params.forceSource,
-      bankRatio: params.bankRatio,
-    });
-    if (cached) {
-      return cached.task;
-    }
-  } catch (bankErr) {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn("[RepairChallengeGenerator] Bank lookup warning:", bankErr);
+  // Resolve dynamic topic
+  const effectiveTopic = resolveTopicForPrompt(params.topic);
+
+  // 1. Content Bank: Only sampled if explicitly requested via forceSource === "bank"
+  if (params.forceSource === "bank") {
+    try {
+      const cached = await sampleBankTask<RepairChallenge>({
+        module: "retry_loop_repair",
+        category: params.category || "grammar",
+        userId: params.userId,
+        forceSource: params.forceSource,
+        bankRatio: params.bankRatio,
+      });
+      if (cached) {
+        return cached.task;
+      }
+    } catch (bankErr) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[RepairChallengeGenerator] Bank lookup warning:", bankErr);
+      }
     }
   }
 
   // 2. Real-time LLM Generation
   try {
-    const userPrompt = buildRepairChallengeUserPrompt(params);
+    const userPrompt = buildRepairChallengeUserPrompt({
+      ...params,
+      topic: effectiveTopic,
+    });
 
     const res = await generateTextWithRouting({
       provider,
@@ -126,6 +149,7 @@ export async function generateRepairChallenge(
 
     // Ensure ID exists
     if (!obj.id) obj.id = `repair_${Date.now()}`;
+    if (!obj.topic) obj.topic = effectiveTopic;
 
     // Sanitize Hints
     if (!Array.isArray(obj.hints) || obj.hints.length === 0) {

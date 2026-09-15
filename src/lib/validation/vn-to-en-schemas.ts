@@ -47,6 +47,7 @@ export const vnToENTaskSchema = z.object({
   prepTimeSec: z.coerce.number().default(2.5),
   isRapidFire: z.boolean().default(false),
   topic: z.string().default("general"),
+  source: z.enum(["ai", "bank"]).optional(),
 });
 
 export const vnEvaluatedErrorSchema = z.object({

@@ -2,28 +2,66 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
-import { Card, CardContent } from "@/components/ui/card";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { toast } from "@/lib/toast";
 import {
   Sparkles,
-  Zap,
   RotateCcw,
   ArrowRight,
   ArrowLeft,
   Clock,
   Target,
   Flame,
-  Brain,
-  HelpCircle,
   AlertTriangle,
   RefreshCw,
   X,
   Settings2,
+  Trophy,
+  Compass,
+  ChevronDown,
+  Wand2,
+  Check,
+  Coffee,
+  Briefcase,
+  Plane,
+  Utensils,
+  ShoppingBag,
+  Laptop,
+  MessageCircle,
+  HeartPulse,
+  GraduationCap,
+  Shuffle,
 } from "lucide-react";
+
+import {
+  PRESET_TOPICS,
+  getTopicDisplay,
+} from "@/lib/foundation/sentence-builder/topics";
+
+const TOPIC_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  Sparkles,
+  Coffee,
+  Briefcase,
+  Plane,
+  Utensils,
+  ShoppingBag,
+  Laptop,
+  MessageCircle,
+  HeartPulse,
+  GraduationCap,
+  Shuffle,
+};
 
 import { useVNToENStore } from "@/stores/vn-to-en-store";
 import { useUnifiedSTT } from "@/hooks/useUnifiedSTT";
@@ -41,13 +79,16 @@ import { computeFastPassVNMatch } from "@/lib/foundation/vn-to-en/fast-pass.serv
 import type { VNToENRetrievalMode } from "@/types/vn-to-en";
 
 export default function VNToENPage() {
+  const router = useRouter();
   const tts = useBrowserTTS();
   const {
     currentTask,
     isGenerating,
     isEvaluating,
     setIsEvaluating,
+    isRegeneratingAI,
     sessionConfig,
+    completedTasksCount,
     currentTaskIndex,
     isSessionCompleted,
     sessionSummary,
@@ -60,7 +101,9 @@ export default function VNToENPage() {
     adaptiveState,
     generationError,
     initSession,
+    finishSessionManually,
     fetchFirstTask,
+    generateNewTaskWithAI,
     processEvaluation,
     advanceToNextTask,
     setHintTier,
@@ -70,13 +113,17 @@ export default function VNToENPage() {
     setIsCountingDown,
     clearGenerationError,
     resetSession,
+    selectedTopicId,
+    customTopicText,
+    setSelectedTopic,
   } = useVNToENStore();
 
   const unifiedSTT = useUnifiedSTT({ lang: "en-US" });
   const unifiedSTTRef = useRef(unifiedSTT);
   unifiedSTTRef.current = unifiedSTT;
 
-  const [hasStartedSession, setHasStartedSession] = useState(false);
+  const [isTopicModalOpen, setIsTopicModalOpen] = useState(false);
+  const [customInputVal, setCustomInputVal] = useState(customTopicText || "");
   const [promptDisplayTime, setPromptDisplayTime] = useState<number>(Date.now());
   const [recordingStartTime, setRecordingStartTime] = useState<number>(0);
   const [recordingDurationMs, setRecordingDurationMs] = useState(0);
@@ -86,15 +133,48 @@ export default function VNToENPage() {
   const durationTimerRef = useRef<NodeJS.Timeout | null>(null);
   const prepTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Initialize or Select Mode
-  const handleStartSession = async (mode: VNToENRetrievalMode) => {
-    setHasStartedSession(true);
-    await initSession(mode);
+  // Zero-Lobby: Automatically initialize Endless Mode on first mount if no task
+  useEffect(() => {
+    if (!currentTask && !isGenerating && !generationError) {
+      initSession("endless");
+    }
+  }, [currentTask, isGenerating, generationError, initSession]);
+
+  useEffect(() => {
+    if (selectedTopicId === "custom") {
+      setCustomInputVal(customTopicText || "");
+    }
+  }, [selectedTopicId, customTopicText]);
+
+  // Exit Studio View
+  const handleExitStudio = () => {
+    if (prepTimerRef.current) {
+      clearInterval(prepTimerRef.current);
+      prepTimerRef.current = null;
+    }
+    if (unifiedSTTRef.current.isListening) {
+      unifiedSTTRef.current.stopListening();
+    }
+    setIsCountingDown(false);
+    setPrepCountdown(null);
+    setIsEvaluating(false);
+    setPendingSpokenText(null);
+    resetSession();
+    router.push("/foundation");
+  };
+
+  // Finish Endless Practice Session Manually & View Report
+  const handleFinishSession = () => {
+    if (completedTasksCount === 0 && !currentTask) {
+      toast.info("Bạn chưa hoàn thành câu nào trong buổi tập này.");
+      return;
+    }
+    finishSessionManually();
   };
 
   // Preparation Countdown Timer routine when a new task is loaded
   useEffect(() => {
-    if (!hasStartedSession || !currentTask || lastEvaluation || isSessionCompleted) {
+    if (!currentTask || lastEvaluation || isSessionCompleted) {
       if (prepTimerRef.current) clearInterval(prepTimerRef.current);
       setIsCountingDown(false);
       setPrepCountdown(null);
@@ -107,9 +187,9 @@ export default function VNToENPage() {
       unifiedSTTRef.current.stopListening().catch(() => {});
     }
 
-    if (autoStartMic && (sessionConfig.mode === "timed" || sessionConfig.mode === "rapid_fire")) {
+    if (autoStartMic) {
       setIsCountingDown(true);
-      let count = Math.round(currentTask.prepTimeSec || (sessionConfig.mode === "rapid_fire" ? 1.0 : 2.0));
+      let count = Math.round(currentTask.prepTimeSec || 2.0);
       setPrepCountdown(count);
 
       prepTimerRef.current = setInterval(() => {
@@ -131,7 +211,7 @@ export default function VNToENPage() {
     return () => {
       if (prepTimerRef.current) clearInterval(prepTimerRef.current);
     };
-  }, [currentTask?.id, autoStartMic, hasStartedSession, sessionConfig.mode, lastEvaluation, isSessionCompleted, setIsCountingDown, setPrepCountdown]);
+  }, [currentTask?.id, autoStartMic, lastEvaluation, isSessionCompleted, setIsCountingDown, setPrepCountdown]);
 
   // Recording Duration Tracker
   useEffect(() => {
@@ -196,7 +276,6 @@ export default function VNToENPage() {
 
       setIsEvaluating(true);
       try {
-
         // Read active evaluation model from settings
         let provider = "gemini";
         let model = "auto";
@@ -242,7 +321,7 @@ export default function VNToENPage() {
     [currentTask, recordingStartTime, promptDisplayTime, hintTier, attemptCount, processEvaluation, setIsEvaluating]
   );
 
-  // Stop Recording -> Do NOT send immediately, store in pending review state
+  // Stop Recording -> store in pending review state
   const handleStopRecord = useCallback(async () => {
     if (!unifiedSTTRef.current.isListening) return;
 
@@ -373,8 +452,8 @@ export default function VNToENPage() {
       } else if (e.code === "Escape") {
         if (hintTier > 0) {
           setHintTier(0);
-        } else if (hasStartedSession) {
-          setHasStartedSession(false);
+        } else {
+          handleExitStudio();
         }
       }
     };
@@ -386,7 +465,6 @@ export default function VNToENPage() {
     isEvaluating,
     lastEvaluation,
     hintTier,
-    hasStartedSession,
     pendingSpokenText,
     handleConfirmSubmit,
     handleReRecord,
@@ -395,119 +473,14 @@ export default function VNToENPage() {
     handleRetryTask,
     handleResetLiveTranscript,
     handleContinueTask,
+    handleSkipOrNextTask,
     setHintTier,
   ]);
 
-  // 1. Session Setup Screen (Lobby View)
-  if (!hasStartedSession || (!currentTask && !isGenerating && !generationError)) {
-    return (
-      <div className="space-y-8 pb-16 animate-in fade-in-0 duration-300 max-w-5xl mx-auto">
-        {/* Top Bar with Global AI Selector */}
-        <div className="flex flex-wrap items-center justify-between gap-3 px-1">
-          <Link href="/foundation">
-            <Button variant="ghost" size="sm" className="gap-2 rounded-xl">
-              <ArrowLeft className="size-4" />
-              <span>Quay lại Foundation</span>
-            </Button>
-          </Link>
-          <GlobalAiSelector />
-        </div>
-
-        {/* Hero Banner */}
-        <div className="p-5 sm:p-6 rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-background shadow-xs">
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
-            Vietnamese → English Speaking
-          </h1>
-        </div>
-
-        {/* 3 Retrieval Modes Selection */}
-        <div className="space-y-3">
-          <h2 className="text-sm font-bold text-foreground uppercase tracking-wider">
-            Chọn chế độ luyện tập:
-          </h2>
-
-          <div className="grid sm:grid-cols-3 gap-4">
-            {/* Direct Retrieval */}
-            <Card
-              onClick={() => handleStartSession("direct")}
-              className="rounded-3xl border border-border/80 bg-card hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-all cursor-pointer p-5 space-y-3 btn-spring shadow-xs"
-            >
-              <div className="size-10 rounded-2xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
-                <Target className="size-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-foreground">Direct Retrieval (Tự do)</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">Tự do suy nghĩ và chủ động bấm Mic khi đã sẵn sàng.</p>
-              </div>
-              <Badge variant="secondary" className="text-[10px] font-mono">
-                8 câu • Không áp lực
-              </Badge>
-            </Card>
-
-            {/* Timed Retrieval */}
-            <Card
-              onClick={() => handleStartSession("timed")}
-              className="rounded-3xl border-2 border-primary/40 bg-gradient-to-br from-card via-card to-primary/5 hover:border-primary transition-all cursor-pointer p-5 space-y-3 btn-spring shadow-sm relative overflow-hidden"
-            >
-              <div className="absolute top-3 right-3">
-                <Badge className="text-[9px] font-bold bg-primary text-primary-foreground">Khuyên dùng</Badge>
-              </div>
-              <div className="size-10 rounded-2xl bg-primary/15 text-primary flex items-center justify-center font-bold">
-                <Clock className="size-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-foreground">Timed Retrieval (Đếm lùi)</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">Đếm lùi chuẩn bị (2s) rồi tự bật Mic ép phản xạ dứt khoát.</p>
-              </div>
-              <Badge variant="outline" className="text-[10px] font-mono text-primary border-primary/30">
-                10 câu • Áp lực thời gian
-              </Badge>
-            </Card>
-
-            {/* Rapid Fire */}
-            <Card
-              onClick={() => handleStartSession("rapid_fire")}
-              className="rounded-3xl border border-border/80 bg-card hover:border-amber-500/50 hover:bg-amber-500/5 transition-all cursor-pointer p-5 space-y-3 btn-spring shadow-xs"
-            >
-              <div className="size-10 rounded-2xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
-                <Flame className="size-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-foreground">Rapid Fire (Liên hoàn &lt;2s)</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">Chuỗi phản xạ câu ngắn giao tiếp liên tục dưới 2 giây.</p>
-              </div>
-              <Badge variant="secondary" className="text-[10px] font-mono text-amber-600 dark:text-amber-400">
-                12 câu • Tốc độ tối đa
-              </Badge>
-            </Card>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // 2. Loading State while generating first task
-  if (isGenerating && !currentTask && !generationError) {
-    return (
-      <div className="p-8 rounded-3xl border border-border/80 bg-card space-y-6 max-w-2xl mx-auto my-12 text-center animate-in fade-in-0">
-        <div className="size-14 rounded-3xl bg-primary/10 text-primary flex items-center justify-center mx-auto animate-pulse">
-          <Sparkles className="size-7 animate-spin" />
-        </div>
-        <div className="space-y-2">
-          <h2 className="text-lg font-bold text-foreground">AI đang tạo tình huống phản xạ...</h2>
-          <p className="text-xs text-muted-foreground">
-            Hệ thống 100% sử dụng AI thật, tối ưu hoá theo khoảng cách phản xạ của bạn.
-          </p>
-        </div>
-        <Skeleton className="h-32 w-full rounded-2xl" />
-      </div>
-    );
-  }
-
-  // 3. Error Banner View (if AI generation fails)
+  // 1. Error State View (if AI generation fails and no task loaded)
   if (generationError && !currentTask) {
     return (
-      <div className="p-8 rounded-3xl border border-destructive/30 bg-destructive/5 space-y-5 max-w-xl mx-auto my-12 text-center animate-in fade-in-0">
+      <div className="p-8 rounded-3xl border border-destructive/30 bg-destructive/5 space-y-5 max-w-xl mx-auto my-16 text-center animate-in fade-in-0 shadow-sm">
         <div className="size-12 rounded-2xl bg-destructive/15 text-destructive flex items-center justify-center mx-auto">
           <AlertTriangle className="size-6" />
         </div>
@@ -538,60 +511,80 @@ export default function VNToENPage() {
             variant="ghost"
             onClick={() => {
               clearGenerationError();
-              setHasStartedSession(false);
+              router.push("/foundation");
             }}
             className="rounded-xl"
           >
-            Quay lại chọn chế độ
+            Về trang Foundation
           </Button>
         </div>
       </div>
     );
   }
 
-  // 4. Immersive Studio View (Professional 3-Column Split Studio)
+  // 2. Loading State while generating initial task (Zero-Lobby initial load)
+  if (!currentTask) {
+    return (
+      <div className="p-8 rounded-3xl border border-border/80 bg-card space-y-4 max-w-lg mx-auto my-16 text-center animate-in fade-in-0 shadow-sm">
+        <div className="size-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto animate-pulse">
+          <Sparkles className="size-6 animate-spin" />
+        </div>
+        <div className="space-y-1">
+          <h2 className="text-base font-bold text-foreground">AI đang chuẩn bị câu phản xạ VN → EN...</h2>
+          <p className="text-xs text-muted-foreground">
+            Chủ đề: {getTopicDisplay(selectedTopicId).label}. Vào phòng tập ngay.
+          </p>
+        </div>
+        <Skeleton className="h-24 w-full rounded-2xl" />
+      </div>
+    );
+  }
+
+  // 3. Immersive Studio View (Professional 3-Column Split Studio)
   return (
     <div className="w-full h-full max-h-[calc(100vh-5.5rem)] flex flex-col justify-between overflow-hidden rounded-3xl border border-border/80 bg-card p-2.5 sm:p-3.5 shadow-xs animate-in fade-in-0 duration-200">
       {/* Studio Header Bar */}
       <header className="flex items-center justify-between border-b border-border/40 pb-2.5 shrink-0 gap-3">
-        <div className="flex items-center gap-3">
+        {/* Left: Exit Studio & Inline Topic Selector */}
+        <div className="flex items-center gap-2.5">
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => {
-              if (prepTimerRef.current) clearInterval(prepTimerRef.current);
-              setHasStartedSession(false);
-            }}
-            className="h-8 px-2.5 rounded-xl gap-1 text-xs text-muted-foreground hover:text-foreground"
-            title="Thoát Studio"
+            onClick={handleExitStudio}
+            className="size-8 p-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
+            title="Thoát phiên luyện tập"
           >
             <X className="size-4" />
-            <span className="hidden sm:inline">Thoát</span>
           </Button>
 
-          <Badge variant="outline" className="text-xs font-semibold px-2.5 py-0.5 rounded-full border-primary/30 text-primary">
-            VN → EN • <span className="capitalize">{sessionConfig.mode.replace("_", " ")}</span>
-          </Badge>
-
-          {/* Global AI Engine Badge / Selector */}
-          <GlobalAiSelector size="sm" />
-        </div>
-
-        {/* Center Progress Indicator */}
-        <div className="flex items-center gap-2.5">
-          <span className="text-xs font-mono font-bold text-foreground">
-            Câu {currentTaskIndex + 1}/{sessionConfig.targetCount}
-          </span>
-          <div className="w-16 sm:w-28">
-            <Progress
-              value={((currentTaskIndex + 1) / sessionConfig.targetCount) * 100}
-              className="h-1.5 rounded-full"
-            />
+          <div className="flex items-center gap-2">
+            <span className="text-xs md:text-sm font-bold tracking-tight text-foreground">
+              VN → EN Speaking
+            </span>
+            <button
+              type="button"
+              onClick={() => setIsTopicModalOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 hover:bg-primary/20 border border-primary/30 text-foreground text-xs font-mono transition-all cursor-pointer group max-w-[200px] sm:max-w-[260px] truncate"
+              title="Bấm để đổi chủ đề luyện tập"
+            >
+              <Compass className="size-3 text-primary shrink-0 group-hover:rotate-45 transition-transform" />
+              <span className="truncate font-medium">{getTopicDisplay(currentTask?.topic || selectedTopicId).label}</span>
+              <ChevronDown className="size-3 text-muted-foreground shrink-0 ml-0.5" />
+            </button>
+            <GlobalAiSelector size="sm" />
           </div>
         </div>
 
-        {/* Right Status Indicator & Next Task Button */}
-        <div className="flex items-center gap-2">
+        {/* Center: Preparation Countdown Pulse Badge (if counting down) */}
+        {isCountingDown && prepCountdown !== null ? (
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/15 text-primary border border-primary/30 text-xs font-mono font-bold animate-pulse">
+            <Clock className="size-3.5" />
+            <span>Nói sau {prepCountdown}s...</span>
+          </div>
+        ) : null}
+
+        {/* Right: Next Task Button, Progress Indicator & Finish Button */}
+        <div className="flex items-center gap-2.5">
           {/* Next Task Action Button */}
           <Button
             variant="outline"
@@ -599,22 +592,54 @@ export default function VNToENPage() {
             onClick={handleSkipOrNextTask}
             disabled={isGenerating || isEvaluating}
             className="h-8 px-2.5 rounded-xl font-bold text-xs gap-1.5 border-primary/40 bg-primary/5 hover:bg-primary hover:text-primary-foreground text-primary transition-all shadow-2xs btn-spring"
-            title="Đổi sang câu hỏi tiếp theo (Phím R)"
+            title="Đổi sang câu tiếp theo (Phím R)"
           >
             <Sparkles className={`size-3.5 ${isGenerating ? "animate-spin" : ""}`} />
             <span>Câu tiếp theo</span>
             <span className="text-[9px] font-mono opacity-60 hidden sm:inline">[R]</span>
           </Button>
 
-          {isCountingDown && prepCountdown !== null ? (
-            <Badge className="bg-primary/15 text-primary border border-primary/30 text-xs font-mono animate-pulse">
-              Chuẩn bị: {prepCountdown}s
-            </Badge>
-          ) : sessionConfig.mode === "rapid_fire" && adaptiveState.rapidStreak > 0 ? (
-            <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-xs font-mono">
-              🔥 Streak: {adaptiveState.rapidStreak}
-            </Badge>
-          ) : null}
+          {adaptiveState.rapidStreak > 1 && (
+            <div className="hidden sm:flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[11px] font-mono font-bold">
+              <Flame className="size-3" />
+              <span>Streak {adaptiveState.rapidStreak}</span>
+            </div>
+          )}
+
+          {/* Progress Indicator */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono font-bold text-foreground">
+              {sessionConfig.mode === "endless"
+                ? `Câu #${currentTaskIndex + 1}`
+                : `Câu ${currentTaskIndex + 1}/${sessionConfig.targetCount}`}
+            </span>
+            {sessionConfig.mode === "endless" ? (
+              <Badge variant="outline" className="text-[10px] font-mono border-primary/30 text-primary">
+                Đã xong {completedTasksCount}
+              </Badge>
+            ) : (
+              <div className="w-16 sm:w-24">
+                <Progress
+                  value={((currentTaskIndex + 1) / (sessionConfig.targetCount || 1)) * 100}
+                  className="h-1.5 rounded-full"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Finish & View Results Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleFinishSession}
+            disabled={isGenerating || isEvaluating}
+            className="h-8 px-2.5 rounded-xl font-bold text-xs gap-1.5 border-amber-500/40 bg-amber-500/10 hover:bg-amber-500 hover:text-white text-amber-600 dark:text-amber-400 transition-all shadow-2xs btn-spring"
+            title="Kết thúc buổi tập và xem báo cáo tổng kết"
+          >
+            <Trophy className="size-3.5" />
+            <span className="hidden sm:inline">Kết thúc & Xem kết quả</span>
+            <span className="sm:hidden">Nghỉ tập</span>
+          </Button>
         </div>
       </header>
 
@@ -633,6 +658,8 @@ export default function VNToENPage() {
               onPlayTerm={(term) => tts.speak(term)}
               onNextTask={handleSkipOrNextTask}
               isGeneratingNext={isGenerating}
+              onRegenerateWithAI={generateNewTaskWithAI}
+              isRegeneratingAI={isRegeneratingAI}
             />
           )}
         </div>
@@ -715,13 +742,111 @@ export default function VNToENPage() {
         </div>
       </footer>
 
+      {/* In-Studio Topic Selector Dialog */}
+      <Dialog open={isTopicModalOpen} onOpenChange={setIsTopicModalOpen}>
+        <DialogContent className="sm:max-w-xl rounded-3xl p-5 md:p-6 bg-card border border-border/80 shadow-2xl space-y-4">
+          <DialogHeader className="space-y-1">
+            <DialogTitle className="text-base md:text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
+              <Compass className="size-5 text-primary" />
+              <span>Đổi chủ đề luyện phản xạ VN → EN</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Chọn một ngữ cảnh có sẵn hoặc tự gõ bất kỳ tình huống nào bạn muốn AI tạo câu.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Preset Topics Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[300px] overflow-y-auto pr-1">
+            {PRESET_TOPICS.map((topic) => {
+              const IconComp = TOPIC_ICONS[topic.icon] || Sparkles;
+              const isSelected = selectedTopicId === topic.id;
+
+              return (
+                <button
+                  key={topic.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedTopic(topic.id, "");
+                    setCustomInputVal("");
+                    setIsTopicModalOpen(false);
+                    toast.success("Đã chọn chủ đề", topic.labelVi);
+                  }}
+                  className={`flex items-center gap-2.5 p-2.5 rounded-2xl border transition-all cursor-pointer text-left btn-spring ${
+                    isSelected
+                      ? "border-primary bg-primary/10 ring-1 ring-primary/40 shadow-xs"
+                      : "border-border/70 bg-card hover:border-primary/40 hover:bg-muted/40"
+                  }`}
+                >
+                  <div
+                    className={`size-7 rounded-xl flex items-center justify-center shrink-0 ${
+                      isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    <IconComp className="size-3.5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-xs font-bold text-foreground block truncate">
+                      {topic.labelVi}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground font-mono block truncate">
+                      {topic.labelEn}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Custom Topic Input */}
+          <div className="p-3 rounded-2xl border border-border/70 bg-muted/20 space-y-2">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Wand2 className="size-3.5 text-primary" />
+              <span className="font-semibold text-foreground">Hoặc nhập bối cảnh tùy chỉnh:</span>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={customInputVal}
+                onChange={(e) => setCustomInputVal(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && customInputVal.trim()) {
+                    setSelectedTopic("custom", customInputVal.trim());
+                    setIsTopicModalOpen(false);
+                    toast.success("Đã chọn chủ đề tùy chỉnh", customInputVal.trim());
+                  }
+                }}
+                placeholder="Ví dụ: Phỏng vấn xin việc, Đặt đồ ăn ở Singapore, Đi khám bác sĩ..."
+                className="flex-1 h-9 px-3 text-xs rounded-xl bg-background border border-border/80 focus:outline-hidden focus:border-primary focus:ring-1 focus:ring-primary text-foreground placeholder:text-muted-foreground/60 transition-all"
+              />
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  if (customInputVal.trim()) {
+                    setSelectedTopic("custom", customInputVal.trim());
+                    setIsTopicModalOpen(false);
+                    toast.success("Đã chọn chủ đề tùy chỉnh", customInputVal.trim());
+                  } else {
+                    toast.info("Vui lòng nhập chủ đề trước khi áp dụng");
+                  }
+                }}
+                className="h-9 px-3 rounded-xl text-xs gap-1 font-semibold"
+              >
+                <Check className="size-3" />
+                <span>Áp dụng</span>
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Completion Summary Modal */}
       <VNSummaryModal
         isOpen={isSessionCompleted}
         summary={sessionSummary}
         onRestart={() => {
           resetSession();
-          setHasStartedSession(false);
+          initSession("endless");
         }}
       />
     </div>

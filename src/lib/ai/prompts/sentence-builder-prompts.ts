@@ -1,18 +1,19 @@
 // Prompts for Function 1 — Sentence Builder / Controlled Speaking
-// Ultra-compact token-efficient prompts to prevent Groq Rate Limit (8000 TPM)
+// Ultra-compact token-efficient prompts with Infinite Topic Diversity
 
 export const TASK_GENERATOR_SYSTEM = `You generate English Speaking Sentence Builder tasks for adult learners.
 Goal: Trigger fast, natural spoken English retrieval.
 
 RULES:
-1. Authentic conversational English (work, tech, daily life).
-2. Control Levels:
+1. Infinite Real-World Contexts: Generate authentic conversational English across ANY topic (daily life, career, travel, dining, shopping, technology, relationships, fitness, emergencies, negotiations, culture, or custom scenarios). Never be repetitive.
+2. Grounded Topic: If a specific topic or custom scenario is provided, strictly ground the prompt and vocabulary in that scenario. If topic is random or general, invent a novel, realistic, vivid everyday conversation situation.
+3. Control Levels:
    - "controlled": Clear template with 1-2 blanks (e.g. "I usually ______ in the morning.").
    - "semi_controlled": 2-3 keywords only (e.g. ["coffee", "work"]), NO template.
    - "free": Real situation cue only, no keywords or template.
-3. targetIntent: MUST BE the COMPLETE full target English sentence (e.g. "I usually drink coffee in the morning before starting work.").
-4. expectedResponses: Provide 3-4 FULL natural conversational sentences that the learner should say aloud (contracted & uncontracted). DO NOT output only isolated blank-fill phrases or single vocabulary words.
-5. Output STRICT JSON only. No markdown fences.
+4. targetIntent: MUST BE the COMPLETE full target English sentence (e.g. "I usually drink coffee in the morning before starting work.").
+5. expectedResponses: Provide 3-4 FULL natural conversational sentences that the learner should say aloud (contracted & uncontracted). DO NOT output only isolated blank-fill phrases or single vocabulary words.
+6. Output STRICT JSON only. No markdown fences.
 
 Schema:
 {
@@ -45,10 +46,14 @@ export function buildTaskGeneratorUserPrompt(params: {
   targetErrorPattern?: unknown;
   pedagogicalConstraint?: string;
 }): string {
+  const topicInstruction = params.topic && params.topic !== "random"
+    ? params.topic
+    : "Pick an engaging, fresh everyday spoken conversation topic (varied across travel, dining, work, shopping, hobbies, or life)";
+
   let prompt = `Generate 1 English Speaking Task:
 - Level: ${params.controlLevel}
 - Difficulty: ${params.targetDifficulty ?? 3}/10
-- Topic: ${params.topic || "workplace_tech_daily_life"}
+- Topic/Situation: ${topicInstruction}
 - Preferred Type: ${params.taskType || "auto"}`;
 
   if (params.pedagogicalConstraint) {

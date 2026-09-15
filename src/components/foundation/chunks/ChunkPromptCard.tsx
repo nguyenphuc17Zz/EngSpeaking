@@ -18,6 +18,7 @@ import type { ChunkChainTask, ChunkTrainingTask } from "@/types/chunk-automatici
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 import { sanitizeTextForTTS } from "@/lib/tts/browser";
 import { toast } from "@/lib/toast";
+import { cn } from "@/lib/utils";
 
 interface Props {
   mode: "chain_builder" | "single_chunk";
@@ -27,6 +28,8 @@ interface Props {
   onSelectHintTier?: (tier: number) => void;
   onNextTask?: () => void;
   isGeneratingNext?: boolean;
+  onRegenerateAI?: () => void;
+  isRegeneratingAI?: boolean;
 }
 
 export function ChunkPromptCard({
@@ -37,6 +40,8 @@ export function ChunkPromptCard({
   onSelectHintTier,
   onNextTask,
   isGeneratingNext = false,
+  onRegenerateAI,
+  isRegeneratingAI = false,
 }: Props) {
   const tts = useBrowserTTS();
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -95,6 +100,17 @@ export function ChunkPromptCard({
               <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 border border-primary/30 text-primary">
                 Chain Builder
               </Badge>
+              {chainTask.source === "ai" && (
+                <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 gap-1 font-normal">
+                  <Sparkles className="size-2.5 text-emerald-500" />
+                  AI Generated
+                </Badge>
+              )}
+              {chainTask.source === "bank" && (
+                <Badge variant="outline" className="border-blue-500/40 text-blue-600 dark:text-blue-400 bg-blue-500/10 gap-1 font-normal">
+                  Từ ngân hàng
+                </Badge>
+              )}
               {chainTask.strategyTitleVi && (
                 <Badge variant="secondary" className="text-[10px] font-mono">
                   {chainTask.strategyTitleVi}
@@ -103,6 +119,19 @@ export function ChunkPromptCard({
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
+              {onRegenerateAI && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onRegenerateAI}
+                  disabled={isRegeneratingAI}
+                  className="h-6 px-2 rounded-lg text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 hover:border-emerald-500 gap-1 shrink-0 cursor-pointer shadow-2xs btn-spring"
+                  title="Tạo chuỗi câu mới bằng AI"
+                >
+                  <Sparkles className={cn("size-2.5 text-emerald-500", isRegeneratingAI && "animate-spin")} />
+                  <span>{isRegeneratingAI ? "AI đang tạo..." : "Tạo mới bằng AI"}</span>
+                </Button>
+              )}
               {onNextTask && (
                 <Button
                   variant="outline"
@@ -242,9 +271,33 @@ export function ChunkPromptCard({
               <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 border border-primary/30 text-primary capitalize">
                 {singleTask.contextDomain}
               </Badge>
+              {singleTask.source === "ai" && (
+                <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 gap-1 font-normal">
+                  <Sparkles className="size-2.5 text-emerald-500" />
+                  AI Generated
+                </Badge>
+              )}
+              {singleTask.source === "bank" && (
+                <Badge variant="outline" className="border-blue-500/40 text-blue-600 dark:text-blue-400 bg-blue-500/10 gap-1 font-normal">
+                  Từ ngân hàng
+                </Badge>
+              )}
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
+              {onRegenerateAI && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onRegenerateAI}
+                  disabled={isRegeneratingAI}
+                  className="h-6 px-2 rounded-lg text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 hover:border-emerald-500 gap-1 shrink-0 cursor-pointer shadow-2xs btn-spring"
+                  title="Tạo bài tập cụm từ mới bằng AI"
+                >
+                  <Sparkles className={cn("size-2.5 text-emerald-500", isRegeneratingAI && "animate-spin")} />
+                  <span>{isRegeneratingAI ? "AI đang tạo..." : "Tạo mới bằng AI"}</span>
+                </Button>
+              )}
               {onNextTask && (
                 <Button
                   variant="outline"

@@ -19,14 +19,20 @@ import {
 } from "@/lib/foundation/sentence-builder/adaptive-engine";
 import { recordErrorsFromEvaluation, getTopWeakness } from "@/lib/foundation/sentence-builder/error-bank.service";
 import { updateFoundationProfileFromScore } from "@/lib/foundation/services/progress.service";
+import { resolveTopicForPrompt } from "@/lib/foundation/sentence-builder/topics";
 
 interface SentenceBuilderStoreState {
+  // Topic State
+  selectedTopicId: string;
+  customTopicText: string;
+  setSelectedTopic: (topicId: string, customText?: string) => void;
   // Current Task & Queue
   currentTask: SentenceBuilderTask | null;
   nextTask: SentenceBuilderTask | null;
   isGenerating: boolean;
   isEvaluating: boolean;
   isPreloadingNext: boolean;
+  isRegeneratingAI: boolean;
 
   // Session State
   sessionConfig: SentenceBuilderSessionConfig;
@@ -56,8 +62,10 @@ interface SentenceBuilderStoreState {
   generationError: string | null;
 
   // Actions
-  initSession: (mode: SessionMode) => Promise<void>;
-  fetchFirstTask: () => Promise<void>;
+  initSession: (mode?: SessionMode) => Promise<void>;
+  finishSessionManually: () => void;
+  fetchFirstTask: (opts?: { forceSource?: "ai" | "bank" | "auto" }) => Promise<void>;
+  generateNewTaskWithAI: () => Promise<void>;
   preloadNextTask: () => Promise<void>;
   processEvaluation: (evaluation: SentenceBuilderEvaluation) => void;
   advanceToNextTask: () => void;
@@ -72,10 +80,11 @@ interface SentenceBuilderStoreState {
 }
 
 const DEFAULT_SESSION_CONFIGS: Record<SessionMode, SentenceBuilderSessionConfig> = {
-  quick: { mode: "quick", targetCount: 4, autoStartMic: true, prepTimeSec: 3.0 },
-  standard: { mode: "standard", targetCount: 10, autoStartMic: true, prepTimeSec: 3.0 },
-  deep: { mode: "deep", targetCount: 20, autoStartMic: true, prepTimeSec: 3.0 },
-  weakness_focus: { mode: "weakness_focus", targetCount: 8, autoStartMic: true, prepTimeSec: 3.0 },
+  endless: { mode: "endless", targetCount: 0, autoStartMic: false, prepTimeSec: 3.0 },
+  quick: { mode: "quick", targetCount: 4, autoStartMic: false, prepTimeSec: 3.0 },
+  standard: { mode: "standard", targetCount: 10, autoStartMic: false, prepTimeSec: 3.0 },
+  deep: { mode: "deep", targetCount: 20, autoStartMic: false, prepTimeSec: 3.0 },
+  weakness_focus: { mode: "weakness_focus", targetCount: 8, autoStartMic: false, prepTimeSec: 3.0 },
 };
 
 export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
@@ -86,8 +95,9 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
       isGenerating: false,
       isEvaluating: false,
       isPreloadingNext: false,
+      isRegeneratingAI: false,
 
-      sessionConfig: DEFAULT_SESSION_CONFIGS.standard,
+      sessionConfig: DEFAULT_SESSION_CONFIGS.endless,
       sessionStartedAt: null,
       completedTasksCount: 0,
       currentTaskIndex: 0,
@@ -98,24 +108,32 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
       hintTier: 0,
       attemptCount: 1,
       lastEvaluation: null,
-      autoStartMic: true,
+      autoStartMic: false,
       prepCountdown: null,
       isCountingDown: false,
 
       adaptiveState: INITIAL_ADAPTIVE_STATE,
       skillMastery: INITIAL_SKILL_MASTERY,
 
+      // Topic Selection Defaults
+      selectedTopicId: "random",
+      customTopicText: "",
+      setSelectedTopic: (topicId: string, customText: string = "") =>
+        set({ selectedTopicId: topicId, customTopicText: customText }),
+
       generationError: null,
 
-      initSession: async (mode: SessionMode) => {
+      initSession: async (mode: SessionMode = "endless") => {
         const topWeakness = getTopWeakness();
+        const selectedMode = mode || "endless";
         const config = {
-          ...DEFAULT_SESSION_CONFIGS[mode],
+          ...DEFAULT_SESSION_CONFIGS[selectedMode],
           weaknessFocusSkill: topWeakness?.patternKey,
         };
 
         set({
           sessionConfig: config,
+          autoStartMic: false,
           sessionStartedAt: new Date().toISOString(),
           completedTasksCount: 0,
           currentTaskIndex: 0,
@@ -137,9 +155,10 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
         await get().fetchFirstTask();
       },
 
-      fetchFirstTask: async () => {
+      fetchFirstTask: async (opts?: { forceSource?: "ai" | "bank" | "auto" }) => {
         set({ isGenerating: true, generationError: null });
-        const { adaptiveState, sessionConfig } = get();
+        const { adaptiveState, selectedTopicId, customTopicText } = get();
+        const effectiveTopic = resolveTopicForPrompt(selectedTopicId, customTopicText);
         const settings = typeof window !== "undefined" ? (await import("@/stores/settings-store")).useSettingsStore.getState() : null;
         const provider = settings?.sentenceBuilderGen?.provider || settings?.activeProvider || "gemini";
         const model =
@@ -155,8 +174,10 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
               controlLevel: adaptiveState.currentLevel,
               targetDifficulty: adaptiveState.currentDifficulty,
               prepTimeSec: adaptiveState.prepTimeSec,
+              topic: effectiveTopic,
               provider,
               model,
+              forceSource: opts?.forceSource,
             }),
           });
 
@@ -183,6 +204,63 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
             isGenerating: false,
             generationError: e instanceof Error ? e.message : "Mất kết nối với máy chủ AI.",
           });
+        }
+      },
+
+      generateNewTaskWithAI: async () => {
+        set({ isRegeneratingAI: true, generationError: null });
+        const { adaptiveState, selectedTopicId, customTopicText } = get();
+        const effectiveTopic = resolveTopicForPrompt(selectedTopicId, customTopicText);
+        const settings = typeof window !== "undefined" ? (await import("@/stores/settings-store")).useSettingsStore.getState() : null;
+        const provider = settings?.sentenceBuilderGen?.provider || settings?.activeProvider || "gemini";
+        const model =
+          settings?.sentenceBuilderGen?.model ||
+          (provider === "groq" ? settings?.preferredGroqModel : settings?.preferredGeminiModel) ||
+          "auto";
+
+        try {
+          const res = await fetch("/api/foundation/sentence-builder/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              controlLevel: adaptiveState.currentLevel,
+              targetDifficulty: adaptiveState.currentDifficulty,
+              prepTimeSec: adaptiveState.prepTimeSec,
+              topic: effectiveTopic,
+              provider,
+              model,
+              forceSource: "ai",
+            }),
+          });
+
+          const data = await res.json();
+          if (data.success && data.task) {
+            set({
+              currentTask: data.task,
+              isRegeneratingAI: false,
+              generationError: null,
+              hintTier: 0,
+              attemptCount: 1,
+              lastEvaluation: null,
+            });
+            const { toast } = await import("@/lib/toast");
+            toast.success("Đã tạo câu mới bằng AI", `Chủ đề: ${data.task.topic || "Giao tiếp"}`);
+          } else {
+            set({
+              isRegeneratingAI: false,
+              generationError: data.error || "Không thể tạo bài tập bằng AI.",
+            });
+            const { toast } = await import("@/lib/toast");
+            toast.error("Lỗi gọi AI", data.error || "Không thể tạo câu mới bằng AI");
+          }
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "Mất kết nối với máy chủ AI.";
+          set({
+            isRegeneratingAI: false,
+            generationError: msg,
+          });
+          const { toast } = await import("@/lib/toast");
+          toast.error("Lỗi gọi AI", msg);
         }
       },
 
@@ -234,7 +312,7 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
 
         const nextIndex = currentTaskIndex + 1;
 
-        if (nextIndex >= sessionConfig.targetCount) {
+        if (sessionConfig.mode !== "endless" && sessionConfig.targetCount > 0 && nextIndex >= sessionConfig.targetCount) {
           // Complete session
           const firstAttempts = sessionTasksHistory.filter((h) => h.attemptsCount === 1 && h.evaluation.isSuccessful).length;
           const accuracy = Math.round((firstAttempts / Math.max(1, sessionTasksHistory.length)) * 100);
@@ -300,6 +378,53 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
         }
       },
 
+      finishSessionManually: () => {
+        const {
+          sessionConfig,
+          sessionTasksHistory,
+          sessionStartedAt,
+        } = get();
+
+        const firstAttempts = sessionTasksHistory.filter((h) => h.attemptsCount === 1 && h.evaluation?.isSuccessful).length;
+        const count = Math.max(1, sessionTasksHistory.length);
+        const accuracy = Math.round((firstAttempts / count) * 100);
+        const avgLatency = Math.round(
+          sessionTasksHistory.reduce((acc, h) => acc + (h.evaluation?.latencyMs || 0), 0) / count
+        );
+        const avgIndependence = Math.round(
+          sessionTasksHistory.reduce((acc, h) => acc + (h.evaluation?.independenceScore || 0), 0) / count
+        );
+        const avgOverall = Math.round(
+          sessionTasksHistory.reduce((acc, h) => acc + (h.evaluation?.overallScore || 0), 0) / count
+        );
+
+        const topWeakness = getTopWeakness();
+
+        const summary: SentenceBuilderSessionSummary = {
+          sessionId: `sb_sess_${Date.now()}`,
+          mode: sessionConfig.mode,
+          startedAt: sessionStartedAt || new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+          totalTasks: sessionTasksHistory.length,
+          completedTasks: sessionTasksHistory.length,
+          firstAttemptSuccessCount: firstAttempts,
+          firstAttemptAccuracy: accuracy,
+          averageResponseLatencyMs: avgLatency,
+          averageIndependence: avgIndependence,
+          averageOverallScore: avgOverall,
+          masteryDelta: Math.min(10, Math.max(2, Math.round(avgOverall / 15))),
+          practicedSkills: ["Sentence Construction", "Spoken Retrieval", "Conversational English"],
+          topWeaknessIdentified: topWeakness ? topWeakness.labelVi : "Phản xạ câu giao tiếp",
+          recommendedNextAction: "Tiếp tục duy trì phản xạ tự nhiên mỗi ngày!",
+          history: sessionTasksHistory,
+        };
+
+        set({
+          isSessionCompleted: true,
+          sessionSummary: summary,
+        });
+      },
+
       setHintTier: (tier) => set({ hintTier: tier }),
       incrementAttempt: () => set((s) => ({ attemptCount: s.attemptCount + 1, lastEvaluation: null })),
       setAutoStartMic: (val) => set({ autoStartMic: val }),
@@ -324,11 +449,13 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
         }),
     }),
     {
-      name: "sentence_builder_store_v1",
+      name: "sentence_builder_store_v2",
       partialize: (s) => ({
         skillMastery: s.skillMastery,
         adaptiveState: s.adaptiveState,
         autoStartMic: s.autoStartMic,
+        selectedTopicId: s.selectedTopicId,
+        customTopicText: s.customTopicText,
       }),
     }
   )

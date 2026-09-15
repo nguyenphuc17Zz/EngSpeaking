@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { evaluateSession } from "@/lib/diagnostics/services/evaluation.service";
 import { toUserMessage } from "@/lib/errors/codes";
-import { createServerClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { evaluationRepo } from "@/lib/db/sqlite-db";
 
 export async function POST(req: Request) {
   let body: unknown;
@@ -31,10 +31,8 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const sessionId = url.searchParams.get("sessionId");
   if (!sessionId) return NextResponse.json({ error: { message: "Thiếu sessionId" } }, { status: 400 });
-  if (!isSupabaseConfigured()) return NextResponse.json({ evaluation: null, snapshot: null });
-  const supabase = createServerClient();
-  if (!supabase) return NextResponse.json({ evaluation: null });
-  const { data } = await supabase.from("speaking_evaluations").select("*").eq("session_id", sessionId).order("generated_at", { ascending: false }).limit(1).single();
-  if (!data) return NextResponse.json({ evaluation: null });
+  const data = evaluationRepo.getBySession(sessionId);
+  if (!data) return NextResponse.json({ evaluation: null, snapshot: null });
   return NextResponse.json({ evaluation: data.evaluation, snapshot: data.snapshot });
 }
+

@@ -7,10 +7,10 @@ import {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { mode = "chain_builder", topic, strategy, domain, chunk, stage, provider, model } = body;
+    const { mode = "chain_builder", topic, strategy, domain, chunk, stage, provider, model, forceSource } = body;
 
     if (mode === "chain_builder") {
-      const task = await generateChunkChainTask({ topic, strategy, domain, provider, model });
+      const task = await generateChunkChainTask({ topic, strategy, domain, provider, model, forceSource });
       return NextResponse.json({ success: true, mode: "chain_builder", task });
     } else {
       const task = await generateSingleChunkTask({ chunk, stage, provider, model });

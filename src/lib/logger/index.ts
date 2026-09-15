@@ -22,6 +22,7 @@ function sanitize(obj: Record<string, unknown>): Record<string, unknown> {
 
 export const logger = {
   sessionStarted: (data?: Record<string, unknown>) => log("info", "session_started", data),
+  sessionEnded: (data?: Record<string, unknown>) => log("info", "session_ended", data),
   recordingStarted: (data?: Record<string, unknown>) => log("info", "recording_started", data),
   recordingStopped: (data?: Record<string, unknown>) => log("info", "recording_stopped", data),
   sttStarted: (data?: Record<string, unknown>) => log("info", "stt_started", data),

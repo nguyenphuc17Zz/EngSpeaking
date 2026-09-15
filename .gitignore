@@ -49,3 +49,9 @@ dev*.log
 models/**
 !models/README.md
 !models/**/README.md
+
+# local SQLite databases
+data/*.db
+data/*.db-wal
+data/*.db-shm
+

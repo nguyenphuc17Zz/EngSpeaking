@@ -49,6 +49,7 @@ export interface CircumlocutionTask {
   differentia?: string; // e.g. "used to heat food quickly using electromagnetic waves"
   semanticKeyAnchors?: string[]; // e.g. ["heat", "warm", "food", "kitchen", "quick"]
   tabooLemmas?: string[]; // e.g. ["microwave", "microwaving", "microwaved"]
+  source?: "ai" | "bank";
 }
 
 export interface SurvivalScenarioTask {
@@ -62,6 +63,7 @@ export interface SurvivalScenarioTask {
   timeLimitSeconds: number;
   tierHints?: SurvivalHintTier[];
   suggestedVocabulary?: SurvivalVocabularyItem[];
+  source?: "ai" | "bank";
 }
 
 export interface SurvivalEvaluationResult {

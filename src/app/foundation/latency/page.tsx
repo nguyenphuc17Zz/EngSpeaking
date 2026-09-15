@@ -45,6 +45,7 @@ export default function LatencyTrainingPage() {
     isGenerating,
     isEvaluating,
     setIsEvaluating,
+    isRegeneratingAI,
     currentDrillMode,
     targetCount,
     currentTaskIndex,
@@ -55,6 +56,7 @@ export default function LatencyTrainingPage() {
     generationError,
     clearGenerationError,
     initSession,
+    generateNewTaskWithAI,
     processEvaluation,
     advanceToNextTask,
     resetSession,
@@ -546,6 +548,8 @@ export default function LatencyTrainingPage() {
                 staircaseTargetMs={adaptiveState.currentTargetLatencyMs}
                 onNextTask={handleSkipOrNextTask}
                 isGeneratingNext={isGenerating}
+                onRegenerateWithAI={generateNewTaskWithAI}
+                isRegeneratingAI={isRegeneratingAI}
               />
             ) : (
               <Card className="rounded-3xl border border-border/80 bg-card p-6 h-full flex flex-col items-center justify-center text-center space-y-4">

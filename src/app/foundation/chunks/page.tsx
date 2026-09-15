@@ -54,6 +54,7 @@ export default function ChunkAutomaticityPage() {
     selectedStrategy,
     setSelectedStrategy,
     isGenerating,
+    isRegeneratingAI,
     isEvaluating,
     setIsEvaluating,
     generationError,
@@ -63,6 +64,7 @@ export default function ChunkAutomaticityPage() {
     loadLibrary,
     fetchNextChainTask,
     fetchNextSingleTask,
+    generateNewTaskWithAI,
     clearGenerationError,
     saveCustomChunk,
     processChainEvaluation,
@@ -519,6 +521,10 @@ export default function ChunkAutomaticityPage() {
                 singleTask={currentSingleTask}
                 currentHintTier={currentHintTier}
                 onSelectHintTier={setCurrentHintTier}
+                onNextTask={handleContinue}
+                isGeneratingNext={isGenerating}
+                onRegenerateAI={generateNewTaskWithAI}
+                isRegeneratingAI={isRegeneratingAI}
               />
             )}
           </div>

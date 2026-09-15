@@ -88,18 +88,20 @@ export async function generateLatencyTask(
     return getTestMockTask({ ...options, drillMode, targetLatencyMs, targetDifficulty });
   }
 
-  // 1. Check Content Bank (Hybrid 70/30 Policy: 70% chance to fetch from Bank)
-  const bankSample = await sampleBankTask<LatencyTask>({
-    module: "latency",
-    level: drillMode,
-    difficulty: targetDifficulty,
-    category: options.category,
-    forceSource: options.forceSource,
-  });
+  // 1. Check Content Bank (Hybrid 70/30 Policy: 70% chance to fetch from Bank, skipped if forceSource === 'ai')
+  if (options.forceSource !== "ai") {
+    const bankSample = await sampleBankTask<LatencyTask>({
+      module: "latency",
+      level: drillMode,
+      difficulty: targetDifficulty,
+      category: options.category,
+      forceSource: options.forceSource,
+    });
 
-  if (bankSample) {
-    recordUserExposure(bankSample.contentId, "latency").catch(() => {});
-    return bankSample.task;
+    if (bankSample) {
+      recordUserExposure(bankSample.contentId, "latency").catch(() => {});
+      return { ...bankSample.task, source: "bank" };
+    }
   }
 
   // 2. Dynamic AI Generation (30% novel LLM generation or when bank misses)
@@ -122,7 +124,7 @@ export async function generateLatencyTask(
           messages: [{ role: "user", content: userPrompt }],
           systemInstruction: LATENCY_GENERATOR_SYSTEM,
           temperature: 0.7,
-          maxOutputTokens: 450, // Reduced to 450 for fast generation and safety against Groq TPM limits
+          maxOutputTokens: 1000, // Sufficient tokens to prevent JSON truncation
         },
       });
 
@@ -181,6 +183,7 @@ export async function generateLatencyTask(
         parsed.staircaseTargetMs = Number(parsed.targetLatencyMs || targetLatencyMs);
       }
 
+      parsed.source = "ai";
       const validated = latencyTaskSchema.safeParse(parsed);
       if (!validated.success) {
         if (process.env.NODE_ENV !== "production") {
@@ -213,17 +216,19 @@ export async function generateLatencyTask(
     task = await attemptGenerate();
   }
 
-  // Emergency Fallback to Content Bank on AI rate limits/outages
+  // Emergency Fallback to Content Bank on AI rate limits/outages (only if not forceSource === 'ai')
   if (!task) {
-    const fallbackBank = await sampleBankTask<LatencyTask>({
-      module: "latency",
-      level: drillMode,
-      difficulty: targetDifficulty,
-      forceSource: "bank",
-    });
-    if (fallbackBank) {
-      recordUserExposure(fallbackBank.contentId, "latency").catch(() => {});
-      return fallbackBank.task;
+    if (options.forceSource !== "ai") {
+      const fallbackBank = await sampleBankTask<LatencyTask>({
+        module: "latency",
+        level: drillMode,
+        difficulty: targetDifficulty,
+        forceSource: "bank",
+      });
+      if (fallbackBank) {
+        recordUserExposure(fallbackBank.contentId, "latency").catch(() => {});
+        return { ...fallbackBank.task, source: "bank" };
+      }
     }
 
     throw new Error(

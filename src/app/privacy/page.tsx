@@ -20,7 +20,7 @@ export default function PrivacyPage() {
           <Button variant="destructive" onClick={() => { if (confirm('Xóa tất cả lịch sử?')) { localStorage.removeItem('english-speaking-settings'); localStorage.removeItem('learner_state_v1'); alert('Đã xóa'); }}}>Reset Progress</Button>
         </CardContent>
       </Card>
-      <Card className="bg-muted/40"><CardContent className="pt-4 text-xs text-muted-foreground">Mọi AI telemetry không chứa API key. Xóa dữ liệu sẽ xóa local và yêu cầu xóa server qua API /api/me (nếu có Supabase).</CardContent></Card>
+      <Card className="bg-muted/40"><CardContent className="pt-4 text-xs text-muted-foreground">Mọi AI telemetry không chứa API key. Dữ liệu lưu trữ an toàn 100% trên SQLite cục bộ (data/app.db). Xóa dữ liệu qua nút Reset hoặc API /api/me.</CardContent></Card>
     </div>
   );
 }

@@ -17,7 +17,7 @@ AI nói → Bạn nói → Ghi âm → STT → Transcript → AI hiểu → AI �
 ## Stack
 
 - Next.js 16 (App Router) + TypeScript strict + Tailwind 4 + shadcn/ui (base-nova)
-- Zustand (client state) + Zod (validation) + Supabase/Postgres
+- Zustand (client state) + Zod (validation) + SQLite (node:sqlite, WAL mode)
 - Web Audio / MediaRecorder / Web Speech API / speechSynthesis
 
 ## Kiến trúc AI-first
@@ -74,7 +74,7 @@ src/
   stores/{voice-session-store,settings-store,foundation-store,conversation-store}
   hooks/{useAudioRecorder,useAudioPlayer,useSpeechRecognition,useBrowserTTS}
   types/{ai,audio,conversation,session,foundation,conversation-world,diagnostics,learner}
-supabase/migrations/{001_initial.sql,002_foundation.sql,003_conversation.sql,004_diagnostics.sql,005_learner.sql}
+  data/app.db           # Persistent SQLite database (WAL mode)
 ```
 
 ## Cấu hình
@@ -85,14 +85,10 @@ Copy `.env.example` → `.env.local`:
 # Server-only — không bao giờ gửi ra browser
 GEMINI_API_KEY=your_gemini_key
 GROQ_API_KEY=your_groq_key
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your_service_role
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 MOCK_AI=false
 ```
 
-- Chưa cấu hình Supabase → tự động fallback in-memory (session `local_*`).
+- Lưu trữ cục bộ hoàn toàn với SQLite (`data/app.db`), không cần setup cloud database bên ngoài.
 - Mặc định theo lựa chọn người dùng: **STT = Browser Web Speech API**, **TTS = Browser speechSynthesis** (miễn phí, không tốn quota). Đổi sang Groq Whisper / Gemini trong **/settings**.
 
 ## Chạy
@@ -100,17 +96,15 @@ MOCK_AI=false
 ```bash
 pnpm install
 pnpm dev      # http://localhost:3000  (/foundation, /conversation, /diagnostics, /curriculum)
-pnpm build    # production build (39 routes: +6 curriculum + learner)
-pnpm test     # vitest (16 files, 82 tests)
+pnpm build    # production build
+pnpm test     # vitest
 pnpm typecheck
 ```
 
-### Supabase (cloud hosted, anonymous per lựa chọn)
+### Database (SQLite cục bộ)
 
-1. Tạo project tại https://supabase.com
-2. Chạy SQL trong `supabase/migrations/001_initial.sql` + `002_foundation.sql` + `003_conversation.sql` + `004_diagnostics.sql` + `005_learner.sql` (SQL Editor)
-3. Điền 4 biến `SUPABASE_*` / `NEXT_PUBLIC_SUPABASE_*` vào `.env.local`, restart dev.
-4. Không cấu hình → fallback in-memory `local_*` / `fsess_*` / `sc_*` / `ct_*` / `eval_*` / `plan_*` (đã verify mock, history rỗng khi không có DB nhưng generation vẫn hoạt động).
+- Tự động khởi tạo database tại `data/app.db` ở chế độ WAL (Write-Ahead Logging).
+- Lưu trữ toàn diện: Content banks (câu hỏi/bài tập AI), sessions, turns, foundation attempts, baselines, speaking evaluations, progress metrics, curriculum plans, telemetry.
 
 ## Provider / Model
 
@@ -154,7 +148,7 @@ Capability filtering: selector chỉ hiển thị model có `capability` tương
   - `GET /api/evaluation/{latest,history,snapshot}` — history/snapshot
 - **Curriculum (Phase 5):**
   - `GET /api/learner/state` — load `LearnerState` (default hoặc DB, anonymous)
-  - `POST /api/learner/state` — save state (localStorage + Supabase `learner_states`)
+  - `POST /api/learner/state` — save state (SQLite `learner_states`)
   - `GET /api/curriculum/today?duration=10&provider=mock` — daily plan nhanh
   - `POST /api/curriculum/generate` — `{learnerState, duration, goalOverride, provider}` → `LearningSessionPlan` + `explanation` (validate §81, persist `learning_plans/blocks`)
   - `POST /api/curriculum/replan` — `{currentPlan, livePerformance, learnerState}` → `UpdatedLearningPlan` (§92-93, chỉ sửa blocks còn lại)
@@ -244,7 +238,7 @@ Capability filtering: selector chỉ hiển thị model có `capability` tương
 - `lib/ai/routing/auto-resolver.ts` + `lib/foundation/difficulty/engine.ts` — AI-assisted isolated
 - `lib/ai/prompts/` + `lib/foundation/prompts/` — versioned, single responsibility (§53)
 - `stores/voice-session-store.ts` + `stores/foundation-store.ts` — `rawText` + `history` cho Phase 4 diagnostics
-- `supabase/migrations/` — thêm bảng không breaking, Phase 3 dynamic conversation cắm vào `FoundationExerciseEngine`
+- `lib/db/sqlite-db.ts` — schema quản lý tập trung toàn bộ tables cho Sessions, Content Banks, Progress, Curriculum và Diagnostics
 
 ## Giấy phép
 

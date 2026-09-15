@@ -19,6 +19,7 @@ interface SurvivalStoreState {
   currentScenarioTask: SurvivalScenarioTask | null;
 
   isGenerating: boolean;
+  isRegeneratingAI: boolean;
   isEvaluating: boolean;
   generationError: string | null;
 
@@ -32,8 +33,9 @@ interface SurvivalStoreState {
   // Actions
   setMode: (mode: "circumlocution" | "scenarios") => void;
   clearGenerationError: () => void;
-  fetchNextCircumTask: (difficulty?: "easy" | "medium" | "hard") => Promise<void>;
-  fetchNextScenarioTask: (context?: string) => Promise<void>;
+  fetchNextCircumTask: (difficulty?: "easy" | "medium" | "hard", forceSource?: "bank" | "ai" | "auto") => Promise<void>;
+  fetchNextScenarioTask: (context?: string, forceSource?: "bank" | "ai" | "auto") => Promise<void>;
+  generateNewTaskWithAI: () => Promise<void>;
   processEvaluation: (evalResult: SurvivalEvaluationResult) => void;
   resetSessionStats: () => void;
   getSessionSummary: () => SurvivalSessionSummary;
@@ -47,6 +49,7 @@ export const useSurvivalStore = create<SurvivalStoreState>()(
       currentScenarioTask: SEED_SURVIVAL_SCENARIOS[0],
 
       isGenerating: false,
+      isRegeneratingAI: false,
       isEvaluating: false,
       generationError: null,
       lastEvaluation: null,
@@ -63,7 +66,7 @@ export const useSurvivalStore = create<SurvivalStoreState>()(
 
       clearGenerationError: () => set({ generationError: null }),
 
-      fetchNextCircumTask: async (difficulty = "medium") => {
+      fetchNextCircumTask: async (difficulty = "medium", forceSource) => {
         set({ isGenerating: true, lastEvaluation: null, generationError: null });
 
         let provider = "gemini";
@@ -82,7 +85,7 @@ export const useSurvivalStore = create<SurvivalStoreState>()(
           const res = await fetch("/api/foundation/survival/generate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mode: "circumlocution", difficulty, provider, model }),
+            body: JSON.stringify({ mode: "circumlocution", difficulty, provider, model, forceSource }),
           });
           const data = await res.json();
           if (data.task) {
@@ -101,7 +104,7 @@ export const useSurvivalStore = create<SurvivalStoreState>()(
         }
       },
 
-      fetchNextScenarioTask: async (context) => {
+      fetchNextScenarioTask: async (context, forceSource) => {
         set({ isGenerating: true, lastEvaluation: null, generationError: null });
 
         let provider = "gemini";
@@ -120,7 +123,7 @@ export const useSurvivalStore = create<SurvivalStoreState>()(
           const res = await fetch("/api/foundation/survival/generate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mode: "scenarios", context, provider, model }),
+            body: JSON.stringify({ mode: "scenarios", context, provider, model, forceSource }),
           });
           const data = await res.json();
           if (data.task) {
@@ -136,6 +139,19 @@ export const useSurvivalStore = create<SurvivalStoreState>()(
             isGenerating: false,
             generationError: e?.message || "Lỗi kết nối khi gọi AI tạo bài tập.",
           });
+        }
+      },
+
+      generateNewTaskWithAI: async () => {
+        set({ isRegeneratingAI: true, lastEvaluation: null, generationError: null });
+        try {
+          if (get().mode === "circumlocution") {
+            await get().fetchNextCircumTask(undefined, "ai");
+          } else {
+            await get().fetchNextScenarioTask(undefined, "ai");
+          }
+        } finally {
+          set({ isRegeneratingAI: false });
         }
       },
 

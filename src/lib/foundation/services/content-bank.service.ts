@@ -1,8 +1,15 @@
 // Universal Content Banking & Hybrid 70/30 Engine
-// Caches AI-generated tasks in DB/memory with SHA-256 deduplication and anti-repetition tracking
+// Caches AI-generated tasks in local SQLite Database with SHA-256 deduplication and anti-repetition tracking
 
 import crypto from "crypto";
-import { createServerClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import {
+  saveSqliteBankTask,
+  sampleSqliteBankTask,
+  recordSqliteUserExposure,
+  findSqliteBankTaskByHash,
+  getSqliteBankStats,
+  getSqliteExposureCount,
+} from "./sqlite-bank";
 
 export interface ContentBankRecord {
   id: string;
@@ -69,7 +76,7 @@ export function computeContentHash(text: string): string {
   return crypto.createHash("sha256").update(normalized).digest("hex");
 }
 
-// Global In-Memory fallbacks for server-side persistence when Supabase is not connected
+// Global In-Memory fallbacks for server-side persistence with SQLite database mirror
 declare global {
   // eslint-disable-next-line no-var
   var __CONTENT_BANK_STORE__: Map<string, ContentBankRecord> | undefined;
@@ -97,97 +104,7 @@ function getMemoryExposuresStore(): UserContentExposure[] {
  */
 function seedInitialMemoryBank(store: Map<string, ContentBankRecord>): void {
   const seeds: SaveBankTaskInput[] = [
-    // 1. Sentence Builder Seeds
-    {
-      module: "sentence_builder",
-      category: "daily_life",
-      level: "controlled",
-      difficulty: 3,
-      topic: "daily_routine",
-      hashSourceText: "Tôi thường uống cà phê vào mỗi buổi sáng.",
-      payload: {
-        id: "sb_seed_coffee_morning",
-        taskType: "sentence_completion",
-        controlLevel: "controlled",
-        instruction: "Hoàn thành câu sau bằng tiếng Anh:",
-        promptVi: "Tôi thường uống cà phê vào mỗi buổi sáng.",
-        targetIntent: "I usually drink coffee every morning.",
-        expectedResponses: [
-          "I usually drink coffee every morning.",
-          "I normally drink a cup of coffee each morning.",
-        ],
-        requiredElements: ["usually", "drink coffee", "every morning"],
-        scaffold: {
-          level: 1,
-          template: "I usually ___ every morning.",
-          keywords: ["coffee", "drink"],
-          starter: "I usually...",
-          constraints: [],
-        },
-        hints: [
-          { tier: 0, title: "Không gợi ý", content: "Nói ngay.", penaltyWeight: 0 },
-          { tier: 1, title: "Từ khoá", content: "drink coffee", penaltyWeight: 0.1 },
-          { tier: 2, title: "Khung câu", content: "I usually ___ every morning.", penaltyWeight: 0.25 },
-          { tier: 3, title: "Từ mở đầu", content: "I usually...", penaltyWeight: 0.5 },
-          { tier: 4, title: "Câu mẫu", content: "I usually drink coffee every morning.", penaltyWeight: 0.85 },
-        ],
-        suggestedVocabulary: [
-          { term: "usually", phonetic: "/ˈjuː.ʒu.ə.li/", meaningVi: "thường xuyên" },
-          { term: "coffee", phonetic: "/ˈkɒf.i/", meaningVi: "cà phê" },
-        ],
-        difficulty: { overall: 3, grammarComplexity: 2, retrievalDemand: 0.5, lengthScore: 2 },
-        skills: ["sentence_construction"],
-        grammarTargets: ["present_simple"],
-        topic: "daily_life",
-        prepTimeSec: 3.0,
-      },
-    },
-    {
-      module: "sentence_builder",
-      category: "workplace",
-      level: "semi_controlled",
-      difficulty: 5,
-      topic: "work_discussion",
-      hashSourceText: "Nếu chúng ta nộp báo cáo muộn, khách hàng sẽ không hài lòng.",
-      payload: {
-        id: "sb_seed_report_deadline",
-        taskType: "conditional_sentence",
-        controlLevel: "semi_controlled",
-        instruction: "Nói câu điều kiện sau sang tiếng Anh:",
-        promptVi: "Nếu chúng ta nộp báo cáo muộn, khách hàng sẽ không hài lòng.",
-        targetIntent: "If we submit the report late, the client will be unhappy.",
-        expectedResponses: [
-          "If we submit the report late, the client will be unhappy.",
-          "If we hand in the report late, the client will not be pleased.",
-        ],
-        requiredElements: ["if we submit", "report late", "client will be unhappy"],
-        scaffold: {
-          level: 2,
-          template: "If we ___ the report late, the client will ___ .",
-          keywords: ["submit", "unhappy"],
-          starter: "If we submit...",
-          constraints: [],
-        },
-        hints: [
-          { tier: 0, title: "Không gợi ý", content: "Nói ngay.", penaltyWeight: 0 },
-          { tier: 1, title: "Từ khoá", content: "submit / late / client / unhappy", penaltyWeight: 0.1 },
-          { tier: 2, title: "Khung câu", content: "If we [verb] late, the client will [verb/adj].", penaltyWeight: 0.25 },
-          { tier: 3, title: "Từ mở đầu", content: "If we submit the report...", penaltyWeight: 0.5 },
-          { tier: 4, title: "Câu mẫu", content: "If we submit the report late, the client will be unhappy.", penaltyWeight: 0.85 },
-        ],
-        suggestedVocabulary: [
-          { term: "submit", phonetic: "/səbˈmɪt/", meaningVi: "nộp, gửi đi" },
-          { term: "client", phonetic: "/ˈklaɪ.ənt/", meaningVi: "khách hàng" },
-        ],
-        difficulty: { overall: 5, grammarComplexity: 4, retrievalDemand: 0.6, lengthScore: 3 },
-        skills: ["conditionals"],
-        grammarTargets: ["first_conditional"],
-        topic: "workplace",
-        prepTimeSec: 4.0,
-      },
-    },
-
-    // 2. VN -> EN Seeds
+    // 1. VN -> EN Seeds
     {
       module: "vn_to_en",
       category: "daily_life",
@@ -224,6 +141,131 @@ function seedInitialMemoryBank(store: Map<string, ContentBankRecord>): void {
           professional: "I typically drink a cup of coffee in the morning prior to commencing work.",
           casual: "I usually grab a cup of coffee in the morning before starting work.",
           idiomatic: "I always kick off my morning with a nice cup of joe before getting down to work.",
+        },
+      },
+    },
+    {
+      module: "vn_to_en",
+      category: "workplace",
+      level: "timed",
+      difficulty: 5,
+      topic: "project_deadline",
+      hashSourceText: "Tôi e rằng chúng ta sẽ không thể hoàn thành dự án này đúng hạn nếu không có thêm nhân lực hỗ trợ.",
+      payload: {
+        id: "vn_seed_timed_deadline",
+        category: "workplace",
+        retrievalMode: "timed",
+        promptVi: "Tôi e rằng chúng ta sẽ không thể hoàn thành dự án này đúng hạn nếu không có thêm nhân lực hỗ trợ.",
+        targetIntent: "I'm afraid we won't be able to finish this project on time without extra manpower.",
+        expectedResponses: [
+          "I'm afraid we can't meet the deadline without additional support.",
+          "I doubt we will finish this project on time without extra hands.",
+          "I'm concerned we won't deliver on schedule unless we get more help.",
+        ],
+        requiredMeaningElements: ["afraid/concerned won't finish", "on time / deadline", "without extra help / manpower"],
+        targetSkills: ["workplace_diplomacy", "conditional", "spoken_retrieval"],
+        difficulty: { overall: 5, grammarComplexity: 4, retrievalDemand: 0.7, semanticDensity: 3 },
+        hints: [
+          { tier: 0, title: "Không gợi ý", content: "Tự phản xạ và nói ngay.", penaltyWeight: 0 },
+          { tier: 1, title: "Từ khoá chính", content: "afraid / finish project on time / extra help", penaltyWeight: 0.1 },
+          { tier: 2, title: "Cấu trúc gợi ý", content: "Dùng 'I'm afraid we won't be able to... without...'", penaltyWeight: 0.25 },
+          { tier: 3, title: "Từ mở đầu", content: "I'm afraid we won't...", penaltyWeight: 0.5 },
+          { tier: 4, title: "Câu mẫu hoàn chỉnh", content: "I'm afraid we won't be able to finish this project on time without extra help.", penaltyWeight: 0.9 },
+        ],
+        prepTimeSec: 1.5,
+        isRapidFire: false,
+        topic: "project_deadline",
+        suggestedVocabulary: [
+          { term: "meet the deadline", meaningVi: "kịp hạn chót" },
+          { term: "extra hands", meaningVi: "người phụ giúp thêm" },
+        ],
+        sayItBetter: {
+          professional: "I have concerns regarding our ability to meet the scheduled deadline without additional resource allocation.",
+          casual: "I don't think we'll make the deadline unless someone else pitches in.",
+          idiomatic: "We're going to miss the cutoff unless all hands are on deck.",
+        },
+      },
+    },
+    {
+      module: "vn_to_en",
+      category: "situational_intent",
+      level: "rapid_fire",
+      difficulty: 2,
+      topic: "quick_reaction",
+      hashSourceText: "Để tôi kiểm tra lại rồi báo lại cho bạn sau nhé.",
+      payload: {
+        id: "vn_seed_rapid_check_later",
+        category: "situational_intent",
+        retrievalMode: "rapid_fire",
+        promptVi: "Để tôi kiểm tra lại rồi báo lại cho bạn sau nhé.",
+        targetIntent: "Let me double-check and get back to you later.",
+        expectedResponses: [
+          "Let me check and get back to you later.",
+          "I'll double-check and let you know soon.",
+          "Let me look into it and follow up with you.",
+        ],
+        requiredMeaningElements: ["let me check", "get back / let you know later"],
+        targetSkills: ["rapid_collocation", "conversational_fluency"],
+        difficulty: { overall: 2, grammarComplexity: 1, retrievalDemand: 0.3, semanticDensity: 1 },
+        hints: [
+          { tier: 0, title: "Không gợi ý", content: "Phản xạ nói trong 1 giây.", penaltyWeight: 0 },
+          { tier: 1, title: "Từ khoá chính", content: "check / get back to you", penaltyWeight: 0.1 },
+          { tier: 2, title: "Cấu trúc gợi ý", content: "Let me [verb] and [verb]...", penaltyWeight: 0.25 },
+          { tier: 3, title: "Từ mở đầu", content: "Let me check...", penaltyWeight: 0.5 },
+          { tier: 4, title: "Câu mẫu hoàn chỉnh", content: "Let me double-check and get back to you later.", penaltyWeight: 0.9 },
+        ],
+        prepTimeSec: 1.0,
+        isRapidFire: true,
+        topic: "quick_reaction",
+        suggestedVocabulary: [
+          { term: "get back to someone", meaningVi: "liên hệ phản hồi lại ai" },
+        ],
+        sayItBetter: {
+          professional: "I will verify the details and revert to you shortly.",
+          casual: "I'll check and let you know in a bit.",
+          idiomatic: "Let me look into it and circle back with you.",
+        },
+      },
+    },
+    {
+      module: "vn_to_en",
+      category: "workplace",
+      level: "direct",
+      difficulty: 4,
+      topic: "meeting_scheduling",
+      hashSourceText: "Chúng ta có thể dời cuộc họp sang chiều thứ Năm được không?",
+      payload: {
+        id: "vn_seed_reschedule_meeting",
+        category: "workplace",
+        retrievalMode: "direct",
+        promptVi: "Chúng ta có thể dời cuộc họp sang chiều thứ Năm được không?",
+        targetIntent: "Could we reschedule the meeting to Thursday afternoon?",
+        expectedResponses: [
+          "Could we move the meeting to Thursday afternoon?",
+          "Can we push back the meeting until Thursday afternoon?",
+          "Is it possible to reschedule the meeting for Thursday afternoon?",
+        ],
+        requiredMeaningElements: ["reschedule/move meeting", "to Thursday afternoon"],
+        targetSkills: ["polite_requests", "workplace_communication"],
+        difficulty: { overall: 4, grammarComplexity: 2, retrievalDemand: 0.5, semanticDensity: 2 },
+        hints: [
+          { tier: 0, title: "Không gợi ý", content: "Tự phản xạ và nói ngay.", penaltyWeight: 0 },
+          { tier: 1, title: "Từ khoá chính", content: "reschedule / meeting / Thursday afternoon", penaltyWeight: 0.1 },
+          { tier: 2, title: "Cấu trúc gợi ý", content: "Could we reschedule [something] to [time]?", penaltyWeight: 0.25 },
+          { tier: 3, title: "Từ mở đầu", content: "Could we move the meeting...", penaltyWeight: 0.5 },
+          { tier: 4, title: "Câu mẫu hoàn chỉnh", content: "Could we reschedule the meeting to Thursday afternoon?", penaltyWeight: 0.9 },
+        ],
+        prepTimeSec: 2.5,
+        isRapidFire: false,
+        topic: "meeting_scheduling",
+        suggestedVocabulary: [
+          { term: "reschedule to", meaningVi: "dời lịch sang" },
+          { term: "push back", meaningVi: "lùi lại (thời gian)" },
+        ],
+        sayItBetter: {
+          professional: "Would it be convenient to postpone our scheduled meeting until Thursday afternoon?",
+          casual: "Can we move our meeting to Thursday afternoon instead?",
+          idiomatic: "Can we push our chat back to Thursday afternoon?",
         },
       },
     },
@@ -581,7 +623,7 @@ function seedInitialMemoryBank(store: Map<string, ContentBankRecord>): void {
   for (const s of seeds) {
     const hash = computeContentHash(s.hashSourceText);
     const id = `cb_${s.module}_${hash.slice(0, 12)}`;
-    store.set(id, {
+    const seedRecord: ContentBankRecord = {
       id,
       module: s.module,
       category: s.category || "general",
@@ -594,7 +636,11 @@ function seedInitialMemoryBank(store: Map<string, ContentBankRecord>): void {
       usage_count: 0,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    });
+    };
+    store.set(id, seedRecord);
+    try {
+      saveSqliteBankTask(seedRecord);
+    } catch {}
   }
 }
 
@@ -616,7 +662,6 @@ export async function sampleBankTask<T>(
     category,
     difficulty,
     level,
-    topic,
     userId = "local_user",
     maxAgeDays = 14,
     bankRatio = 0.7,
@@ -628,7 +673,19 @@ export async function sampleBankTask<T>(
     return null;
   }
 
-  // 2. Hybrid dice roll: 30% of the time, inject dynamic LLM novelty
+  // 2. Try SQLite Local Database first (Primary 100% persistent local DB)
+  try {
+    const sqliteResult = sampleSqliteBankTask<T>(options);
+    if (sqliteResult) {
+      return sqliteResult;
+    }
+  } catch (err) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[ContentBank] SQLite sample error, falling back to memory:", err);
+    }
+  }
+
+  // 3. Fallback to In-Memory store
   if (forceSource === "auto") {
     const dice = Math.random();
     if (dice > bankRatio) {
@@ -640,85 +697,6 @@ export async function sampleBankTask<T>(
   cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);
   const cutoffIso = cutoffDate.toISOString();
 
-  // Try Supabase first if available
-  if (isSupabaseConfigured()) {
-    try {
-      const supabase = createServerClient();
-      if (supabase) {
-        // Query recent exposures for this user to exclude recently seen tasks
-        const { data: recentExposures } = await supabase
-          .from("user_content_exposures")
-          .select("content_id")
-          .eq("user_id", userId)
-          .eq("module", module)
-          .gte("exposed_at", cutoffIso);
-
-        const excludedIds = new Set<string>((recentExposures || []).map((e: { content_id: string }) => e.content_id));
-
-        // Query candidate items
-        let query = supabase
-          .from("content_banks")
-          .select("*")
-          .eq("module", module);
-
-        if (category && category !== "all") {
-          query = query.eq("category", category);
-        }
-
-        if (level && level !== "all") {
-          query = query.eq("level", level);
-        }
-
-        if (difficulty !== undefined) {
-          // Allow flexible range +-1 if difficulty is specified
-          query = query
-            .gte("difficulty", Math.max(1, difficulty - 1))
-            .lte("difficulty", Math.min(10, difficulty + 1));
-        }
-
-        if (topic && topic !== "general" && topic !== "auto") {
-          query = query.eq("topic", topic);
-        }
-
-        const { data: candidates, error } = await query.order("usage_count", { ascending: true }).limit(20);
-
-        if (!error && candidates && candidates.length > 0) {
-          // Filter out excluded IDs
-          let pool = candidates.filter((c: ContentBankRecord) => !excludedIds.has(c.id));
-          // If all candidates have been seen, fall back to the least-recently used one
-          if (pool.length === 0) {
-            pool = candidates;
-          }
-
-          if (pool.length > 0) {
-            // Pick a random candidate from top candidates to maintain variety
-            const selected = pool[Math.floor(Math.random() * Math.min(pool.length, 5))] as ContentBankRecord;
-
-            // Increment usage count asynchronously
-            supabase
-              .from("content_banks")
-              .update({
-                usage_count: (selected.usage_count || 0) + 1,
-                updated_at: new Date().toISOString(),
-              })
-              .eq("id", selected.id)
-              .then(() => {});
-
-            return {
-              task: selected.payload as T,
-              contentId: selected.id,
-              source: "bank",
-              usageCount: (selected.usage_count || 0) + 1,
-            };
-          }
-        }
-      }
-    } catch {
-      // Fall through to memory store if Supabase fails
-    }
-  }
-
-  // Fallback to In-Memory store
   const memStore = getMemoryBankStore();
   const exposures = getMemoryExposuresStore();
   const recentExposures = new Set(
@@ -748,7 +726,6 @@ export async function sampleBankTask<T>(
     pool = candidates;
   }
 
-  // Sort by usage count and pick randomly among lowest usage
   pool.sort((a, b) => a.usage_count - b.usage_count);
   const selected = pool[Math.floor(Math.random() * Math.min(pool.length, 3))];
 
@@ -764,7 +741,7 @@ export async function sampleBankTask<T>(
 }
 
 /**
- * Saves a newly AI-generated task into the Content Bank.
+ * Saves a newly AI-generated task into the SQLite Content Bank.
  * Automatically computes normalized SHA-256 hash for deduplication.
  */
 export async function saveBankTask(input: SaveBankTaskInput): Promise<ContentBankRecord> {
@@ -798,43 +775,26 @@ export async function saveBankTask(input: SaveBankTaskInput): Promise<ContentBan
     updated_at: now,
   };
 
-  // 1. Try Supabase
-  if (isSupabaseConfigured()) {
-    try {
-      const supabase = createServerClient();
-      if (supabase) {
-        const { error } = await supabase.from("content_banks").upsert(
-          {
-            id: record.id,
-            module: record.module,
-            category: record.category,
-            level: record.level,
-            difficulty: record.difficulty,
-            topic: record.topic,
-            content_hash: record.content_hash,
-            payload: record.payload,
-            quality_score: record.quality_score,
-            usage_count: 1,
-            updated_at: now,
-          },
-          { onConflict: "module,content_hash" }
-        );
-        if (!error) {
-          return record;
-        }
-      }
-    } catch {
-      // Fall through to memory store
+  // 1. Primary: Save in SQLite Database (Persistent in data/content-banks.db)
+  try {
+    saveSqliteBankTask(record);
+  } catch (err) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[ContentBank] Failed to save task to SQLite:", err);
     }
   }
 
-  // 2. Save in Memory
+  // 2. Keep in In-Memory Map
   const memStore = getMemoryBankStore();
   const existing = memStore.get(id);
   if (existing) {
-    existing.usage_count += 1;
-    existing.updated_at = now;
-    return existing;
+    const updated: ContentBankRecord = {
+      ...existing,
+      usage_count: existing.usage_count + 1,
+      updated_at: now,
+    };
+    memStore.set(id, updated);
+    return updated;
   }
 
   memStore.set(id, record);
@@ -860,7 +820,7 @@ export async function getFallbackBankTask<T>(opts: {
 }
 
 /**
- * Directly finds a task by exact content hash (e.g. for simplification of a specific sentence or exact vocabulary lookup).
+ * Directly finds a task by exact content hash.
  */
 export async function findBankTaskByHash<T>(
   module: string,
@@ -868,33 +828,11 @@ export async function findBankTaskByHash<T>(
 ): Promise<T | null> {
   const hash = computeContentHash(hashSourceText);
 
-  // 1. Check Supabase
-  if (isSupabaseConfigured()) {
-    try {
-      const supabase = createServerClient();
-      if (supabase) {
-        const { data, error } = await supabase
-          .from("content_banks")
-          .select("id, payload, usage_count")
-          .eq("module", module)
-          .eq("content_hash", hash)
-          .maybeSingle();
-
-        if (!error && data?.payload) {
-          supabase
-            .from("content_banks")
-            .update({
-              usage_count: (data.usage_count || 0) + 1,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", data.id)
-            .then(() => {});
-
-          return data.payload as T;
-        }
-      }
-    } catch {}
-  }
+  // 1. Check SQLite
+  try {
+    const sqliteTask = findSqliteBankTaskByHash<T>(module, hash);
+    if (sqliteTask) return sqliteTask;
+  } catch {}
 
   // 2. Check In-Memory
   const memStore = getMemoryBankStore();
@@ -920,26 +858,12 @@ export async function recordUserExposure(
   const exposureId = `exp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   const now = new Date().toISOString();
 
-  if (isSupabaseConfigured()) {
-    try {
-      const supabase = createServerClient();
-      if (supabase) {
-        await supabase.from("user_content_exposures").insert({
-          id: exposureId,
-          user_id: userId,
-          content_id: contentId,
-          module,
-          exposed_at: now,
-          score,
-          completed: true,
-        });
-        return;
-      }
-    } catch {
-      // Fallback to memory
-    }
-  }
+  // 1. Primary: Record in SQLite
+  try {
+    recordSqliteUserExposure(contentId, module, userId, score);
+  } catch {}
 
+  // 2. In-Memory tracker
   const exposures = getMemoryExposuresStore();
   exposures.push({
     id: exposureId,
@@ -951,7 +875,6 @@ export async function recordUserExposure(
     completed: true,
   });
 
-  // Limit memory store to last 500 items
   if (exposures.length > 500) {
     exposures.splice(0, exposures.length - 500);
   }
@@ -965,30 +888,21 @@ export async function getContentBankStats(): Promise<{
   byModule: Record<string, number>;
   totalExposures: number;
 }> {
-  if (isSupabaseConfigured()) {
-    try {
-      const supabase = createServerClient();
-      if (supabase) {
-        const { data: banks } = await supabase.from("content_banks").select("module");
-        const { count: exposureCount } = await supabase
-          .from("user_content_exposures")
-          .select("*", { count: "exact", head: true });
-
-        const byModule: Record<string, number> = {};
-        for (const item of banks || []) {
-          byModule[item.module] = (byModule[item.module] || 0) + 1;
-        }
-
-        return {
-          totalItems: (banks || []).length,
-          byModule,
-          totalExposures: exposureCount || 0,
-        };
-      }
-    } catch {
-      // fallback
+  try {
+    const sqliteStats = getSqliteBankStats();
+    const totalExposures = getSqliteExposureCount();
+    let total = 0;
+    for (const cnt of Object.values(sqliteStats)) {
+      total += cnt;
     }
-  }
+    if (total > 0 || totalExposures > 0) {
+      return {
+        totalItems: total,
+        byModule: sqliteStats,
+        totalExposures,
+      };
+    }
+  } catch {}
 
   const memStore = getMemoryBankStore();
   const exposures = getMemoryExposuresStore();
@@ -1003,3 +917,4 @@ export async function getContentBankStats(): Promise<{
     totalExposures: exposures.length,
   };
 }
+

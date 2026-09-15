@@ -97,6 +97,7 @@ export interface ChunkChainTask {
     partOfSpeech?: string;
     phonetic?: string;
   }>;
+  source?: "ai" | "bank";
 }
 
 export interface ChunkTrainingTask {
@@ -120,6 +121,7 @@ export interface ChunkTrainingTask {
     partOfSpeech?: string;
     phonetic?: string;
   }>;
+  source?: "ai" | "bank";
 }
 
 export interface ChunkEvaluationResult {

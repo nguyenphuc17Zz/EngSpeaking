@@ -40,6 +40,7 @@ export const latencyTaskSchema = z.object({
       })
     )
     .optional(),
+  source: z.enum(["ai", "bank"]).optional(),
 });
 
 export const hesitationProfileSchema = z.object({

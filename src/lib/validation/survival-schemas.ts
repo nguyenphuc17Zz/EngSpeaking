@@ -36,6 +36,7 @@ export const circumlocutionTaskSchema = z.object({
   differentia: z.string().optional(),
   semanticKeyAnchors: z.array(z.string()).default([]),
   tabooLemmas: z.array(z.string()).default([]),
+  source: z.enum(["ai", "bank"]).optional(),
 });
 
 export const survivalScenarioTaskSchema = z.object({
@@ -49,6 +50,7 @@ export const survivalScenarioTaskSchema = z.object({
   timeLimitSeconds: z.number().default(5),
   tierHints: z.array(survivalHintTierSchema).optional(),
   suggestedVocabulary: z.array(survivalVocabularyItemSchema).optional(),
+  source: z.enum(["ai", "bank"]).optional(),
 });
 
 export const survivalEvaluationSchema = z.object({

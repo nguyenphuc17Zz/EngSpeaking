@@ -51,6 +51,7 @@ export const sentenceBuilderTaskSchema = z.object({
   topic: z.string().default("daily_life"),
   prepTimeSec: z.number().default(3.0),
   targetErrorPatternKey: z.string().optional(),
+  source: z.enum(["ai", "bank", "seed"]).optional(),
 });
 
 export const evaluatedErrorSchema = z.object({

@@ -13,11 +13,13 @@ import {
   Copy,
   Check,
   ArrowRight,
+  Sparkles,
 } from "lucide-react";
 import type { SentenceBuilderTask } from "@/types/sentence-builder";
 import { sanitizeTextForTTS } from "@/lib/tts/browser";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 import { toast } from "@/lib/toast";
+import { getTopicDisplay } from "@/lib/foundation/sentence-builder/topics";
 
 interface TaskCardProps {
   task: SentenceBuilderTask;
@@ -34,6 +36,8 @@ interface TaskCardProps {
   onPlayTerm?: (term: string) => void;
   onNextTask?: () => void;
   isGeneratingNext?: boolean;
+  onRegenerateWithAI?: () => void;
+  isRegeneratingAI?: boolean;
 }
 
 export function TaskCard({
@@ -48,6 +52,8 @@ export function TaskCard({
   onPlayTerm,
   onNextTask,
   isGeneratingNext = false,
+  onRegenerateWithAI,
+  isRegeneratingAI = false,
 }: TaskCardProps) {
   const tts = useBrowserTTS();
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -113,9 +119,39 @@ export function TaskCard({
             <Badge variant="outline" className={`text-[10px] font-mono px-1.5 py-0 border ${levelInfo.color}`}>
               {levelInfo.label}
             </Badge>
-            <Badge variant="secondary" className="text-[10px] font-mono capitalize">
-              {task.topic.replace(/_/g, " ")}
+            <Badge
+              variant="secondary"
+              className="text-[10px] font-medium max-w-[220px] truncate"
+              title={getTopicDisplay(task.topic).label}
+            >
+              {getTopicDisplay(task.topic).label}
             </Badge>
+
+            {task.source === "ai" ? (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 gap-1 font-normal">
+                <Sparkles className="size-2.5 text-emerald-500" />
+                AI Generated
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-blue-500/40 text-blue-600 dark:text-blue-400 bg-blue-500/10 gap-1 font-normal">
+                Từ ngân hàng
+              </Badge>
+            )}
+
+            {onRegenerateWithAI && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                onClick={onRegenerateWithAI}
+                disabled={isRegeneratingAI || isGeneratingNext}
+                className="h-5 px-1.5 text-[10px] gap-1 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted/80 cursor-pointer"
+                title="Yêu cầu AI tạo câu hoàn toàn mới"
+              >
+                <Sparkles className={`size-2.5 text-emerald-500 ${isRegeneratingAI ? "animate-spin" : ""}`} />
+                <span>{isRegeneratingAI ? "Đang tạo..." : "Tạo mới bằng AI"}</span>
+              </Button>
+            )}
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">

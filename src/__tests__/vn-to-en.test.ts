@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { generateVNToENTask } from "@/lib/foundation/vn-to-en/task-generator.service";
+import { generateVNToENTask, cleanJson } from "@/lib/foundation/vn-to-en/task-generator.service";
 import { evaluateVNToENAttempt } from "@/lib/foundation/vn-to-en/evaluator.service";
 import {
   updateVNAdaptiveState,
@@ -197,6 +197,75 @@ describe("Vietnamese -> English Speaking (Function 2) Engine", () => {
 
     expect(incompleteResult.canFastPass).toBe(false);
     expect(incompleteResult.evaluation).toBeUndefined();
+  });
+
+  describe("cleanJson Parser Resilience", () => {
+    it("handles raw JSON properly", () => {
+      const parsed = cleanJson('{"id": "test_1", "promptVi": "Xin chào"}') as Record<string, unknown>;
+      expect(parsed).toBeDefined();
+      expect(parsed?.id).toBe("test_1");
+    });
+
+    it("strips thinking/reasoning tags and markdown code fences", () => {
+      const raw = `<think>
+I need to produce a JSON object with promptVi and targetIntent.
+</think>
+Here is the JSON:
+\`\`\`json
+{
+  "id": "test_think",
+  "promptVi": "Tôi đang bận",
+  "targetIntent": "I am busy"
+}
+\`\`\`
+Hope this helps!`;
+      const parsed = cleanJson(raw) as Record<string, unknown>;
+      expect(parsed).toBeDefined();
+      expect(parsed?.id).toBe("test_think");
+      expect(parsed?.promptVi).toBe("Tôi đang bận");
+    });
+
+    it("handles trailing commas in objects and arrays", () => {
+      const raw = `{"id": "trailing", "items": ["a", "b",], "nested": {"key": "val",},}`;
+      const parsed = cleanJson(raw) as Record<string, unknown>;
+      expect(parsed).toBeDefined();
+      expect(parsed?.id).toBe("trailing");
+    });
+
+    it("recovers from truncated JSON when output tokens cut off closing braces", () => {
+      const truncated = `{"id": "trunc_1", "category": "daily_life", "promptVi": "Cắt ngang", "hints": [{"tier": 0, "title": "Không"`;
+      const parsed = cleanJson(truncated) as Record<string, unknown>;
+      expect(parsed).toBeDefined();
+      expect(parsed?.id).toBe("trunc_1");
+      expect(parsed?.promptVi).toBe("Cắt ngang");
+    });
+  });
+
+  describe("Endless Mode & Topic Handling", () => {
+    it("generates endless mode task with dynamic topic", async () => {
+      const endlessTask = await generateVNToENTask({
+        retrievalMode: "endless",
+        topic: "travel",
+        provider: "mock",
+      });
+      expect(endlessTask).toBeDefined();
+      expect(endlessTask.retrievalMode).toBe("endless");
+      expect(endlessTask.promptVi).toBeDefined();
+      expect(endlessTask.targetIntent).toBeDefined();
+      expect(endlessTask.sayItBetter).toBeDefined();
+    });
+
+    it("supports topic selection in vn-to-en store", async () => {
+      const { useVNToENStore } = await import("@/stores/vn-to-en-store");
+      const store = useVNToENStore.getState();
+
+      store.setSelectedTopic("workplace", "");
+      expect(useVNToENStore.getState().selectedTopicId).toBe("workplace");
+
+      store.setSelectedTopic("custom", "Phỏng vấn xin việc bằng tiếng Anh");
+      expect(useVNToENStore.getState().selectedTopicId).toBe("custom");
+      expect(useVNToENStore.getState().customTopicText).toBe("Phỏng vấn xin việc bằng tiếng Anh");
+    });
   });
 });
 

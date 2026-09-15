@@ -14,21 +14,21 @@ CRITICAL INSTRUCTIONS:
    - "timed": Medium-complexity sentence with 2-3s countdown pressure.
    - "rapid_fire": Short, punchy, high-frequency conversational phrases (e.g. "Tôi không chắc.", "Để tôi xem.", "Bạn nói đúng rồi.", "Tôi sẽ kiểm tra lại ngay.") designed for <2.0s automatic response.
 3. INCLUDE REQUIRED SEMANTIC ELEMENTS:
-   - Specify 2-4 semantic meaning chunks required for full comprehension.
-4. HINTS HIERARCHY (4 Tiers):
-   - Tier 0: None
-   - Tier 1: Semantic keywords (e.g. "coffee / morning / focus")
-   - Tier 2: Grammar cue (e.g. "Use past simple tense" or "Use 'in order to'")
-   - Tier 3: Sentence starter (e.g. "I usually drink...")
-   - Tier 4: Full model answer
+   - Specify 2-3 semantic meaning chunks required for full comprehension.
+4. HINTS HIERARCHY (Keep concise to maintain ultra-fast generation):
+   - Tier 0: None ("Tự phản xạ và nói ngay.")
+   - Tier 1: 2-3 concise keywords (e.g. "coffee / morning / focus")
+   - Tier 2: 1 concise grammar cue (e.g. "Use present simple tense")
+   - Tier 3: 2-3 starter words (e.g. "I usually drink...")
+   - Tier 4: Model answer (1 natural sentence)
 5. SUGGESTED VOCABULARY & COLLOCATIONS:
-   ALWAYS generate 2-4 authentic, high-frequency collocations/chunks with Vietnamese meanings in "suggestedVocabulary". Provide natural oral chunks (e.g. "get stuck in traffic", "wrap up", "catch up with") rather than stiff single words.
+   Provide 2 authentic, high-frequency spoken collocations/chunks with concise Vietnamese meanings in "suggestedVocabulary".
 6. PROVIDE BỘ 3 "SAY IT BETTER" (sayItBetter):
-   Always provide 3 clean, natural spoken English formulations:
-   - "professional": Formal, polite workplace & meeting English (clear, professional, polished).
-   - "casual": Natural, relaxed everyday spoken English for peers/friends.
+   Provide 3 clean, concise spoken English formulations:
+   - "professional": Formal, polished workplace & meeting English.
+   - "casual": Natural, relaxed everyday spoken English.
    - "idiomatic": Native colloquial phrase or idiom expressing the exact intent.
-7. OUTPUT FORMAT: STRICT JSON ONLY. NO MARKDOWN. NO CONVERSATIONAL PROSE.
+7. OUTPUT FORMAT: STRICT RAW JSON ONLY. NO MARKDOWN INTRODUCTIONS. NO CONVERSATIONAL PROSE. Output pure JSON without markdown fences or code blocks if possible.
 
 JSON Schema:
 {
@@ -36,8 +36,8 @@ JSON Schema:
   "category": "daily_life" | "workplace" | "study" | "opinion" | "experience" | "plans" | "conditional" | "comparison" | "explanation" | "situational_intent",
   "retrievalMode": "direct" | "timed" | "rapid_fire",
   "promptVi": string,
-  "targetIntent": string,
-  "expectedResponses": string[] (2-4 natural valid English sentences),
+  "targetIntent": string (The primary full spoken English sentence, e.g. "I usually drink a cup of coffee in the morning before work."),
+  "expectedResponses": string[] (2-4 complete, natural spoken English sentences - NEVER abstract descriptions),
   "requiredMeaningElements": string[] (2-4 semantic components),
   "targetSkills": string[],
   "difficulty": {
@@ -68,7 +68,7 @@ JSON Schema:
 }`;
 
 export function buildVNToENTaskPrompt(params: {
-  retrievalMode: "direct" | "timed" | "rapid_fire";
+  retrievalMode: "endless" | "direct" | "timed" | "rapid_fire";
   category?: string;
   targetDifficulty: number;
   weakSkills?: string[];
@@ -76,15 +76,22 @@ export function buildVNToENTaskPrompt(params: {
   recentPrompts?: string[];
   topic?: string;
 }): string {
+  const modeInstruction =
+    params.retrievalMode === "rapid_fire"
+      ? "Short, punchy high-frequency conversational response (<2s reaction time)."
+      : params.retrievalMode === "timed"
+      ? "Direct oral retrieval with 2-3s preparation pressure."
+      : "Authentic, conversational spoken retrieval sentence designed for fluid real-time communication.";
+
   return `Generate a single adaptive Vietnamese -> English speaking task:
-- Retrieval Mode: ${params.retrievalMode}
+- Retrieval Mode: ${params.retrievalMode} (${modeInstruction})
 - Category: ${params.category || "auto_select_best"}
 - Target Difficulty (1-10): ${params.targetDifficulty}
 - Learner Weak Skills to target: ${params.weakSkills?.join(", ") || "spoken_retrieval, past_tense"}
 - Recent Recurring Spoken Errors: ${params.recentErrors?.join(", ") || "None"}
-- Anchor Instruction: If learner has recent errors, naturally embed that grammar/collocation target into authentic Vietnamese situational dialogue without word-by-word translation.
+- Context / Topic Situation: ${params.topic || "work_and_life"}
+- Anchor Instruction: Deeply ground the promptVi in this exact topic situation. If learner has recent errors, naturally embed that target into authentic Vietnamese situational dialogue without word-by-word translation.
 - Anti-Repetition Exclusion (DO NOT use or closely match): ${JSON.stringify(params.recentPrompts?.slice(-10) || [])}
-- Topic domain: ${params.topic || "work_and_life"}
 
 Output pure JSON matching the schema.`;
 }

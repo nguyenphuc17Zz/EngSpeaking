@@ -1,7 +1,7 @@
 import { generateTextWithRouting } from "@/lib/ai";
 import { WEEKLY_REPORT_SYSTEM, buildWeeklyPrompt } from "../prompts/weekly-report";
 import type { ProgressReport } from "@/types/progress";
-import { createServerClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { progressRepo } from "@/lib/db/sqlite-db";
 
 const CACHE = new Map<string, { report: ProgressReport; at: number }>();
 
@@ -11,15 +11,12 @@ export async function generateReport(period: "7d" | "30d" | "90d", learnerId = "
   if (cached && Date.now() - cached.at < 1000 * 60 * 30) return cached.report;
 
   // Try DB cache
-  if (isSupabaseConfigured()) {
-    const supabase = createServerClient()!;
-    const since = period === "7d" ? new Date(Date.now() - 7 * 86400000) : period === "90d" ? new Date(Date.now() - 90 * 86400000) : new Date(Date.now() - 30 * 86400000);
-    const { data } = await supabase.from("progress_reports").select("report").eq("learner_state_id", learnerId).gte("period_start", since.toISOString()).order("created_at", { ascending: false }).limit(1).single();
-    if (data?.report) {
-      const r = data.report as ProgressReport;
-      CACHE.set(key, { report: r, at: Date.now() });
-      return r;
-    }
+  const since = period === "7d" ? new Date(Date.now() - 7 * 86400000) : period === "90d" ? new Date(Date.now() - 90 * 86400000) : new Date(Date.now() - 30 * 86400000);
+  const data = progressRepo.getLatestProgressReport(learnerId, since);
+  if (data?.report) {
+    const r = data.report as ProgressReport;
+    CACHE.set(key, { report: r, at: Date.now() });
+    return r;
   }
 
   // Build summary from existing data (deterministic fallback if no AI)
@@ -62,20 +59,17 @@ export async function generateReport(period: "7d" | "30d" | "90d", learnerId = "
     json.generatedAt = new Date().toISOString();
     json.reportVersion = "1.0.0";
     CACHE.set(key, { report: json, at: Date.now() });
-    // Persist
-    if (isSupabaseConfigured()) {
-      const supabase = createServerClient()!;
-      await supabase.from("progress_reports").insert({
+    // Persist to SQLite
+    try {
+      progressRepo.saveProgressReport({
         id: `rep_${Date.now()}`,
         learner_state_id: learnerId,
         period_start: json.period.start,
         period_end: json.period.end,
         report: json,
-        learner_state_version: 1,
         report_version: "1.0.0",
-        prompt_version: "1.0.0",
       });
-    }
+    } catch {}
     return json;
   } catch {
     const fallback: ProgressReport = {

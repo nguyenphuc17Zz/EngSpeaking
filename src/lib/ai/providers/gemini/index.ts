@@ -29,6 +29,10 @@ function buildPayload(input: TextGenerationInput) {
   }
   const genConfig: Record<string, unknown> = { temperature: input.temperature ?? 0.7 };
   if (input.maxOutputTokens) genConfig.maxOutputTokens = input.maxOutputTokens;
+  const modelStr = (input.model || "").toLowerCase();
+  if (modelStr.includes("3.6") || modelStr.includes("3.7") || (modelStr.includes("3.5-flash") && !modelStr.includes("lite"))) {
+    genConfig.thinkingConfig = { thinkingBudget: 0 };
+  }
   payload.generationConfig = genConfig;
   return payload;
 }

@@ -2,11 +2,19 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { toast } from "@/lib/toast";
 import {
   Sparkles,
@@ -28,7 +36,36 @@ import {
   AlertTriangle,
   RefreshCw,
   Settings2,
+  Coffee,
+  Briefcase,
+  Plane,
+  Utensils,
+  ShoppingBag,
+  Laptop,
+  MessageCircle,
+  HeartPulse,
+  GraduationCap,
+  Compass,
+  Shuffle,
+  Check,
+  Wand2,
+  ChevronDown,
 } from "lucide-react";
+import { PRESET_TOPICS, getTopicDisplay } from "@/lib/foundation/sentence-builder/topics";
+
+const TOPIC_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  Sparkles,
+  Coffee,
+  Briefcase,
+  Plane,
+  Utensils,
+  ShoppingBag,
+  Laptop,
+  MessageCircle,
+  HeartPulse,
+  GraduationCap,
+  Shuffle,
+};
 
 import { useSentenceBuilderStore } from "@/stores/sentence-builder-store";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -54,6 +91,7 @@ export default function SentenceBuilderPage() {
     currentTask,
     isGenerating,
     isEvaluating,
+    isRegeneratingAI,
     sessionConfig,
     completedTasksCount,
     currentTaskIndex,
@@ -69,7 +107,9 @@ export default function SentenceBuilderPage() {
     skillMastery,
     generationError,
     initSession,
+    finishSessionManually,
     fetchFirstTask,
+    generateNewTaskWithAI,
     clearGenerationError,
     processEvaluation,
     advanceToNextTask,
@@ -80,8 +120,12 @@ export default function SentenceBuilderPage() {
     setIsCountingDown,
     setIsEvaluating,
     resetSession,
+    selectedTopicId,
+    customTopicText,
+    setSelectedTopic,
   } = useSentenceBuilderStore();
 
+  const router = useRouter();
   const settings = useSettingsStore();
   const activeAiModel =
     settings.sentenceBuilderGen?.model ||
@@ -91,12 +135,26 @@ export default function SentenceBuilderPage() {
   const unifiedSTT = useUnifiedSTT({ lang: "en-US" });
   const tts = useBrowserTTS();
 
-  const [hasStartedSession, setHasStartedSession] = useState(false);
+  const [isTopicModalOpen, setIsTopicModalOpen] = useState(false);
   const [isHintDrawerOpen, setIsHintDrawerOpen] = useState(false);
   const [recordingStartTime, setRecordingStartTime] = useState<number>(0);
   const [hasListenedBaseSentence, setHasListenedBaseSentence] = useState(false);
   const [pendingSpokenText, setPendingSpokenText] = useState<string | null>(null);
   const [pendingDurationMs, setPendingDurationMs] = useState<number>(2000);
+  const [customInputVal, setCustomInputVal] = useState(customTopicText || "");
+
+  // Zero-Lobby: Automatically initialize Endless Mode on first mount if no task
+  useEffect(() => {
+    if (!currentTask && !isGenerating && !generationError) {
+      initSession("endless");
+    }
+  }, [currentTask, isGenerating, generationError, initSession]);
+
+  useEffect(() => {
+    if (selectedTopicId === "custom") {
+      setCustomInputVal(customTopicText || "");
+    }
+  }, [selectedTopicId, customTopicText]);
 
   const prepTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -112,12 +170,6 @@ export default function SentenceBuilderPage() {
     }
   }, [currentTask?.id]);
 
-  // Initialize or Select Mode
-  const handleStartSession = async (mode: SessionMode) => {
-    setHasStartedSession(true);
-    await initSession(mode);
-  };
-
   // Exit Studio View
   const handleExitStudio = () => {
     if (prepTimerRef.current) {
@@ -132,7 +184,16 @@ export default function SentenceBuilderPage() {
     setIsEvaluating(false);
     setPendingSpokenText(null);
     resetSession();
-    setHasStartedSession(false);
+    router.push("/foundation");
+  };
+
+  // Finish Endless Practice Session Manually & View Report
+  const handleFinishSession = () => {
+    if (completedTasksCount === 0 && !currentTask) {
+      toast.info("Bạn chưa hoàn thành câu nào trong buổi tập này.");
+      return;
+    }
+    finishSessionManually();
   };
 
   // Start Voice Recording
@@ -333,7 +394,7 @@ export default function SentenceBuilderPage() {
 
   // Preparation Countdown Timer routine when a new task is loaded
   useEffect(() => {
-    if (!hasStartedSession || !currentTask || lastEvaluation || isSessionCompleted) {
+    if (!currentTask || lastEvaluation || isSessionCompleted) {
       if (prepTimerRef.current) {
         clearInterval(prepTimerRef.current);
         prepTimerRef.current = null;
@@ -378,7 +439,7 @@ export default function SentenceBuilderPage() {
         prepTimerRef.current = null;
       }
     };
-  }, [currentTask?.id, autoStartMic, hasStartedSession, !!lastEvaluation, isSessionCompleted, setIsCountingDown, setPrepCountdown]);
+  }, [currentTask?.id, autoStartMic, !!lastEvaluation, isSessionCompleted, setIsCountingDown, setPrepCountdown]);
 
   // Keyboard Shortcuts Listener
   useEffect(() => {
@@ -423,164 +484,7 @@ export default function SentenceBuilderPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isEvaluating, !!lastEvaluation, pendingSpokenText, hintTier, setHintTier]);
 
-  // 1. Session Setup Screen (Lobby View)
-  if (!hasStartedSession || (!currentTask && !isGenerating)) {
-    return (
-      <div className="space-y-6 pb-12 animate-in fade-in-0 duration-200 max-w-5xl mx-auto">
-        {/* Compact Hero Banner */}
-        <div className="p-5 md:p-6 rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-background shadow-xs space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-primary/15 text-primary text-xs font-bold">
-              <Sparkles className="size-3.5" />
-              <span>Spoken Retrieval Studio</span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <GlobalAiSelector size="sm" />
-            </div>
-          </div>
-
-          <div className="max-w-2xl space-y-1">
-            <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
-              Sentence Builder & Controlled Speaking
-            </h1>
-          </div>
-
-          {/* Quick Mastery Snapshot */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
-            <div className="p-2.5 rounded-2xl bg-card border border-border/60">
-              <span className="text-[10px] font-semibold text-muted-foreground block">Mastery Tổng hợp</span>
-              <span className="font-mono text-base font-bold text-primary">{skillMastery.overallMastery}%</span>
-            </div>
-            <div className="p-2.5 rounded-2xl bg-card border border-border/60">
-              <span className="text-[10px] font-semibold text-muted-foreground block">Truy xuất từ vựng</span>
-              <span className="font-mono text-base font-bold text-indigo-500">{skillMastery.vocabularyRetrieval}%</span>
-            </div>
-            <div className="p-2.5 rounded-2xl bg-card border border-border/60">
-              <span className="text-[10px] font-semibold text-muted-foreground block">Cấu trúc câu</span>
-              <span className="font-mono text-base font-bold text-emerald-500">{skillMastery.sentenceConstruction}%</span>
-            </div>
-            <div className="p-2.5 rounded-2xl bg-card border border-border/60">
-              <span className="text-[10px] font-semibold text-muted-foreground block">Mức độ Tự lập</span>
-              <span className="font-mono text-base font-bold text-amber-500">{skillMastery.independence}%</span>
-            </div>
-          </div>
-        </div>
-
-        {/* AI Generation Error Banner with Retry */}
-        {generationError && (
-          <div className="p-4 rounded-3xl bg-destructive/10 border border-destructive/30 text-destructive space-y-3 animate-in fade-in-0 shadow-xs">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="size-5 shrink-0 text-destructive mt-0.5" />
-              <div className="space-y-1 text-xs">
-                <span className="font-bold text-sm block">Không thể tạo bài tập bằng AI</span>
-                <p className="text-muted-foreground leading-relaxed">{generationError}</p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <Button
-                size="sm"
-                onClick={() => fetchFirstTask()}
-                className="h-8 rounded-xl text-xs gap-1.5 font-semibold btn-spring"
-              >
-                <RefreshCw className="size-3.5" />
-                <span>Thử lại ngay</span>
-              </Button>
-              <Link href="/settings">
-                <Button variant="outline" size="sm" className="h-8 rounded-xl text-xs">
-                  Mở Cài đặt API Key
-                </Button>
-              </Link>
-            </div>
-          </div>
-        )}
-
-        {/* 4 Session Modes Selection */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs font-bold text-foreground uppercase tracking-wider">
-              Chọn phòng tập phản xạ:
-            </h2>
-          </div>
-
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-            {/* Quick Practice */}
-            <Card
-              onClick={() => handleStartSession("quick")}
-              className="rounded-3xl border border-border/80 bg-card hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer p-4 space-y-2.5 btn-spring shadow-2xs group"
-            >
-              <div className="size-9 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold group-hover:scale-105 transition-transform">
-                <Clock className="size-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-foreground">Quick (~3')</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">4 câu phản xạ nhanh khởi động ngày mới.</p>
-              </div>
-              <Badge variant="secondary" className="text-[10px] font-mono">
-                4 tasks
-              </Badge>
-            </Card>
-
-            {/* Standard Practice */}
-            <Card
-              onClick={() => handleStartSession("standard")}
-              className="rounded-3xl border-2 border-primary/50 bg-gradient-to-br from-card via-card to-primary/10 hover:border-primary transition-all cursor-pointer p-4 space-y-2.5 btn-spring shadow-xs relative overflow-hidden group"
-            >
-              <div className="absolute top-3 right-3">
-                <Badge className="text-[9px] font-bold bg-primary text-primary-foreground py-0 px-1.5">Khuyên dùng</Badge>
-              </div>
-              <div className="size-9 rounded-2xl bg-primary/20 text-primary flex items-center justify-center font-bold group-hover:scale-105 transition-transform">
-                <Flame className="size-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-foreground">Standard (~10')</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">10 câu chuẩn: Khởi động → Tăng tốc → Sửa lỗi.</p>
-              </div>
-              <Badge variant="outline" className="text-[10px] font-mono text-primary border-primary/40">
-                10 tasks
-              </Badge>
-            </Card>
-
-            {/* Deep Practice */}
-            <Card
-              onClick={() => handleStartSession("deep")}
-              className="rounded-3xl border border-border/80 bg-card hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-all cursor-pointer p-4 space-y-2.5 btn-spring shadow-2xs group"
-            >
-              <div className="size-9 rounded-2xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold group-hover:scale-105 transition-transform">
-                <Brain className="size-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-foreground">Deep (~20')</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">20 câu nâng cao, đa dạng cấu trúc phức.</p>
-              </div>
-              <Badge variant="secondary" className="text-[10px] font-mono">
-                20 tasks
-              </Badge>
-            </Card>
-
-            {/* Weakness Focus */}
-            <Card
-              onClick={() => handleStartSession("weakness_focus")}
-              className="rounded-3xl border border-border/80 bg-card hover:border-amber-500/50 hover:bg-amber-500/5 transition-all cursor-pointer p-4 space-y-2.5 btn-spring shadow-2xs group"
-            >
-              <div className="size-9 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold group-hover:scale-105 transition-transform">
-                <Target className="size-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-foreground">Weakness Focus</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">Quét Error Bank và drill vào mẫu câu yếu nhất.</p>
-              </div>
-              <Badge variant="secondary" className="text-[10px] font-mono text-amber-600 dark:text-amber-400">
-                Targeted Drill
-              </Badge>
-            </Card>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // 2. Error State View (if AI generation fails and no task loaded)
+  // 1. Error State View (if AI generation fails and no task loaded)
   if (generationError && !currentTask) {
     return (
       <div className="p-8 rounded-3xl border border-destructive/30 bg-destructive/5 space-y-5 max-w-xl mx-auto my-16 text-center animate-in fade-in-0 shadow-sm">
@@ -614,19 +518,19 @@ export default function SentenceBuilderPage() {
             variant="ghost"
             onClick={() => {
               clearGenerationError();
-              setHasStartedSession(false);
+              router.push("/foundation");
             }}
             className="rounded-xl"
           >
-            Quay lại chọn chế độ
+            Về trang Foundation
           </Button>
         </div>
       </div>
     );
   }
 
-  // 3. Loading State while generating task
-  if (isGenerating && !currentTask) {
+  // 2. Loading State while generating task (Zero-Lobby initial load)
+  if (!currentTask) {
     return (
       <div className="p-8 rounded-3xl border border-border/80 bg-card space-y-4 max-w-lg mx-auto my-16 text-center animate-in fade-in-0 shadow-sm">
         <div className="size-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto animate-pulse">
@@ -635,10 +539,10 @@ export default function SentenceBuilderPage() {
         <div className="space-y-1">
           <h2 className="text-base font-bold text-foreground">AI đang thiết kế bài tập phản xạ...</h2>
           <p className="text-xs text-muted-foreground">
-            Tình huống giao tiếp tự nhiên trong đời sống & công việc.
+            Chủ đề: {getTopicDisplay(selectedTopicId).label}. Vào phòng tập ngay.
           </p>
         </div>
-        <Skeleton className="h-20 w-full rounded-2xl" />
+        <Skeleton className="h-24 w-full rounded-2xl" />
       </div>
     );
   }
@@ -663,11 +567,18 @@ export default function SentenceBuilderPage() {
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs md:text-sm font-bold tracking-tight text-foreground">
-                Sentence Builder Studio
+                Sentence Builder
               </span>
-              <Badge variant="outline" className="text-[10px] font-mono capitalize px-2 py-0">
-                {sessionConfig.mode.replace("_", " ")}
-              </Badge>
+              <button
+                type="button"
+                onClick={() => setIsTopicModalOpen(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 hover:bg-primary/20 border border-primary/30 text-foreground text-xs font-mono transition-all cursor-pointer group max-w-[200px] sm:max-w-[260px] truncate"
+                title="Bấm để đổi chủ đề luyện tập"
+              >
+                <Compass className="size-3 text-primary shrink-0 group-hover:rotate-45 transition-transform" />
+                <span className="truncate font-medium">{getTopicDisplay(currentTask?.topic || selectedTopicId).label}</span>
+                <ChevronDown className="size-3 text-muted-foreground shrink-0 ml-0.5" />
+              </button>
               <GlobalAiSelector size="sm" />
             </div>
           </div>
@@ -704,17 +615,40 @@ export default function SentenceBuilderPage() {
             </div>
           )}
 
+          {/* Progress Indicator */}
           <div className="flex items-center gap-2">
             <span className="text-xs font-mono font-bold text-foreground">
-              {currentTaskIndex + 1}/{sessionConfig.targetCount}
+              {sessionConfig.mode === "endless"
+                ? `Câu #${currentTaskIndex + 1}`
+                : `${currentTaskIndex + 1}/${sessionConfig.targetCount}`}
             </span>
-            <div className="w-16 sm:w-24">
-              <Progress
-                value={((currentTaskIndex + 1) / sessionConfig.targetCount) * 100}
-                className="h-1.5 rounded-full"
-              />
-            </div>
+            {sessionConfig.mode === "endless" ? (
+              <Badge variant="outline" className="text-[10px] font-mono border-primary/30 text-primary">
+                Đã xong {completedTasksCount}
+              </Badge>
+            ) : (
+              <div className="w-16 sm:w-24">
+                <Progress
+                  value={((currentTaskIndex + 1) / (sessionConfig.targetCount || 1)) * 100}
+                  className="h-1.5 rounded-full"
+                />
+              </div>
+            )}
           </div>
+
+          {/* Finish & View Results Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleFinishSession}
+            disabled={isGenerating || isEvaluating}
+            className="h-8 px-2.5 rounded-xl font-bold text-xs gap-1.5 border-amber-500/40 bg-amber-500/10 hover:bg-amber-500 hover:text-white text-amber-600 dark:text-amber-400 transition-all shadow-2xs btn-spring"
+            title="Kết thúc buổi tập và xem báo cáo tổng kết"
+          >
+            <Trophy className="size-3.5" />
+            <span className="hidden sm:inline">Kết thúc & Xem kết quả</span>
+            <span className="sm:hidden">Nghỉ tập</span>
+          </Button>
         </div>
       </header>
 
@@ -735,6 +669,8 @@ export default function SentenceBuilderPage() {
               onPlayTerm={(term) => tts.speak(term)}
               onNextTask={handleSkipOrNextTask}
               isGeneratingNext={isGenerating}
+              onRegenerateWithAI={generateNewTaskWithAI}
+              isRegeneratingAI={isRegeneratingAI}
             />
           )}
         </div>
@@ -815,6 +751,104 @@ export default function SentenceBuilderPage() {
         </div>
       </footer>
 
+      {/* In-Studio Topic Selector Dialog */}
+      <Dialog open={isTopicModalOpen} onOpenChange={setIsTopicModalOpen}>
+        <DialogContent className="sm:max-w-xl rounded-3xl p-5 md:p-6 bg-card border border-border/80 shadow-2xl space-y-4">
+          <DialogHeader className="space-y-1">
+            <DialogTitle className="text-base md:text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
+              <Compass className="size-5 text-primary" />
+              <span>Đổi chủ đề luyện tập phản xạ</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Chọn một ngữ cảnh có sẵn hoặc tự gõ bất kỳ tình huống nào bạn muốn AI tạo câu.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Preset Topics Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[300px] overflow-y-auto pr-1">
+            {PRESET_TOPICS.map((topic) => {
+              const IconComp = TOPIC_ICONS[topic.icon] || Sparkles;
+              const isSelected = selectedTopicId === topic.id;
+
+              return (
+                <button
+                  key={topic.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedTopic(topic.id, "");
+                    setCustomInputVal("");
+                    setIsTopicModalOpen(false);
+                    toast.success("Đã chọn chủ đề", topic.labelVi);
+                  }}
+                  className={`flex items-center gap-2.5 p-2.5 rounded-2xl border transition-all cursor-pointer text-left btn-spring ${
+                    isSelected
+                      ? "border-primary bg-primary/10 ring-1 ring-primary/40 shadow-xs"
+                      : "border-border/70 bg-card hover:border-primary/40 hover:bg-muted/40"
+                  }`}
+                >
+                  <div
+                    className={`size-7 rounded-xl flex items-center justify-center shrink-0 ${
+                      isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    <IconComp className="size-3.5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-xs font-bold text-foreground block truncate">
+                      {topic.labelVi}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground font-mono block truncate">
+                      {topic.labelEn}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Custom Topic Input */}
+          <div className="p-3 rounded-2xl border border-border/70 bg-muted/20 space-y-2">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Wand2 className="size-3.5 text-primary" />
+              <span className="font-semibold text-foreground">Hoặc nhập bối cảnh tùy chỉnh:</span>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={customInputVal}
+                onChange={(e) => setCustomInputVal(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && customInputVal.trim()) {
+                    setSelectedTopic("custom", customInputVal.trim());
+                    setIsTopicModalOpen(false);
+                    toast.success("Đã chọn chủ đề tùy chỉnh", customInputVal.trim());
+                  }
+                }}
+                placeholder="Ví dụ: Đặt khách sạn ở Tokyo, Mua trà sữa ít ngọt, Phỏng vấn xin việc..."
+                className="flex-1 h-9 px-3 text-xs rounded-xl bg-background border border-border/80 focus:outline-hidden focus:border-primary focus:ring-1 focus:ring-primary text-foreground placeholder:text-muted-foreground/60 transition-all"
+              />
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  if (customInputVal.trim()) {
+                    setSelectedTopic("custom", customInputVal.trim());
+                    setIsTopicModalOpen(false);
+                    toast.success("Đã chọn chủ đề tùy chỉnh", customInputVal.trim());
+                  } else {
+                    toast.info("Vui lòng nhập chủ đề trước khi áp dụng");
+                  }
+                }}
+                className="h-9 px-3 rounded-xl text-xs gap-1 font-semibold"
+              >
+                <Check className="size-3" />
+                <span>Áp dụng</span>
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Completion Summary Modal */}
       <SessionSummaryModal
         isOpen={isSessionCompleted}
@@ -822,7 +856,7 @@ export default function SentenceBuilderPage() {
         skillMastery={skillMastery}
         onRestart={() => {
           resetSession();
-          setHasStartedSession(false);
+          initSession("endless");
         }}
       />
     </div>

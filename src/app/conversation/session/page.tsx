@@ -75,7 +75,7 @@ export default function ConversationSessionPage() {
   const [speechStartMs, setSpeechStartMs] = useState<number>(0);
 
   // ─── Affective & Pragmatic Live State ──────────────────────────────────
-  const [handsFreeMode, setHandsFreeMode] = useState(true);
+  const [handsFreeMode, setHandsFreeMode] = useState(false);
   const [activePragmaticAct, setActivePragmaticAct] = useState<PragmaticSpeechAct | null>(null);
   const [activePragmaticFeedback, setActivePragmaticFeedback] = useState<string | null>(null);
   const [unlockedObjectiveAlert, setUnlockedObjectiveAlert] = useState<SpeakingObjective | null>(null);

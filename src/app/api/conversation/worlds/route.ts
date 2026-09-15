@@ -1,25 +1,29 @@
 import { NextResponse } from "next/server";
-import { createServerClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { getAppDb } from "@/lib/db/sqlite-db";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const id = url.searchParams.get("id");
+  const db = getAppDb();
+
   if (id) {
-    if (!isSupabaseConfigured()) return NextResponse.json({ world: null, turns: [], facts: [], events: [], summary: null });
-    const supabase = createServerClient();
-    if (!supabase) return NextResponse.json({ world: null });
-    const { data: world } = await supabase.from("conversation_worlds").select("*").eq("id", id).single();
-    const { data: turns } = await supabase.from("conversation_turns_world").select("*").eq("world_id", id).order("timestamp", { ascending: true });
-    const { data: facts } = await supabase.from("conversation_facts").select("*").eq("world_id", id);
-    const { data: events } = await supabase.from("conversation_events").select("*").eq("world_id", id);
-    const { data: summary } = await supabase.from("conversation_summaries").select("*").eq("world_id", id).single();
-    return NextResponse.json({ world, turns: turns || [], facts: facts || [], events: events || [], summary: summary?.summary || null });
+    const world = db.prepare("SELECT * FROM conversation_worlds WHERE id = ?").get(id) as any;
+    const turns = db.prepare("SELECT * FROM conversation_turns_world WHERE world_id = ? ORDER BY timestamp ASC").all(id);
+    const facts = db.prepare("SELECT * FROM conversation_facts WHERE world_id = ?").all(id);
+    const events = db.prepare("SELECT * FROM conversation_events WHERE world_id = ?").all(id);
+    const summary = db.prepare("SELECT * FROM conversation_summaries WHERE world_id = ?").get(id) as any;
+    return NextResponse.json({
+      world,
+      turns: turns || [],
+      facts: facts || [],
+      events: events || [],
+      summary: summary?.summary ? JSON.parse(summary.summary) : null,
+    });
   }
+
   // list
   const limit = Math.min(parseInt(url.searchParams.get("limit") || "10", 10) || 10, 50);
-  if (!isSupabaseConfigured()) return NextResponse.json({ worlds: [] });
-  const supabase = createServerClient();
-  if (!supabase) return NextResponse.json({ worlds: [] });
-  const { data } = await supabase.from("conversation_worlds").select("*").order("created_at", { ascending: false }).limit(limit);
-  return NextResponse.json({ worlds: data || [] });
+  const worlds = db.prepare("SELECT * FROM conversation_worlds ORDER BY created_at DESC LIMIT ?").all(limit);
+  return NextResponse.json({ worlds: worlds || [] });
 }
+

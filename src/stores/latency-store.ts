@@ -22,6 +22,7 @@ interface LatencyStoreState {
   isGenerating: boolean;
   isEvaluating: boolean;
   isPreloadingNext: boolean;
+  isRegeneratingAI: boolean;
 
   currentDrillMode: LatencyDrillMode;
   targetCount: number;
@@ -38,7 +39,8 @@ interface LatencyStoreState {
   // Actions
   clearGenerationError: () => void;
   initSession: (mode: LatencyDrillMode, targetCount?: number) => Promise<void>;
-  fetchFirstTask: () => Promise<void>;
+  fetchFirstTask: (opts?: { forceSource?: "ai" | "bank" | "auto" }) => Promise<void>;
+  generateNewTaskWithAI: () => Promise<void>;
   preloadNextTask: () => Promise<void>;
   processEvaluation: (evaluation: LatencyEvaluation) => void;
   advanceToNextTask: () => void;
@@ -61,6 +63,7 @@ export const useLatencyStore = create<LatencyStoreState>()(
       isGenerating: false,
       isEvaluating: false,
       isPreloadingNext: false,
+      isRegeneratingAI: false,
       generationError: null,
 
       currentDrillMode: "open_response",
@@ -95,7 +98,7 @@ export const useLatencyStore = create<LatencyStoreState>()(
         await get().fetchFirstTask();
       },
 
-      fetchFirstTask: async () => {
+      fetchFirstTask: async (opts?: { forceSource?: "ai" | "bank" | "auto" }) => {
         set({ isGenerating: true, generationError: null });
         const { currentDrillMode, adaptiveState } = get();
 
@@ -121,6 +124,7 @@ export const useLatencyStore = create<LatencyStoreState>()(
               targetLatencyMs: adaptiveState.currentTargetLatencyMs,
               provider,
               model,
+              forceSource: opts?.forceSource,
             }),
           });
 
@@ -139,6 +143,57 @@ export const useLatencyStore = create<LatencyStoreState>()(
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Lỗi kết nối AI khi tạo tình huống phản xạ.";
           set({ isGenerating: false, generationError: msg });
+        }
+      },
+
+      generateNewTaskWithAI: async () => {
+        set({ isRegeneratingAI: true, generationError: null });
+        const { currentDrillMode, adaptiveState } = get();
+
+        let provider = "gemini";
+        let model = "auto";
+        try {
+          const { useSettingsStore } = await import("@/stores/settings-store");
+          const settings = useSettingsStore.getState();
+          provider = settings.generation?.provider || settings.activeProvider || "gemini";
+          model =
+            settings.generation?.model ||
+            (provider === "groq" ? settings.preferredGroqModel : settings.preferredGeminiModel) ||
+            "auto";
+        } catch {}
+
+        try {
+          const res = await fetch("/api/foundation/latency/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              drillMode: currentDrillMode,
+              targetDifficulty: adaptiveState.currentDifficulty,
+              targetLatencyMs: adaptiveState.currentTargetLatencyMs,
+              provider,
+              model,
+              forceSource: "ai",
+            }),
+          });
+
+          const data = await res.json();
+          if (!res.ok || !data.task) {
+            throw new Error(data.error || "Không thể tạo câu hỏi mới từ AI");
+          }
+
+          set({
+            currentTask: data.task,
+            isRegeneratingAI: false,
+            lastEvaluation: null,
+            generationError: null,
+          });
+          const { toast } = await import("@/lib/toast");
+          toast.success("Đã tạo câu mới bằng AI", `Chủ đề: ${data.task.category || "Phản xạ"}`);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Lỗi kết nối AI khi tạo câu hỏi mới.";
+          set({ isRegeneratingAI: false, generationError: msg });
+          const { toast } = await import("@/lib/toast");
+          toast.error("Lỗi gọi AI", msg);
         }
       },
 

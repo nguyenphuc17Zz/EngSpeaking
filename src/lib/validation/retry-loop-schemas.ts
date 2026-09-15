@@ -48,6 +48,7 @@ export const targetedCorrectionSchema = z.object({
 export const repairChallengeSchema = z.object({
   id: z.string(),
   category: z.string().default("grammar"),
+  topic: z.string().default("general"),
   situationVi: z.string(),
   targetIntent: z.string(),
   erroneousSentence: z.string(),

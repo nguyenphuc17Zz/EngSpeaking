@@ -20,14 +20,21 @@ import {
   getCompactErrorContextPack,
   ingestErrorOccurrence,
 } from "@/lib/foundation/error-bank/error-bank.service";
+import { resolveTopicForPrompt } from "@/lib/foundation/sentence-builder/topics";
 
 interface VNToENStoreState {
+  // Topic State
+  selectedTopicId: string;
+  customTopicText: string;
+  setSelectedTopic: (topicId: string, customText?: string) => void;
+
   // Current Task & Preload Queue
   currentTask: VNToENTask | null;
   nextTask: VNToENTask | null;
   isGenerating: boolean;
   isEvaluating: boolean;
   isPreloadingNext: boolean;
+  isRegeneratingAI: boolean;
 
   // Session State
   sessionConfig: VNToENSessionConfig;
@@ -56,8 +63,10 @@ interface VNToENStoreState {
   adaptiveState: VNAdaptiveState;
 
   // Actions
-  initSession: (mode: VNToENRetrievalMode) => Promise<void>;
-  fetchFirstTask: () => Promise<void>;
+  initSession: (mode?: VNToENRetrievalMode) => Promise<void>;
+  finishSessionManually: () => void;
+  fetchFirstTask: (opts?: { forceSource?: "ai" | "bank" | "auto" }) => Promise<void>;
+  generateNewTaskWithAI: () => Promise<void>;
   preloadNextTask: () => Promise<void>;
   processEvaluation: (evaluation: VNToENEvaluation) => void;
   advanceToNextTask: () => void;
@@ -72,9 +81,10 @@ interface VNToENStoreState {
 }
 
 const DEFAULT_CONFIGS: Record<VNToENRetrievalMode, VNToENSessionConfig> = {
+  endless: { mode: "endless", targetCount: 0, autoStartMic: false, prepTimeSec: 2.0 },
   direct: { mode: "direct", targetCount: 8, autoStartMic: false, prepTimeSec: 2.5 },
-  timed: { mode: "timed", targetCount: 10, autoStartMic: true, prepTimeSec: 2.0 },
-  rapid_fire: { mode: "rapid_fire", targetCount: 12, autoStartMic: true, prepTimeSec: 1.0 },
+  timed: { mode: "timed", targetCount: 10, autoStartMic: false, prepTimeSec: 2.0 },
+  rapid_fire: { mode: "rapid_fire", targetCount: 12, autoStartMic: false, prepTimeSec: 1.0 },
 };
 
 export const useVNToENStore = create<VNToENStoreState>()(
@@ -85,8 +95,9 @@ export const useVNToENStore = create<VNToENStoreState>()(
       isGenerating: false,
       isEvaluating: false,
       isPreloadingNext: false,
+      isRegeneratingAI: false,
 
-      sessionConfig: DEFAULT_CONFIGS.timed,
+      sessionConfig: DEFAULT_CONFIGS.endless,
       sessionStartedAt: null,
       completedTasksCount: 0,
       currentTaskIndex: 0,
@@ -94,10 +105,16 @@ export const useVNToENStore = create<VNToENStoreState>()(
       isSessionCompleted: false,
       sessionSummary: null,
 
+      // Topic Defaults
+      selectedTopicId: "random",
+      customTopicText: "",
+      setSelectedTopic: (topicId: string, customText: string = "") =>
+        set({ selectedTopicId: topicId, customTopicText: customText }),
+
       hintTier: 0,
       attemptCount: 1,
       lastEvaluation: null,
-      autoStartMic: true,
+      autoStartMic: false,
       prepCountdown: null,
       isCountingDown: false,
       isSayItBetterMode: false,
@@ -107,10 +124,11 @@ export const useVNToENStore = create<VNToENStoreState>()(
 
       clearGenerationError: () => set({ generationError: null }),
 
-      initSession: async (mode: VNToENRetrievalMode) => {
-        const config = DEFAULT_CONFIGS[mode];
+      initSession: async (mode: VNToENRetrievalMode = "endless") => {
+        const config = DEFAULT_CONFIGS[mode] || DEFAULT_CONFIGS.endless;
         set({
           sessionConfig: config,
+          autoStartMic: false,
           sessionStartedAt: new Date().toISOString(),
           completedTasksCount: 0,
           currentTaskIndex: 0,
@@ -133,9 +151,10 @@ export const useVNToENStore = create<VNToENStoreState>()(
         await get().fetchFirstTask();
       },
 
-      fetchFirstTask: async () => {
+      fetchFirstTask: async (opts) => {
         set({ isGenerating: true, generationError: null });
-        const { adaptiveState, sessionConfig } = get();
+        const { adaptiveState, sessionConfig, selectedTopicId, customTopicText } = get();
+        const effectiveTopic = resolveTopicForPrompt(selectedTopicId, customTopicText);
 
         // Read active provider & model from settings
         let provider = "gemini";
@@ -164,8 +183,10 @@ export const useVNToENStore = create<VNToENStoreState>()(
               retrievalMode: sessionConfig.mode,
               targetDifficulty: adaptiveState.currentDifficulty,
               recentErrors,
+              topic: effectiveTopic,
               provider,
               model,
+              forceSource: opts?.forceSource,
             }),
           });
 
@@ -192,6 +213,60 @@ export const useVNToENStore = create<VNToENStoreState>()(
             isGenerating: false,
             generationError: err instanceof Error ? err.message : "Lỗi kết nối mạng khi tạo bài tập.",
           });
+        }
+      },
+
+      generateNewTaskWithAI: async () => {
+        set({ isRegeneratingAI: true, generationError: null });
+        const { adaptiveState, sessionConfig, selectedTopicId, customTopicText } = get();
+        const effectiveTopic = resolveTopicForPrompt(selectedTopicId, customTopicText);
+        const settings = typeof window !== "undefined" ? (await import("@/stores/settings-store")).useSettingsStore.getState() : null;
+        const provider = settings?.activeProvider || "gemini";
+        const model = (provider === "groq" ? settings?.preferredGroqModel : settings?.preferredGeminiModel) || "auto";
+
+        try {
+          const res = await fetch("/api/foundation/vn-to-en/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              retrievalMode: sessionConfig.mode,
+              targetDifficulty: adaptiveState.currentDifficulty,
+              topic: effectiveTopic,
+              provider,
+              model,
+              forceSource: "ai",
+            }),
+          });
+
+          const data = await res.json();
+          if (data.success && data.task) {
+            set({
+              currentTask: data.task,
+              isRegeneratingAI: false,
+              generationError: null,
+              hintTier: 0,
+              attemptCount: 1,
+              lastEvaluation: null,
+              isSayItBetterMode: false,
+            });
+            const { toast } = await import("@/lib/toast");
+            toast.success("Đã tạo câu mới bằng AI", `Chủ đề: ${data.task.category || "Giao tiếp"}`);
+          } else {
+            set({
+              isRegeneratingAI: false,
+              generationError: data.error || "Không thể tạo câu mới bằng AI.",
+            });
+            const { toast } = await import("@/lib/toast");
+            toast.error("Lỗi gọi AI", data.error || "Không thể tạo câu mới bằng AI");
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Lỗi kết nối mạng khi tạo bài tập.";
+          set({
+            isRegeneratingAI: false,
+            generationError: msg,
+          });
+          const { toast } = await import("@/lib/toast");
+          toast.error("Lỗi gọi AI", msg);
         }
       },
 
@@ -288,7 +363,7 @@ export const useVNToENStore = create<VNToENStoreState>()(
 
         const nextIndex = currentTaskIndex + 1;
 
-        if (nextIndex >= sessionConfig.targetCount) {
+        if (sessionConfig.mode !== "endless" && sessionConfig.targetCount > 0 && nextIndex >= sessionConfig.targetCount) {
           // Complete session summary calculation
           const firstAttempts = sessionHistory.filter((h) => h.attemptsCount === 1 && h.evaluation.isSuccessful).length;
           const accuracy = Math.round((firstAttempts / Math.max(1, sessionHistory.length)) * 100);
@@ -361,6 +436,54 @@ export const useVNToENStore = create<VNToENStoreState>()(
         }
       },
 
+      finishSessionManually: () => {
+        const { sessionConfig, sessionHistory, sessionStartedAt } = get();
+        const firstAttempts = sessionHistory.filter((h) => h.attemptsCount === 1 && h.evaluation?.isSuccessful).length;
+        const count = Math.max(1, sessionHistory.length);
+        const accuracy = Math.round((firstAttempts / count) * 100);
+        const independentCount = sessionHistory.filter((h) => h.evaluation?.hintTierUsed === 0 && h.evaluation?.isSuccessful).length;
+        const independentRate = Math.round((independentCount / count) * 100);
+
+        const avgLatency = Math.round(
+          sessionHistory.reduce((acc, h) => acc + (h.evaluation?.responseLatencyMs || 0), 0) / count
+        );
+
+        const retriedTasks = sessionHistory.filter((h) => h.attemptsCount > 1);
+        const retriedSuccesses = retriedTasks.filter((h) => h.evaluation?.isSuccessful).length;
+        const retryRecoveryRate = retriedTasks.length > 0 ? Math.round((retriedSuccesses / retriedTasks.length) * 100) : 100;
+
+        const gapDistribution = {
+          noneCount: sessionHistory.filter((h) => h.evaluation?.gapType === "none").length,
+          retrievalGapCount: sessionHistory.filter((h) => h.evaluation?.gapType === "retrieval_gap").length,
+          knowledgeGapCount: sessionHistory.filter((h) => h.evaluation?.gapType === "knowledge_gap").length,
+          productionGapCount: sessionHistory.filter((h) => h.evaluation?.gapType === "production_gap").length,
+        };
+
+        const summary: VNToENSessionSummary = {
+          sessionId: `vn_sess_${Date.now()}`,
+          mode: sessionConfig.mode,
+          startedAt: sessionStartedAt || new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+          totalTasks: sessionHistory.length,
+          completedTasks: sessionHistory.length,
+          firstAttemptSuccessCount: firstAttempts,
+          firstAttemptAccuracy: accuracy,
+          independentSuccessRate: independentRate,
+          averageResponseLatencyMs: avgLatency,
+          retryRecoveryRate,
+          masteryDelta: Math.min(10, Math.max(3, Math.round(accuracy / 12))),
+          gapDistribution,
+          topWeaknessIdentified: gapDistribution.retrievalGapCount > 1 ? "Độ trễ phản xạ (>3.5s)" : "Phản xạ câu theo bối cảnh",
+          recommendedNextAction: "Tiếp tục duy trì phản xạ tự nhiên mỗi ngày!",
+          history: sessionHistory,
+        };
+
+        set({
+          isSessionCompleted: true,
+          sessionSummary: summary,
+        });
+      },
+
       setHintTier: (tier) => set({ hintTier: tier }),
       incrementAttempt: (isSayItBetter = false) =>
         set((s) => ({
@@ -389,7 +512,7 @@ export const useVNToENStore = create<VNToENStoreState>()(
         }),
     }),
     {
-      name: "vn_to_en_store_v1",
+      name: "vn_to_en_store_v2",
       partialize: (s) => ({
         adaptiveState: s.adaptiveState,
         autoStartMic: s.autoStartMic,

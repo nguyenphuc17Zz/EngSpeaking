@@ -34,7 +34,7 @@ export default function HistoryPage() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle className="text-sm">Sessions gần đây (Supabase nếu cấu hình)</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-sm">Sessions gần đây (SQLite Database)</CardTitle></CardHeader>
         <CardContent className="space-y-1 text-xs">
           {(sessions as Array<{ id: string; skill: string; exercise_type: string; difficulty: number; status: string; started_at: string }>).length === 0 ? <p className="text-muted-foreground">Chưa có session server.</p> : (
             (sessions as Array<{ id: string; skill: string; exercise_type: string; difficulty: number; status: string; started_at: string }>).map((s) => (

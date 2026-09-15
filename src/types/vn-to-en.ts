@@ -1,7 +1,7 @@
 // Vietnamese -> English Speaking Domain Types — Function 2
 // Spoken Retrieval Engine converting Vietnamese thoughts directly into spoken English
 
-export type VNToENRetrievalMode = "direct" | "timed" | "rapid_fire";
+export type VNToENRetrievalMode = "endless" | "direct" | "timed" | "rapid_fire";
 
 export type VNPromptCategory =
   | "daily_life"
@@ -62,6 +62,7 @@ export interface VNToENTask {
   prepTimeSec: number; // 3.0s down to 1.5s (or 0 for direct / rapid fire)
   isRapidFire?: boolean;
   topic: string;
+  source?: "ai" | "bank";
 }
 
 export interface VNEvaluatedError {

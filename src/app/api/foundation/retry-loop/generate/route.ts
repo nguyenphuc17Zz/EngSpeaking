@@ -4,13 +4,15 @@ import { generateRepairChallenge } from "@/lib/foundation/retry-loop/challenge-g
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const { category, provider, model, recentPatterns } = body;
+    const { category, provider, model, recentPatterns, topic, forceSource } = body;
 
     const challenge = await generateRepairChallenge({
       category,
       provider,
       model,
       recentPatterns,
+      topic,
+      forceSource,
     });
 
     return NextResponse.json({ success: true, challenge });

@@ -1,8 +1,5 @@
-// LearnerState service with versioning §52-53, anonymous persistence
 import type { LearnerState, LearnerStateChange, SkillState, LearningGoalId } from "@/types/learner";
 import { computeRetentionRisk, applyRecencyDecay, updateMastery, computeTrend } from "./mastery";
-import { createServerClient, isSupabaseConfigured } from "@/lib/supabase/client";
-import { writeSkillHistory } from "@/lib/progress/writers";
 
 const STORAGE_KEY = "learner_state_v1";
 const CHANGES_KEY = "learner_state_changes";
@@ -103,8 +100,25 @@ export function updateSkillFromPerformance(
 
   const next: LearnerState = { ...state, skills: state.skills.map((s, i) => i === idx ? newSkill : s), version: state.version + 1, updatedAt: new Date().toISOString() };
   saveLearnerState(next);
-  // Phase 8: also write skill_history for long-term analytics (fire-and-forget)
-  try { void writeSkillHistory("default", skillId, mastery, confidence, newSkill.retentionRisk, newSkill.trend, newSkill.practiceCount, sourceSessionId); } catch {}
+  // Phase 8: also write skill_history for long-term analytics (fire-and-forget via API in browser)
+  if (typeof window !== "undefined") {
+    try {
+      void fetch("/api/progress/skills", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          learnerId: "default_learner",
+          skillId,
+          mastery,
+          confidence,
+          retentionRisk: newSkill.retentionRisk,
+          trend: newSkill.trend,
+          practiceCount: newSkill.practiceCount,
+          sourceSessionId,
+        }),
+      }).catch(() => {});
+    } catch {}
+  }
   return next;
 }
 

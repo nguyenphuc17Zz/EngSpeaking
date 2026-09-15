@@ -5,6 +5,7 @@ import { generateTextWithRouting } from "@/lib/ai";
 import { vnToENTaskSchema } from "@/lib/validation/vn-to-en-schemas";
 import { VN_TO_EN_GENERATOR_SYSTEM, buildVNToENTaskPrompt } from "@/lib/ai/prompts/vn-to-en-prompts";
 import { sampleBankTask, saveBankTask, recordUserExposure } from "@/lib/foundation/services/content-bank.service";
+import { resolveTopicForPrompt } from "@/lib/foundation/sentence-builder/topics";
 import type { VNToENTask, VNToENRetrievalMode, VNPromptCategory } from "@/types/vn-to-en";
 
 export interface GenerateVNTaskOptions {
@@ -22,7 +23,7 @@ export interface GenerateVNTaskOptions {
 
 // Minimal test fixture strictly for offline test runner when provider === "mock"
 function getTestMockTask(options: GenerateVNTaskOptions): VNToENTask {
-  const mode = options.retrievalMode || "direct";
+  const mode = options.retrievalMode || "endless";
   const id = `vn_task_test_${Date.now()}`;
   return {
     id,
@@ -62,31 +63,108 @@ function getTestMockTask(options: GenerateVNTaskOptions): VNToENTask {
   };
 }
 
-function cleanJson(text: string): unknown {
-  const trimmed = text.trim();
-  const withoutFence = trimmed
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "");
+export function cleanJson(text: string): unknown {
+  if (!text) return null;
+  // 1. Strip reasoning / thinking tokens (<think> or <thought>)
+  let cleaned = text
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/<thought>[\s\S]*?<\/thought>/gi, "")
+    .trim();
+
+  // 2. Extract content from markdown code block if present
+  const codeBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (codeBlockMatch && codeBlockMatch[1]) {
+    cleaned = codeBlockMatch[1].trim();
+  }
+
+  // 3. Direct JSON parse attempt
   try {
-    return JSON.parse(withoutFence);
-  } catch {
-    const m = withoutFence.match(/\{[\s\S]*\}/);
-    if (m) {
+    return JSON.parse(cleaned);
+  } catch {}
+
+  // 4. Try locating the outermost JSON object { ... }
+  const firstBrace = cleaned.indexOf("{");
+  const lastBrace = cleaned.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    const candidate = cleaned.slice(firstBrace, lastBrace + 1);
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // 5. Try fixing common syntax issues like trailing commas before } or ]
+      const withoutTrailingCommas = candidate.replace(/,\s*([}\]])/g, "$1");
       try {
-        return JSON.parse(m[0]);
-      } catch {
-        return null;
+        return JSON.parse(withoutTrailingCommas);
+      } catch {}
+    }
+  }
+
+  // 6. Truncated JSON recovery: if output was cut off, attempt auto-closing with a LIFO stack
+  if (firstBrace !== -1) {
+    let text = cleaned.slice(firstBrace).trim();
+    const stack: string[] = [];
+    let inString = false;
+    let isEscaped = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (inString) {
+        if (ch === "\\" && !isEscaped) {
+          isEscaped = true;
+        } else if (ch === '"' && !isEscaped) {
+          inString = false;
+        } else {
+          isEscaped = false;
+        }
+      } else {
+        if (ch === '"') {
+          inString = true;
+        } else if (ch === "{") {
+          stack.push("}");
+        } else if (ch === "[") {
+          stack.push("]");
+        } else if (ch === "}") {
+          if (stack.length > 0 && stack[stack.length - 1] === "}") {
+            stack.pop();
+          }
+        } else if (ch === "]") {
+          if (stack.length > 0 && stack[stack.length - 1] === "]") {
+            stack.pop();
+          }
+        }
       }
     }
-    return null;
+
+    let repaired = text;
+    if (inString) {
+      repaired += '"';
+    }
+
+    // Remove any dangling comma before closing
+    repaired = repaired.replace(/,\s*$/, "");
+
+    // If ended with dangling key: e.g. "key": -> add null
+    if (/:\s*$/.test(repaired)) {
+      repaired += '""';
+    }
+
+    // Close remaining in LIFO order
+    while (stack.length > 0) {
+      const closer = stack.pop();
+      if (closer) repaired += closer;
+    }
+
+    try {
+      return JSON.parse(repaired);
+    } catch {}
   }
+
+  return null;
 }
 
 export async function generateVNToENTask(
   options: GenerateVNTaskOptions = {}
 ): Promise<VNToENTask> {
-  const retrievalMode = options.retrievalMode || "direct";
+  const retrievalMode = options.retrievalMode || "endless";
   const targetDifficulty = options.targetDifficulty || (retrievalMode === "rapid_fire" ? 2 : retrievalMode === "timed" ? 5 : 3);
   const provider = options.provider || "gemini";
   const model = options.model || "auto";
@@ -95,22 +173,37 @@ export async function generateVNToENTask(
     return getTestMockTask({ ...options, retrievalMode, targetDifficulty });
   }
 
-  // 1. Check Content Bank (Hybrid 70/30 Policy: 70% chance to fetch from Bank)
-  const bankSample = await sampleBankTask<VNToENTask>({
-    module: "vn_to_en",
-    level: retrievalMode,
-    difficulty: targetDifficulty,
-    category: options.category,
-    topic: options.topic,
-    forceSource: options.forceSource,
-  });
+  // Resolve dynamic / infinite / custom topic from rich situation pool
+  const effectiveTopic = resolveTopicForPrompt(options.topic);
 
-  if (bankSample) {
-    recordUserExposure(bankSample.contentId, "vn_to_en").catch(() => {});
-    return bankSample.task;
+  // 1. Content Bank: Only sampled if explicitly requested via forceSource === "bank"
+  // (Prevents repeating static seed sentences and guarantees boundless topic diversity)
+  if (options.forceSource === "bank") {
+    const bankSample = await sampleBankTask<VNToENTask>({
+      module: "vn_to_en",
+      level: retrievalMode,
+      difficulty: targetDifficulty,
+      category: options.category,
+      topic: options.topic && options.topic !== "random" ? options.topic : undefined,
+      forceSource: options.forceSource,
+    });
+
+    if (bankSample) {
+      recordUserExposure(bankSample.contentId, "vn_to_en").catch(() => {});
+      const task = bankSample.task;
+      if (!task.sayItBetter) {
+        const expList = task.expectedResponses || [];
+        task.sayItBetter = {
+          professional: expList[0] || task.targetIntent || "",
+          casual: expList[1] || expList[0] || task.targetIntent || "",
+          idiomatic: expList[2] || expList[0] || task.targetIntent || "",
+        };
+      }
+      return task;
+    }
   }
 
-  // 2. Dynamic AI Generation (30% novel LLM generation or when bank misses)
+  // 2. Dynamic AI Generation (100% novel LLM generation grounded deeply in the resolved topic)
   const userPrompt = buildVNToENTaskPrompt({
     retrievalMode,
     category: options.category,
@@ -118,13 +211,17 @@ export async function generateVNToENTask(
     weakSkills: options.weakSkills,
     recentErrors: options.recentErrors,
     recentPrompts: options.recentPrompts,
-    topic: options.topic,
+    topic: effectiveTopic,
   });
 
   let lastErrorMsg = "";
 
   const attemptGenerate = async (): Promise<VNToENTask | null> => {
     try {
+      // Gemini can easily handle 1000 output tokens without issue.
+      // Groq uses 750 tokens to guarantee the full schema is never truncated while safely within TPM.
+      const maxOutputTokens = provider === "groq" ? 750 : 1000;
+
       const res = await generateTextWithRouting({
         provider,
         model,
@@ -132,13 +229,16 @@ export async function generateVNToENTask(
           messages: [{ role: "user", content: userPrompt }],
           systemInstruction: VN_TO_EN_GENERATOR_SYSTEM,
           temperature: 0.7,
-          maxOutputTokens: 450, // Reduced from 900 to 450 to protect against Groq 8000 TPM limit
+          maxOutputTokens,
         },
       });
 
       const parsed = cleanJson(res.text) as Record<string, unknown>;
       if (!parsed) {
         lastErrorMsg = "AI trả về nội dung không phải JSON hợp lệ.";
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[VNToENTaskGenerator] Failed to parse JSON. Raw AI response snippet:", res.text.slice(0, 300));
+        }
         return null;
       }
 
@@ -247,7 +347,16 @@ export async function generateVNToENTask(
     });
     if (fallbackBank) {
       recordUserExposure(fallbackBank.contentId, "vn_to_en").catch(() => {});
-      return fallbackBank.task;
+      const fallbackTask = fallbackBank.task;
+      if (!fallbackTask.sayItBetter) {
+        const expList = fallbackTask.expectedResponses || [];
+        fallbackTask.sayItBetter = {
+          professional: expList[0] || fallbackTask.targetIntent || "",
+          casual: expList[1] || expList[0] || fallbackTask.targetIntent || "",
+          idiomatic: expList[2] || expList[0] || fallbackTask.targetIntent || "",
+        };
+      }
+      return fallbackTask;
     }
 
     throw new Error(

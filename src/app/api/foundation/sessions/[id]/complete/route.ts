@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
-import { createServerClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { foundationRepo } from "@/lib/db/sqlite-db";
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  if (!isSupabaseConfigured()) return NextResponse.json({ session: { id, status: "completed", completed_at: new Date().toISOString() } });
-  const supabase = createServerClient();
-  if (!supabase) return NextResponse.json({ session: { id, status: "completed" } });
-  const { data, error } = await supabase.from("foundation_sessions").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", id).select().single();
-  if (error) return NextResponse.json({ error: { message: error.message } }, { status: 500 });
-  return NextResponse.json({ session: data });
+  const completed_at = new Date().toISOString();
+  foundationRepo.completeSession(id, completed_at);
+  const session = foundationRepo.getSession(id);
+  return NextResponse.json({ session: session || { id, status: "completed", completed_at } });
 }
+

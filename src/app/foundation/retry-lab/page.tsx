@@ -2,15 +2,21 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
-import { Card, CardContent } from "@/components/ui/card";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { toast } from "@/lib/toast";
 import {
   RotateCcw,
   Sparkles,
-  ArrowLeft,
-  ShieldCheck,
   Zap,
   TrendingUp,
   AlertTriangle,
@@ -19,46 +25,81 @@ import {
   RefreshCw,
   Loader2,
   Settings,
-  HelpCircle,
   X,
-  Play,
+  Trophy,
+  Compass,
+  ChevronDown,
+  Wand2,
+  Coffee,
+  Briefcase,
+  Plane,
+  Utensils,
+  Laptop,
+  ShoppingBag,
+  HeartPulse,
+  Clock,
+  ArrowRight,
+  ShieldCheck,
+  CheckCircle2,
 } from "lucide-react";
 
 import { useRetryLoopStore } from "@/stores/retry-loop-store";
-import { useSettingsStore } from "@/stores/settings-store";
 import { RepairPromptCard } from "@/components/foundation/retry-loop/RepairPromptCard";
 import { RepairContextCard } from "@/components/foundation/retry-loop/RepairContextCard";
 import { RepairFeedbackCard } from "@/components/foundation/retry-loop/RepairFeedbackCard";
+import { RepairSummaryModal } from "@/components/foundation/retry-loop/RepairSummaryModal";
 import { SpeakingController } from "@/components/foundation/sentence-builder/SpeakingController";
 import { GlobalAiSelector } from "@/components/common/GlobalAiSelector";
 import { getErrorBankRecords } from "@/lib/foundation/sentence-builder/error-bank.service";
+import { PRESET_TOPICS, getTopicDisplay } from "@/lib/foundation/sentence-builder/topics";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 import { useUnifiedSTT } from "@/hooks/useUnifiedSTT";
 import { soundEffects } from "@/lib/audio/audio-chimes";
-import type { ErrorBankRecord } from "@/types/sentence-builder";
+
+const TOPIC_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  Sparkles,
+  Coffee,
+  Briefcase,
+  Plane,
+  Utensils,
+  Laptop,
+  ShoppingBag,
+  HeartPulse,
+};
 
 export default function SpokenRepairLabPage() {
+  const router = useRouter();
+
   const {
     activeSession,
     metrics,
     isEvaluatingRepair,
     isGeneratingChallenge,
-    isGeneratingCorrection,
     lastRepairResult,
     generationError,
+    selectedTopicId,
+    customTopicText,
+    currentChallengeIndex,
+    completedChallengesCount,
+    isSessionCompleted,
+    sessionSummary,
     clearGenerationError,
     generateAiRepairChallenge,
     startRepairSession,
     submitRepairSpokenAttempt,
+    setSelectedTopic,
+    finishSessionManually,
+    resetSession,
     closeActiveSession,
   } = useRetryLoopStore();
 
-  const [errorRecords, setErrorRecords] = useState<ErrorBankRecord[]>([]);
   const [currentHintTier, setCurrentHintTier] = useState(0);
   const [autoStartMic, setAutoStartMic] = useState(false);
   const [prepSecondsLeft, setPrepSecondsLeft] = useState<number | null>(null);
   const [pendingSpokenText, setPendingSpokenText] = useState<string | null>(null);
   const [pendingDurationMs, setPendingDurationMs] = useState<number>(1500);
+  const [isTopicModalOpen, setIsTopicModalOpen] = useState(false);
+  const [customInputVal, setCustomInputVal] = useState("");
 
   // Audio / Speech Hooks
   const tts = useBrowserTTS();
@@ -67,29 +108,55 @@ export default function SpokenRepairLabPage() {
   unifiedSTTRef.current = unifiedSTT;
   const [recordingStartTime, setRecordingStartTime] = useState(0);
   const [elapsedDurationMs, setElapsedDurationMs] = useState(0);
+  const [promptDisplayTime, setPromptDisplayTime] = useState(Date.now());
   const durationTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const autoLaunchedRef = useRef(false);
 
-  // Load Error Bank records for lobby and auto-launch if ?recordId=... is passed
+  // Zero-Lobby: Auto-launch first challenge or load from Error Bank on mount
   useEffect(() => {
-    try {
-      const records = getErrorBankRecords();
-      setErrorRecords(records);
+    if (autoLaunchedRef.current) return;
 
-      if (typeof window !== "undefined" && !autoLaunchedRef.current && !activeSession) {
-        const urlParams = new URLSearchParams(window.location.search);
-        const recordId = urlParams.get("recordId") || urlParams.get("errorId");
-        if (recordId) {
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      const recordId = urlParams.get("recordId") || urlParams.get("errorId");
+      if (recordId) {
+        try {
+          const records = getErrorBankRecords();
           const target = records.find((r) => r.id === recordId);
           if (target) {
             autoLaunchedRef.current = true;
-            handleStartFromErrorBank(target);
+            startRepairSession({
+              originalTaskId: target.id,
+              sourceContext: "retry_lab",
+              originalPrompt: target.targetSentence,
+              originalTranscript: target.userSpokenTranscript || target.erroneousSentence,
+              expectedSentence: target.targetSentence,
+              detectedErrors: target.detectedErrors?.map((e) => ({
+                type: e.type,
+                userText: e.userErroneousWord || "",
+                correction: e.correctedWord || "",
+                explanation: e.explanationVi || "",
+              })),
+            });
+            return;
           }
-        }
+        } catch {}
       }
-    } catch {}
-  }, [activeSession]);
+    }
+
+    if (!activeSession && !isGeneratingChallenge) {
+      autoLaunchedRef.current = true;
+      generateAiRepairChallenge();
+    }
+  }, [activeSession, isGeneratingChallenge, generateAiRepairChallenge, startRepairSession]);
+
+  // Track prompt display time for latency calculation
+  useEffect(() => {
+    if (activeSession) {
+      setPromptDisplayTime(Date.now());
+    }
+  }, [activeSession?.sessionId]);
 
   // Handle Prep Countdown Timer when a new session starts
   useEffect(() => {
@@ -138,7 +205,7 @@ export default function SpokenRepairLabPage() {
   }, [unifiedSTT.isListening, recordingStartTime]);
 
   // Start Mic Recording
-  const handleStartRecord = async () => {
+  const handleStartRecord = useCallback(async () => {
     soundEffects.playMicStart();
     unifiedSTTRef.current.resetTranscript();
     setPendingSpokenText(null);
@@ -149,584 +216,492 @@ export default function SpokenRepairLabPage() {
     } catch {
       toast.error("Lỗi Micro", "Vui lòng cấp quyền micro cho trình duyệt.");
     }
-  };
+  }, []);
 
-  // Stop Mic Recording -> Store in pending review state
-  const handleStopRecord = async () => {
+  // Stop Mic Recording -> Pending Review
+  const handleStopRecord = useCallback(async () => {
     if (!unifiedSTTRef.current.isListening) return;
     soundEffects.playMicStop();
-    const durationMs = Math.max(600, Date.now() - recordingStartTime);
+    const durationMs = Math.max(700, Date.now() - recordingStartTime);
 
     try {
       const { text: spokenText } = await unifiedSTTRef.current.stopListening();
-      if (spokenText) {
-        setPendingSpokenText(spokenText);
-        setPendingDurationMs(durationMs);
-      } else {
-        toast.info("Chưa phát hiện giọng nói", "Vui lòng nhấn Mic và thử nói lại câu đã sửa.");
+      if (!spokenText) {
+        toast.error("Chưa ghi nhận được âm thanh", "Vui lòng bấm mic và nói lại câu.");
+        return;
       }
+      setPendingSpokenText(spokenText);
+      setPendingDurationMs(durationMs);
     } catch {
       toast.error("Lỗi hoàn thành thu âm", "Hãy thử nói lại câu.");
     }
-  };
+  }, [recordingStartTime]);
 
-  // Evaluate attempt
-  const evaluateSpokenAttempt = async (spokenText: string, durationMs: number) => {
-    if (!activeSession) return;
-    try {
-      const res = await submitRepairSpokenAttempt({
-        spokenTranscript: spokenText,
-        responseLatencyMs: 1500,
-        speechDurationMs: durationMs,
-        expectedSentence: activeSession.targetCorrection.betterSentence,
-      });
+  // Confirm submit speech attempt
+  const handleConfirmSubmit = useCallback(async () => {
+    if (!pendingSpokenText || !activeSession) return;
+    const responseLatency = Math.max(400, recordingStartTime ? recordingStartTime - promptDisplayTime : 1500);
 
-      if (res?.isSuccessful) {
-        soundEffects.playAIReady();
-      } else {
-        soundEffects.playMicStop();
-      }
-    } finally {
-      setPendingSpokenText(null);
+    const result = await submitRepairSpokenAttempt({
+      spokenTranscript: pendingSpokenText,
+      responseLatencyMs: responseLatency,
+      speechDurationMs: pendingDurationMs,
+      expectedSentence: activeSession.targetCorrection.betterSentence,
+    });
+
+    if (result?.isSuccessful) {
+      soundEffects.playAIReady();
     }
-  };
+    setPendingSpokenText(null);
+  }, [pendingSpokenText, activeSession, recordingStartTime, promptDisplayTime, pendingDurationMs, submitRepairSpokenAttempt]);
 
-  // User confirms submitting pending speech
-  const handleConfirmSubmit = async () => {
-    if (!pendingSpokenText) return;
-    await evaluateSpokenAttempt(pendingSpokenText, pendingDurationMs);
-  };
-
-  // User decides to re-record
-  const handleReRecord = () => {
+  // Re-record
+  const handleReRecord = useCallback(() => {
     setPendingSpokenText(null);
     handleStartRecord();
-  };
+  }, [handleStartRecord]);
 
-  // Handle Practice from Error Bank
-  const handleStartFromErrorBank = async (record: ErrorBankRecord) => {
-    const userText = record.examples[0]?.userText || record.labelVi || "lỗi khẩu ngữ";
-    const correction = record.examples[0]?.correction || record.description || "câu chuẩn";
-    const explanation = record.description || record.labelVi;
-
-    setCurrentHintTier(0);
+  // Next challenge
+  const handleNextChallenge = useCallback(() => {
+    if (isGeneratingChallenge || isEvaluatingRepair) return;
     setPendingSpokenText(null);
-    await startRepairSession({
-      originalTaskId: record.id,
-      sourceContext: "retry_lab",
-      originalPrompt: `Sửa lại lỗi sau trong câu: "${userText}"`,
-      originalTranscript: userText,
-      expectedSentence: correction,
-      detectedErrors: [
-        {
-          type: record.category === "sentence_structure" ? "grammar" : record.category,
-          userText,
-          correction,
-          explanation,
-        },
-      ],
-    });
-  };
-
-  // Handle AI Instant Challenge
-  const handleStartAiChallenge = async (category?: string) => {
     setCurrentHintTier(0);
+    useRetryLoopStore.setState({ lastRepairResult: null });
+    generateAiRepairChallenge();
+  }, [isGeneratingChallenge, isEvaluatingRepair, generateAiRepairChallenge]);
+
+  // Select Topic from Dialog
+  const handleSelectTopic = (topicId: string, customText?: string) => {
+    setSelectedTopic(topicId, customText);
+    setIsTopicModalOpen(false);
+    const display = getTopicDisplay(customText ? `custom_scenario: ${customText}` : topicId);
+    toast.success("Đã chọn chủ đề", display.label);
     setPendingSpokenText(null);
-    await generateAiRepairChallenge(category);
+    setCurrentHintTier(0);
+    generateAiRepairChallenge(undefined, customText ? `custom_scenario: ${customText}` : topicId);
   };
 
-  // Keyboard Shortcuts Handler
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      // Don't capture when typing in text fields
-      const target = e.target as HTMLElement;
-      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+  // Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = (document.activeElement?.tagName || "").toLowerCase();
+      if (activeTag === "input" || activeTag === "textarea") return;
 
-      // Space: Toggle Mic / Re-record / Retry
       if (e.code === "Space") {
         e.preventDefault();
-        if (activeSession && !lastRepairResult) {
-          if (unifiedSTT.isListening) {
-            handleStopRecord();
-          } else if (pendingSpokenText) {
-            handleReRecord();
-          } else if (!isEvaluatingRepair) {
-            handleStartRecord();
-          }
-        } else if (lastRepairResult) {
-          // Retry same challenge
+        if (lastRepairResult) {
           useRetryLoopStore.setState({ lastRepairResult: null });
           setPendingSpokenText(null);
           setCurrentHintTier(0);
+          if (autoStartMic) handleStartRecord();
+        } else if (pendingSpokenText) {
+          handleReRecord();
+        } else if (unifiedSTTRef.current.isListening) {
+          handleStopRecord();
+        } else {
+          handleStartRecord();
         }
-      }
-
-      // Backspace: Reset live transcript while keeping mic open
-      if (e.code === "Backspace") {
-        if (unifiedSTT.isListening) {
+      } else if (e.key === "r" || e.key === "R") {
+        e.preventDefault();
+        handleNextChallenge();
+      } else if (e.key === "h" || e.key === "H") {
+        e.preventDefault();
+        setCurrentHintTier((prev) => (prev >= 4 ? 0 : prev + 1));
+      } else if (e.key === "Backspace") {
+        if (unifiedSTTRef.current.isListening) {
           e.preventDefault();
           unifiedSTTRef.current.resetTranscript();
           setPendingSpokenText(null);
-          soundEffects.playMicStop();
         }
-      }
-
-      // Key H: Cycle Hints (0 -> 1 -> 2 -> 3 -> 4 -> 0)
-      if (e.code === "KeyH" && !isEvaluatingRepair) {
-        e.preventDefault();
-        setCurrentHintTier((prev) => (prev >= 4 ? 0 : prev + 1));
-      }
-
-      // Key R: Next Challenge
-      if (e.code === "KeyR" && !isEvaluatingRepair && !isGeneratingChallenge) {
-        e.preventDefault();
-        handleStartAiChallenge();
-      }
-
-      // Enter: Confirm pending submit or Advance to next challenge
-      if (e.code === "Enter") {
+      } else if (e.key === "Enter") {
         if (pendingSpokenText && !isEvaluatingRepair) {
           e.preventDefault();
           handleConfirmSubmit();
         } else if (lastRepairResult) {
           e.preventDefault();
-          handleStartAiChallenge();
+          handleNextChallenge();
+        }
+      } else if (e.key === "Escape") {
+        if (isTopicModalOpen) {
+          setIsTopicModalOpen(false);
         }
       }
+    };
 
-      // Esc: Collapse hints or exit Studio
-      if (e.code === "Escape") {
-        e.preventDefault();
-        if (currentHintTier > 0) {
-          setCurrentHintTier(0);
-        } else if (activeSession) {
-          setPendingSpokenText(null);
-          closeActiveSession();
-        }
-      }
-    },
-    [
-      activeSession,
-      lastRepairResult,
-      unifiedSTT.isListening,
-      currentHintTier,
-      isEvaluatingRepair,
-      pendingSpokenText,
-      pendingDurationMs,
-      handleConfirmSubmit,
-    ]
-  );
-
-  useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleKeyDown]);
+  }, [
+    isTopicModalOpen,
+    lastRepairResult,
+    pendingSpokenText,
+    isEvaluatingRepair,
+    autoStartMic,
+    handleStartRecord,
+    handleStopRecord,
+    handleReRecord,
+    handleConfirmSubmit,
+    handleNextChallenge,
+  ]);
 
-  const liveText = unifiedSTT.fullTranscript;
+  const liveText = pendingSpokenText || unifiedSTT.transcript || unifiedSTT.interimTranscript;
 
-  // ==================== 1. STUDIO MODE (Active Session) ====================
-  if (activeSession) {
+  // 1. Loading State (Zero-Lobby Initial Fetch)
+  if (!activeSession) {
     return (
-      <div className="w-full h-full max-h-[calc(100vh-5.5rem)] flex flex-col bg-background overflow-hidden select-none">
-        {/* Studio Top Header Bar */}
-        <header className="h-14 border-b border-border/80 bg-card/95 backdrop-blur-md px-3 sm:px-5 flex items-center justify-between gap-2 shrink-0 z-10">
-          <div className="flex items-center gap-2.5">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={closeActiveSession}
-              className="h-8 px-2.5 rounded-xl text-xs font-semibold gap-1.5 text-muted-foreground hover:text-foreground hover:bg-muted"
-              title="Thoát phòng thí nghiệm (Esc)"
-            >
-              <ArrowLeft className="size-4" />
-              <span className="hidden sm:inline">Rời Studio</span>
-            </Button>
-
-            <div className="h-4 w-px bg-border/60 hidden sm:block" />
-
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                <RotateCcw className="size-3.5 text-amber-500" />
-                <span>Spoken Repair Lab</span>
-              </span>
-              <Badge
-                variant="outline"
-                className="text-[10px] font-mono border-amber-500/30 text-amber-600 dark:text-amber-400 hidden md:inline-flex"
-              >
-                {activeSession.sourceContext === "retry_lab" ? "⚡ AI Challenge" : "📁 Error Bank"}
-              </Badge>
-            </div>
-          </div>
-
-          {/* Center: Preparation Timer */}
-          {prepSecondsLeft !== null && prepSecondsLeft > 0 && (
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 animate-pulse">
-              <Sparkles className="size-3.5" />
-              <span className="text-xs font-bold font-mono">
-                Chuẩn bị: {prepSecondsLeft.toFixed(1)}s
-              </span>
-            </div>
-          )}
-
-          {/* Right Header Actions: Next Challenge, GlobalAiSelector */}
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => handleStartAiChallenge()}
-              disabled={isGeneratingChallenge || isEvaluatingRepair}
-              className="h-8 px-2.5 rounded-xl text-xs font-semibold gap-1.5 border-primary/30 text-primary hover:bg-primary/10 btn-spring shadow-2xs"
-              title="Câu sửa sai tiếp theo (phím R)"
-            >
-              {isGeneratingChallenge ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <Sparkles className="size-3.5 text-primary" />
-              )}
-              <span className="hidden sm:inline">Câu tiếp [R]</span>
-            </Button>
-
-            <GlobalAiSelector size="sm" />
-          </div>
-        </header>
-
-        {/* Generation Error Banner */}
-        {generationError && (
-          <div className="bg-destructive/10 border-b border-destructive/30 px-4 py-2 flex items-center justify-between text-xs text-destructive shrink-0">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="size-4 shrink-0" />
-              <span>{generationError}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => handleStartAiChallenge()}
-                className="h-6 px-2 text-[11px] border-destructive/30 hover:bg-destructive/10 text-destructive"
-              >
-                Thử lại ngay
-              </Button>
-              <Link href="/settings">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-6 px-2 text-[11px] text-destructive hover:bg-destructive/10"
-                >
-                  Kiểm tra API Key
-                </Button>
-              </Link>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={clearGenerationError}
-                className="size-6 p-0 text-destructive"
-              >
-                <X className="size-3" />
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Studio Main Body: 3-Column Zero-Scroll Studio */}
-        <main className="flex-1 min-h-0 p-2.5 sm:p-4 overflow-hidden">
-          <div className="h-full w-full grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 overflow-hidden">
-            {/* Column 1 (4 cols): Repair Prompt & Focus Card */}
-            <div className="lg:col-span-4 h-full min-h-0 overflow-hidden flex flex-col">
-              <RepairPromptCard
-                session={activeSession}
-                currentHintTier={currentHintTier}
-                onSelectHintTier={setCurrentHintTier}
-              />
-            </div>
-
-            {/* Column 2 (5 cols): Context, Structure & 4-Tier Ladder */}
-            <div className="lg:col-span-5 h-full min-h-0 overflow-hidden flex flex-col">
-              <RepairContextCard
-                session={activeSession}
-                currentHintTier={currentHintTier}
-                onSelectHintTier={setCurrentHintTier}
-              />
-            </div>
-
-            {/* Column 3 (3 cols): Compact Speaking Controller or Feedback Card */}
-            <div className="lg:col-span-3 h-full min-h-0 overflow-hidden flex flex-col">
-              {!lastRepairResult ? (
-                <SpeakingController
-                  compact={true}
-                  status={
-                    isEvaluatingRepair || unifiedSTT.isTranscribing
-                      ? "processing"
-                      : unifiedSTT.isListening
-                      ? "recording"
-                      : "idle"
-                  }
-                  isListening={unifiedSTT.isListening}
-                  liveTranscript={liveText}
-                  durationMs={elapsedDurationMs || unifiedSTT.audioRecorder.durationMs}
-                  autoStartMic={autoStartMic}
-                  onToggleAutoStartMic={setAutoStartMic}
-                  onStartRecord={handleStartRecord}
-                  onStopRecord={handleStopRecord}
-                  onSubmitTextFallback={(text) => evaluateSpokenAttempt(text, 1500)}
-                  onOpenHints={() => setCurrentHintTier((prev) => (prev >= 4 ? 0 : prev + 1))}
-                  isEvaluating={isEvaluatingRepair || unifiedSTT.isTranscribing}
-                  onResetLiveTranscript={() => {
-                    unifiedSTTRef.current.resetTranscript();
-                    setPendingSpokenText(null);
-                  }}
-                  pendingText={pendingSpokenText}
-                  onConfirmSubmit={handleConfirmSubmit}
-                  onReRecord={handleReRecord}
-                />
-              ) : (
-                <RepairFeedbackCard
-                  session={activeSession}
-                  result={lastRepairResult}
-                  onRetry={() => {
-                    useRetryLoopStore.setState({ lastRepairResult: null });
-                    setPendingSpokenText(null);
-                    setCurrentHintTier(0);
-                  }}
-                  onContinue={() => handleStartAiChallenge()}
-                />
-              )}
-            </div>
-          </div>
-        </main>
-
-        {/* Studio Footer Keybindings Dock */}
-        <footer className="h-10 border-t border-border/40 bg-card/80 px-4 flex items-center justify-between text-[11px] text-muted-foreground shrink-0 select-none">
-          <div className="flex items-center gap-3 overflow-x-auto py-1">
-            <span className="flex items-center gap-1 font-mono">
-              <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
-                Space
-              </kbd>
-              <span>{lastRepairResult ? "Nói lại" : pendingSpokenText ? "Thu âm lại" : "Nói / Dừng"}</span>
-            </span>
-            <span className="flex items-center gap-1 font-mono hidden sm:inline-flex">
-              <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
-                Backspace
-              </kbd>
-              <span>Xóa nói lại</span>
-            </span>
-            <span className="flex items-center gap-1 font-mono">
-              <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
-                H
-              </kbd>
-              <span>Đổi tầng gợi ý</span>
-            </span>
-            <span className="flex items-center gap-1 font-mono">
-              <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
-                R
-              </kbd>
-              <span>Câu tiếp</span>
-            </span>
-            {pendingSpokenText && !isEvaluatingRepair ? (
-              <span className="flex items-center gap-1 font-mono text-primary font-bold">
-                <kbd className="px-1.5 py-0.5 rounded bg-primary text-primary-foreground border text-[10px] font-bold">
-                  Enter
-                </kbd>
-                <span>Nộp bài chấm điểm</span>
-              </span>
-            ) : (
-              <span className="flex items-center gap-1 font-mono hidden md:inline-flex">
-                <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
-                  Enter
-                </kbd>
-                <span>Câu tiếp</span>
-              </span>
-            )}
-            <span className="flex items-center gap-1 font-mono">
-              <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
-                Esc
-              </kbd>
-              <span>Đóng gợi ý / Thoát</span>
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1.5 font-mono text-[10px]">
-            <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="hidden md:inline">Spoken Repair Studio Active</span>
-          </div>
-        </footer>
+      <div className="p-8 rounded-3xl border border-border/80 bg-card space-y-4 max-w-lg mx-auto my-16 text-center animate-in fade-in-0 shadow-sm">
+        <div className="size-12 rounded-2xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto animate-pulse">
+          <Sparkles className="size-6 animate-spin" />
+        </div>
+        <div className="space-y-1">
+          <h2 className="text-base font-bold text-foreground">AI đang khởi tạo bài tập Spoken Repair...</h2>
+          <p className="text-xs text-muted-foreground">
+            Chủ đề: {getTopicDisplay(selectedTopicId).label}. Vào phòng tập sửa lỗi ngay.
+          </p>
+        </div>
+        <Skeleton className="h-24 w-full rounded-2xl" />
       </div>
     );
   }
 
-  // ==================== 2. LOBBY & DASHBOARD VIEW (When no active session) ====================
+  // 2. Main Studio View (Professional 3-Column Zero-Scroll Layout)
   return (
-    <div className="space-y-8 pb-16 animate-in fade-in-0 duration-300 max-w-5xl mx-auto px-2 sm:px-4">
-      {/* Top Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+    <div className="w-full h-full max-h-[calc(100vh-5.5rem)] flex flex-col justify-between overflow-hidden rounded-3xl border border-border/80 bg-card p-2.5 sm:p-3.5 shadow-xs animate-in fade-in-0 duration-200">
+      {/* Studio Top Header */}
+      <header className="flex items-center justify-between border-b border-border/40 pb-2.5 shrink-0 gap-3">
+        {/* Left: Exit button & Inline Topic Selector */}
         <div className="flex items-center gap-2.5">
           <Link href="/foundation">
-            <Button variant="ghost" size="sm" className="size-9 p-0 rounded-full">
-              <ArrowLeft className="size-4" />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="size-8 p-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
+              title="Thoát về Foundation Hub"
+            >
+              <X className="size-4" />
             </Button>
           </Link>
-          <div>
-            <h1 className="text-base sm:text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
-              <RotateCcw className="size-4 text-amber-500" />
-              <span>Spoken Repair Lab (Phòng Thí Nghiệm Sửa Sai)</span>
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              Chu trình Correct → Say Again: Biến nhận thức lỗi thành phản xạ khẩu ngữ tự nhiên
-            </p>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs md:text-sm font-bold tracking-tight text-foreground flex items-center gap-1.5">
+              <RotateCcw className="size-3.5 text-amber-500" />
+              <span>Spoken Repair Lab</span>
+            </span>
+
+            {/* In-Studio Topic Selector Badge */}
+            <button
+              type="button"
+              onClick={() => setIsTopicModalOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-foreground text-xs font-mono transition-all cursor-pointer group max-w-[200px] sm:max-w-[260px] truncate"
+              title="Bấm để đổi chủ đề luyện tập"
+            >
+              <Compass className="size-3 text-amber-500 shrink-0 group-hover:rotate-45 transition-transform" />
+              <span className="truncate font-medium">
+                {getTopicDisplay(activeSession.topic || selectedTopicId).label}
+              </span>
+              <ChevronDown className="size-3 text-muted-foreground shrink-0 ml-0.5" />
+            </button>
+
+            <GlobalAiSelector size="sm" />
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <GlobalAiSelector size="sm" />
-        </div>
-      </div>
-
-      {/* Hero Action: AI Instant Challenge Generator */}
-      <Card className="rounded-3xl border-2 border-primary/40 bg-gradient-to-r from-primary/15 via-card to-amber-500/10 p-6 shadow-sm overflow-hidden">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="space-y-1.5 max-w-xl">
-            <h2 className="text-lg md:text-xl font-bold text-foreground">
-              Studio Luyện Phản Xạ Sửa Lỗi (Retry Lab)
-            </h2>
+        {/* Center: Preparation Countdown Badge */}
+        {prepSecondsLeft !== null && prepSecondsLeft > 0 ? (
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-mono font-bold animate-pulse">
+            <Clock className="size-3.5" />
+            <span>Nói sau {prepSecondsLeft.toFixed(1)}s...</span>
           </div>
+        ) : null}
 
+        {/* Right Actions: Next challenge, Counter & Finish */}
+        <div className="flex items-center gap-2.5">
+          {/* Next Task Button */}
           <Button
-            size="lg"
-            onClick={() => handleStartAiChallenge()}
-            disabled={isGeneratingChallenge}
-            className="rounded-2xl font-bold text-sm px-6 h-12 gap-2 btn-spring shadow-md shrink-0 w-full md:w-auto"
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleNextChallenge}
+            disabled={isGeneratingChallenge || isEvaluatingRepair}
+            className="h-8 px-2.5 rounded-xl font-bold text-xs gap-1.5 border-primary/40 bg-primary/5 hover:bg-primary hover:text-primary-foreground text-primary transition-all shadow-2xs btn-spring"
+            title="Đổi sang câu sửa lỗi tiếp theo (phím R)"
           >
             {isGeneratingChallenge ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                <span>AI đang tạo câu...</span>
-              </>
+              <Loader2 className="size-3.5 animate-spin" />
             ) : (
-              <>
-                <Play className="size-4 fill-current" />
-                <span>Bắt đầu Luyện AI Ngay</span>
-              </>
+              <Sparkles className="size-3.5 text-primary" />
             )}
+            <span className="hidden sm:inline">Câu tiếp theo</span>
+            <span className="text-[9px] font-mono opacity-60 hidden sm:inline">[R]</span>
+          </Button>
+
+          {/* Endless Progress Indicator */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono font-bold text-foreground">
+              Câu #{currentChallengeIndex + 1}
+            </span>
+            <Badge
+              variant="outline"
+              className="text-[10px] font-mono border-amber-500/30 text-amber-600 dark:text-amber-400"
+            >
+              Đã sửa {completedChallengesCount}
+            </Badge>
+          </div>
+
+          {/* Finish & View Summary Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={finishSessionManually}
+            disabled={isGeneratingChallenge || isEvaluatingRepair}
+            className="h-8 px-2.5 rounded-xl font-bold text-xs gap-1.5 border-amber-500/40 bg-amber-500/10 hover:bg-amber-500 hover:text-white text-amber-600 dark:text-amber-400 transition-all shadow-2xs btn-spring"
+            title="Kết thúc buổi tập và xem báo cáo tổng kết"
+          >
+            <Trophy className="size-3.5" />
+            <span className="hidden sm:inline">Kết thúc & Xem kết quả</span>
+            <span className="sm:hidden">Nghỉ tập</span>
           </Button>
         </div>
-      </Card>
+      </header>
 
-      {/* Metrics Banner */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="p-4 rounded-2xl bg-card border border-border/80 text-center space-y-1 shadow-xs">
-          <span className="text-[10px] text-muted-foreground font-semibold block">Tỉ lệ phục hồi (Recovery)</span>
-          <span className="font-mono text-xl font-bold text-emerald-500">
-            {metrics.errorRecoveryRate}%
-          </span>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-card border border-border/80 text-center space-y-1 shadow-xs">
-          <span className="text-[10px] text-muted-foreground font-semibold block">Sửa chuẩn lần đầu</span>
-          <span className="font-mono text-xl font-bold text-primary">
-            {metrics.firstRetrySuccessRate}%
-          </span>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-card border border-border/80 text-center space-y-1 shadow-xs">
-          <span className="text-[10px] text-muted-foreground font-semibold block">Tự sửa lỗi (Self-Correction)</span>
-          <span className="font-mono text-xl font-bold text-indigo-500">
-            {metrics.selfCorrectionCount}
-          </span>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-card border border-border/80 text-center space-y-1 shadow-xs">
-          <span className="text-[10px] text-muted-foreground font-semibold block">Tổng lỗi đã sửa</span>
-          <span className="font-mono text-xl font-bold text-foreground">
-            {metrics.totalResolvedCount}
-          </span>
-        </div>
-      </div>
-
-      {/* Error Bank Records Section */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
-            <AlertTriangle className="size-4 text-amber-500" />
-            <span>Mẫu lỗi thực tế từ Ngân hàng Lỗi (Error Bank):</span>
-          </h2>
-          <span className="text-xs text-muted-foreground font-mono">{errorRecords.length} mẫu lỗi đã lưu</span>
-        </div>
-
-        {errorRecords.length === 0 ? (
-          <Card className="rounded-3xl border border-dashed border-border/80 p-8 text-center space-y-3 bg-muted/20">
-            <div className="size-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto">
-              <ShieldCheck className="size-6" />
-            </div>
-            <div className="space-y-1">
-              <h3 className="text-sm font-bold text-foreground">Ngân hàng Lỗi cá nhân hiện đang trống</h3>
-              <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed">
-                Bạn chưa có lỗi nào ghi nhận từ Sentence Builder hay VN → EN. Nhưng bạn có thể bấm <strong>"Bắt đầu Luyện AI Ngay"</strong> ở trên để AI tạo các thử thách sửa sai kinh điển ngay lập tức!
-              </p>
-            </div>
-            <div className="pt-2">
+      {/* Generation Error Banner */}
+      {generationError && (
+        <div className="bg-destructive/10 border-b border-destructive/30 px-4 py-2 flex items-center justify-between text-xs text-destructive shrink-0">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="size-4 shrink-0" />
+            <span>{generationError}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleNextChallenge}
+              className="h-6 px-2 text-[11px] border-destructive/30 hover:bg-destructive/10 text-destructive"
+            >
+              Thử lại ngay
+            </Button>
+            <Link href="/settings">
               <Button
                 size="sm"
-                onClick={() => handleStartAiChallenge()}
-                className="rounded-xl font-bold text-xs gap-1.5"
+                variant="ghost"
+                className="h-6 px-2 text-[11px] text-destructive hover:bg-destructive/10"
               >
-                <Sparkles className="size-3.5" />
-                <span>Thực hành thử thách sửa lỗi AI</span>
+                Kiểm tra API Key
               </Button>
-            </div>
-          </Card>
-        ) : (
-          <div className="grid sm:grid-cols-2 gap-4">
-            {errorRecords.map((rec) => (
-              <Card
-                key={rec.id}
-                className="rounded-3xl border border-border/80 bg-card hover:border-primary/50 transition-all p-5 space-y-3 shadow-xs flex flex-col justify-between"
-              >
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Badge variant="secondary" className="text-[10px] font-mono capitalize">
-                      {rec.category}
-                    </Badge>
-                    <span className="text-[11px] font-mono text-muted-foreground">
-                      Gặp {rec.frequency} lần
+            </Link>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={clearGenerationError}
+              className="size-6 p-0 text-destructive"
+            >
+              <X className="size-3" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Main Studio Body: 3-Column Zero-Scroll Layout */}
+      <main className="flex-1 min-h-0 p-2 sm:p-2.5 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-2.5 lg:gap-3">
+        {/* Column 1 (4 cols): Repair Prompt & Focus Card */}
+        <div className="lg:col-span-4 h-full min-h-0 overflow-hidden flex flex-col">
+          <RepairPromptCard
+            session={activeSession}
+            currentHintTier={currentHintTier}
+            onSelectHintTier={setCurrentHintTier}
+          />
+        </div>
+
+        {/* Column 2 (5 cols): Context, Structure & 4-Tier Ladder */}
+        <div className="lg:col-span-5 h-full min-h-0 overflow-hidden flex flex-col">
+          <RepairContextCard
+            session={activeSession}
+            currentHintTier={currentHintTier}
+            onSelectHintTier={setCurrentHintTier}
+          />
+        </div>
+
+        {/* Column 3 (3 cols): Speaking Controller or Feedback Card */}
+        <div className="lg:col-span-3 h-full min-h-0 overflow-hidden flex flex-col">
+          {!lastRepairResult ? (
+            <SpeakingController
+              compact={true}
+              status={
+                isEvaluatingRepair || unifiedSTT.isTranscribing
+                  ? "processing"
+                  : unifiedSTT.isListening
+                  ? "recording"
+                  : "idle"
+              }
+              isListening={unifiedSTT.isListening}
+              liveTranscript={liveText}
+              durationMs={elapsedDurationMs || unifiedSTT.audioRecorder.durationMs}
+              autoStartMic={autoStartMic}
+              onToggleAutoStartMic={setAutoStartMic}
+              onStartRecord={handleStartRecord}
+              onStopRecord={handleStopRecord}
+              onSubmitTextFallback={(text) => {
+                submitRepairSpokenAttempt({
+                  spokenTranscript: text,
+                  responseLatencyMs: 1500,
+                  speechDurationMs: 1500,
+                  expectedSentence: activeSession.targetCorrection.betterSentence,
+                });
+              }}
+              onOpenHints={() => setCurrentHintTier((prev) => (prev >= 4 ? 0 : prev + 1))}
+              isEvaluating={isEvaluatingRepair || unifiedSTT.isTranscribing}
+              onResetLiveTranscript={() => {
+                unifiedSTTRef.current.resetTranscript();
+                setPendingSpokenText(null);
+              }}
+              pendingText={pendingSpokenText}
+              onConfirmSubmit={handleConfirmSubmit}
+              onReRecord={handleReRecord}
+            />
+          ) : (
+            <RepairFeedbackCard
+              session={activeSession}
+              result={lastRepairResult}
+              onRetry={() => {
+                useRetryLoopStore.setState({ lastRepairResult: null });
+                setPendingSpokenText(null);
+                setCurrentHintTier(0);
+              }}
+              onContinue={handleNextChallenge}
+            />
+          )}
+        </div>
+      </main>
+
+      {/* Studio Footer Keybindings Dock */}
+      <footer className="flex items-center justify-between border-t border-border/40 pt-1.5 shrink-0 text-[11px] font-mono text-muted-foreground">
+        <div className="flex items-center gap-3 overflow-x-auto py-0.5">
+          <span>
+            [Space]: {lastRepairResult ? "Nói lại" : pendingSpokenText ? "Thu âm lại" : "Thu âm/Dừng"}
+          </span>
+          <span>•</span>
+          <span className="hidden sm:inline">[Backspace]: Xóa nói lại</span>
+          <span className="hidden sm:inline">•</span>
+          <span>[H]: Gợi ý ({currentHintTier}/4)</span>
+          <span>•</span>
+          <span>[R]: Câu tiếp</span>
+          {pendingSpokenText && !isEvaluatingRepair && (
+            <>
+              <span>•</span>
+              <span className="text-primary font-bold">[Enter]: Nộp bài</span>
+            </>
+          )}
+          {lastRepairResult && (
+            <>
+              <span>•</span>
+              <span className="text-primary font-bold">[Enter]: Câu tiếp theo</span>
+            </>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 font-mono text-[10px]">
+          <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="hidden md:inline">Spoken Repair Studio Active</span>
+        </div>
+      </footer>
+
+      {/* In-Studio Topic Selector Dialog */}
+      <Dialog open={isTopicModalOpen} onOpenChange={setIsTopicModalOpen}>
+        <DialogContent className="sm:max-w-xl rounded-3xl p-5 md:p-6 bg-card border border-border/80 shadow-2xl space-y-4">
+          <DialogHeader className="space-y-1">
+            <DialogTitle className="text-base md:text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
+              <Compass className="size-5 text-amber-500" />
+              <span>Đổi chủ đề luyện Spoken Repair</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Chọn một ngữ cảnh có sẵn hoặc gõ tình huống tùy chỉnh để AI sinh câu có lỗi thực tế theo bối cảnh đó.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Preset Topics Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[300px] overflow-y-auto pr-1">
+            {PRESET_TOPICS.map((topic) => {
+              const IconComp = TOPIC_ICONS[topic.icon] || Sparkles;
+              const isSelected = selectedTopicId === topic.id;
+
+              return (
+                <button
+                  key={topic.id}
+                  type="button"
+                  onClick={() => handleSelectTopic(topic.id)}
+                  className={`flex items-center gap-2.5 p-2.5 rounded-2xl border transition-all cursor-pointer text-left btn-spring ${
+                    isSelected
+                      ? "border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/40 shadow-xs"
+                      : "border-border/70 bg-card hover:border-amber-500/40 hover:bg-muted/40"
+                  }`}
+                >
+                  <div
+                    className={`size-7 rounded-xl flex items-center justify-center shrink-0 ${
+                      isSelected
+                        ? "bg-amber-500 text-white"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    <IconComp className="size-3.5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-xs font-bold text-foreground block truncate">
+                      {topic.labelVi}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground font-mono block truncate">
+                      {topic.labelEn}
                     </span>
                   </div>
-
-                  <div className="space-y-1">
-                    <div className="text-xs font-mono">
-                      <span className="line-through text-red-500 font-semibold">
-                        "{rec.examples[0]?.userText || rec.labelVi}"
-                      </span>
-                      <span className="text-muted-foreground mx-1.5">→</span>
-                      <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                        "{rec.examples[0]?.correction || rec.description}"
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground line-clamp-2">
-                      {rec.description || rec.labelVi}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-border/40 flex items-center justify-between">
-                  <span className="text-[11px] text-muted-foreground">
-                    Chính xác: <span className="font-mono font-bold text-foreground">{rec.accuracy}%</span>
-                  </span>
-                  <Button
-                    size="sm"
-                    onClick={() => handleStartFromErrorBank(rec)}
-                    disabled={isGeneratingCorrection}
-                    className="rounded-xl font-bold text-xs gap-1 h-8 px-3 btn-spring"
-                  >
-                    <RotateCcw className="size-3" />
-                    <span>Vào Studio sửa câu này</span>
-                  </Button>
-                </div>
-              </Card>
-            ))}
+                </button>
+              );
+            })}
           </div>
-        )}
-      </div>
+
+          {/* Custom Topic Input */}
+          <div className="p-3 rounded-2xl border border-border/70 bg-muted/20 space-y-2">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Wand2 className="size-3.5 text-amber-500" />
+              <span className="font-semibold text-foreground">Hoặc nhập bối cảnh tùy chỉnh:</span>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={customInputVal}
+                onChange={(e) => setCustomInputVal(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && customInputVal.trim()) {
+                    handleSelectTopic("custom", customInputVal.trim());
+                  }
+                }}
+                placeholder="VD: Phỏng vấn xin việc, đi mua sắm ở siêu thị..."
+                className="flex-1 px-3 py-1.5 rounded-xl border border-border/80 bg-background text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
+              <Button
+                type="button"
+                size="sm"
+                disabled={!customInputVal.trim()}
+                onClick={() => {
+                  if (customInputVal.trim()) {
+                    handleSelectTopic("custom", customInputVal.trim());
+                  }
+                }}
+                className="rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white"
+              >
+                Áp dụng
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Repair Session Summary Modal */}
+      <RepairSummaryModal
+        isOpen={isSessionCompleted}
+        summary={sessionSummary}
+        onRestart={() => {
+          resetSession();
+          generateAiRepairChallenge();
+        }}
+      />
     </div>
   );
 }

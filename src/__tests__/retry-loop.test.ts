@@ -225,5 +225,68 @@ describe("Function 3 — Retry Loop (Correct -> Say Again) Engine", () => {
 
     expect(failResult.canFastPass).toBe(false);
   });
+
+  it("supports topic resolution in challenge generation", async () => {
+    const challenge = await generateRepairChallenge({
+      provider: "mock",
+      topic: "travel",
+    });
+
+    expect(challenge).toBeDefined();
+    expect(challenge.erroneousSentence).toBeDefined();
+    expect(challenge.betterSentence).toBeDefined();
+    expect(challenge.topic).toBeDefined();
+  });
+
+  it("manages endless session and calculates recovery summary in store", async () => {
+    const { useRetryLoopStore } = await import("@/stores/retry-loop-store");
+    const store = useRetryLoopStore.getState();
+
+    // Set topic
+    store.setSelectedTopic("workplace", "Họp báo cáo tiến độ");
+    expect(useRetryLoopStore.getState().selectedTopicId).toBe("workplace");
+    expect(useRetryLoopStore.getState().customTopicText).toBe("Họp báo cáo tiến độ");
+
+    // Reset session
+    store.resetSession();
+    expect(useRetryLoopStore.getState().currentChallengeIndex).toBe(0);
+    expect(useRetryLoopStore.getState().completedChallengesCount).toBe(0);
+
+    // Simulate session history
+    useRetryLoopStore.setState({
+      sessionHistory: [
+        {
+          challengeTitle: "Thì Quá khứ đơn",
+          originalSentence: "Yesterday I go late.",
+          betterSentence: "Yesterday I went late.",
+          isResolved: true,
+          attemptsCount: 1,
+          isSelfCorrection: false,
+        },
+        {
+          challengeTitle: "Giới từ",
+          originalSentence: "I arrive at airport.",
+          betterSentence: "I arrived at the airport.",
+          isResolved: true,
+          attemptsCount: 2,
+          isSelfCorrection: true,
+        },
+      ],
+    });
+
+    // Finish session manually
+    useRetryLoopStore.getState().finishSessionManually();
+    const summary = useRetryLoopStore.getState().sessionSummary;
+
+    expect(summary).toBeDefined();
+    expect(summary?.totalChallenges).toBe(2);
+    expect(summary?.resolvedCount).toBe(2);
+    expect(summary?.recoveryRate).toBe(100);
+    expect(summary?.firstAttemptSuccessCount).toBe(1);
+    expect(summary?.firstAttemptAccuracy).toBe(50);
+    expect(summary?.selfCorrectionCount).toBe(1);
+    expect(useRetryLoopStore.getState().isSessionCompleted).toBe(true);
+  });
 });
+
 

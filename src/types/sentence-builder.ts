@@ -65,6 +65,7 @@ export interface SentenceBuilderTask {
   prepTimeSec: number; // 3.0s down to 1.5s
   modelAudioSample?: string;
   targetErrorPatternKey?: string; // Links task to ErrorBank weakness
+  source?: "ai" | "bank" | "seed";
 }
 
 export interface EvaluatedError {
@@ -147,7 +148,7 @@ export interface ErrorBankRecord {
   lastSeenAt: string;
 }
 
-export type SessionMode = "quick" | "standard" | "deep" | "weakness_focus";
+export type SessionMode = "endless" | "quick" | "standard" | "deep" | "weakness_focus";
 
 export interface SentenceBuilderSessionConfig {
   mode: SessionMode;

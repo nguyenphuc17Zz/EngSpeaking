@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createServerClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { foundationRepo } from "@/lib/db/sqlite-db";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: sessionId } = await params;
@@ -18,7 +18,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   };
   if (!transcript) return NextResponse.json({ error: { message: "Thiếu transcript" } }, { status: 400 });
 
-  const row = {
+  const attempt = foundationRepo.recordAttempt({
     id: `fatt_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
     session_id: sessionId,
     exercise_id: exerciseId || "unknown",
@@ -30,13 +30,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     hint_level: hintLevel ?? 0,
     score_overall: scoreOverall ?? null,
     completed: completed ?? true,
-    created_at: new Date().toISOString(),
-  };
+  });
 
-  if (!isSupabaseConfigured()) return NextResponse.json({ attempt: row });
-  const supabase = createServerClient();
-  if (!supabase) return NextResponse.json({ attempt: row });
-  const { data, error } = await supabase.from("foundation_attempts").insert(row).select().single();
-  if (error) return NextResponse.json({ error: { message: error.message } }, { status: 500 });
-  return NextResponse.json({ attempt: data });
+  return NextResponse.json({ attempt });
 }
+
