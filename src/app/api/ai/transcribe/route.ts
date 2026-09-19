@@ -33,6 +33,7 @@ export async function POST(req: Request) {
   const provider = (form.get("provider") as string) || "auto";
   const model = (form.get("model") as string) || "auto";
   const language = (form.get("language") as string) || "en-US";
+  const prompt = (form.get("prompt") as string) || "";
 
   if (!file) return NextResponse.json({ error: { code: "INVALID_REQUEST", message: "Thiếu file audio" } }, { status: 400 });
 
@@ -83,7 +84,13 @@ export async function POST(req: Request) {
     logger.sttStarted({ provider: providerId, model: modelId });
     const arrayBuffer = await file.arrayBuffer();
     const blob = new Blob([arrayBuffer], { type: file.type || "audio/webm" });
-    const result = await p.transcribe({ audio: blob, mimeType: file.type, language: safeLanguage, model: modelId });
+    const result = await p.transcribe({
+      audio: blob,
+      mimeType: file.type,
+      language: safeLanguage,
+      model: modelId,
+      prompt: prompt || undefined,
+    });
     logger.sttCompleted({ provider: result.provider });
     // Validate
     const { transcriptionResultSchema } = await import("@/lib/validation/schemas");

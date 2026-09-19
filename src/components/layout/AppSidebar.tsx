@@ -25,6 +25,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { EngSpeakLogo } from "@/components/ui/engspeak-logo";
 
 export interface NavItem {
   href: string;
@@ -184,9 +185,7 @@ export function AppSidebar({ collapsed, onToggleCollapse, onNavigateMobile }: Ap
           onClick={onNavigateMobile}
           className="flex items-center gap-3 overflow-hidden group focus:outline-none"
         >
-          <div className="flex items-center justify-center size-9 rounded-xl bg-primary text-primary-foreground shadow-xs group-hover:scale-105 transition-transform shrink-0">
-            <Volume2 className="size-4.5" />
-          </div>
+          <EngSpeakLogo size={36} />
           {!collapsed && (
             <div className="flex flex-col truncate">
               <span className="font-serif font-bold text-base tracking-tight text-sidebar-foreground">EngSpeak</span>

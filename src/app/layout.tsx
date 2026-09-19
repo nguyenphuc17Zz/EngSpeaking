@@ -25,6 +25,15 @@ const fontMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "EngSpeak — Nghệ Thuật Phản Xạ Khẩu Ngữ Tiếng Anh",
   description: "Luyện phản xạ và bản năng nói tiếng Anh tự nhiên cùng AI trong không gian học tập chuẩn Warm Editorial",
+  icons: {
+    icon: [
+      { url: "/icon.png", sizes: "512x512", type: "image/png" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    apple: [
+      { url: "/apple-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

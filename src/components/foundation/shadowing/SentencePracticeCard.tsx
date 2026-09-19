@@ -115,6 +115,12 @@ export function SentencePracticeCard({
       const cleanWord = word.toLowerCase().replace(/[^\w']/g, "");
       if (!cleanWord) return;
 
+      // Stop user voice playback if currently active
+      if (userAudioRef.current) {
+        userAudioRef.current.pause();
+        setIsPlayingUserAudio(false);
+      }
+
       const lexiconMatch = lookupLexiconWord(cleanWord);
       let popupData: any;
 
@@ -436,11 +442,13 @@ export function SentencePracticeCard({
         )}
 
         {/* ── Live Transcript (while recording) ── */}
-        {isRecording && liveTranscript && (
+        {isRecording && (
           <div className="px-4 pb-2 shrink-0">
-            <div className="p-2 rounded-2xl bg-primary/10 border border-primary/25 text-xs text-primary/90 font-mono leading-relaxed animate-in fade-in-0 duration-100 flex items-center gap-2">
-              <span className="size-2 rounded-full bg-red-500 animate-ping shrink-0" />
-              <p className="truncate">{liveTranscript}</p>
+            <div className="p-2 rounded-2xl bg-rose-500/10 border border-rose-500/25 text-xs text-rose-600 dark:text-rose-400 font-mono leading-relaxed animate-in fade-in-0 duration-100 flex items-center gap-2">
+              <span className="size-2 rounded-full bg-rose-500 animate-ping shrink-0" />
+              <p className="truncate">
+                {liveTranscript || "Đang lắng nghe giọng bạn..."}
+              </p>
             </div>
           </div>
         )}

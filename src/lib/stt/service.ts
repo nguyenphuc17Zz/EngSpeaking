@@ -6,6 +6,7 @@ export interface STTOptions {
   language?: string;
   provider: string;
   model: string;
+  prompt?: string;
 }
 
 export interface AudioEnhanceOptions {
@@ -207,6 +208,9 @@ export async function transcribeViaServer(
   form.append("provider", opts.provider);
   form.append("model", opts.model);
   form.append("language", opts.language || "en-US");
+  if (opts.prompt) {
+    form.append("prompt", opts.prompt);
+  }
   const res = await fetch("/api/ai/transcribe", { method: "POST", body: form });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {

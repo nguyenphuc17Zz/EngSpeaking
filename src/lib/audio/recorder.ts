@@ -49,7 +49,10 @@ export function createAudioRecorder(stream: MediaStream): AudioRecorder {
       if (state !== "inactive") throw new Error("Recorder already started");
       chunks = [];
       pausedDuration = 0;
-      const mr = new MediaRecorder(stream, { mimeType });
+      const mr = new MediaRecorder(stream, {
+        mimeType,
+        audioBitsPerSecond: 128000,
+      });
       recorder = mr;
       startTime = Date.now();
       state = "recording";
@@ -122,14 +125,32 @@ export function createAudioRecorder(stream: MediaStream): AudioRecorder {
 }
 
 // Microphone permission helpers §12
-export async function requestMicrophone(): Promise<MediaStream> {
+export interface MicrophoneRequestOptions {
+  deviceId?: string;
+  sampleRate?: number;
+}
+
+export async function requestMicrophone(options?: MicrophoneRequestOptions): Promise<MediaStream> {
   if (!navigator.mediaDevices?.getUserMedia) throw new Error("MediaDevices not supported");
   return navigator.mediaDevices.getUserMedia({
     audio: {
+      deviceId: options?.deviceId ? { exact: options.deviceId } : undefined,
       echoCancellation: true,
       noiseSuppression: true,
       autoGainControl: true,
+      sampleRate: options?.sampleRate || { ideal: 48000, min: 16000 },
       channelCount: 1,
+      // Advanced WebRTC clarity constraints (Chrome / Edge)
+      // @ts-ignore
+      googEchoCancellation: true,
+      // @ts-ignore
+      googAutoGainControl: true,
+      // @ts-ignore
+      googNoiseSuppression: true,
+      // @ts-ignore
+      googHighpassFilter: true,
+      // @ts-ignore
+      googAudioMirroring: false,
     },
   });
 }

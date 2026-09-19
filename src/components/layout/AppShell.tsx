@@ -13,6 +13,7 @@ import { KeybindingsModal } from "@/components/common/KeybindingsModal";
 import { GlobalAiSelector } from "@/components/common/GlobalAiSelector";
 import { GlobalSpeedSelector } from "@/components/common/GlobalSpeedSelector";
 import { GlobalSelectionAudio } from "@/components/common/GlobalSelectionAudio";
+import { useUiStore } from "@/stores/ui-store";
 import { cn } from "@/lib/utils";
 
 interface AppShellProps {
@@ -25,6 +26,7 @@ export function AppShell({ children }: AppShellProps) {
   const [isDark, setIsDark] = useState(false);
   const [isKeybindingsOpen, setIsKeybindingsOpen] = useState(false);
   const pathname = usePathname();
+  const hideAppHeader = useUiStore((s) => s.hideAppHeader);
 
   // Global shortcut listener: Pressing ? toggles keybindings modal
   useEffect(() => {
@@ -100,100 +102,107 @@ export function AppShell({ children }: AppShellProps) {
       {/* Main Content Area */}
       <div className="flex flex-col flex-1 h-full min-w-0 overflow-hidden">
         {/* Top Header Bar */}
-        <header className="flex items-center justify-between h-16 px-4 md:px-6 border-b border-border/60 bg-background/80 backdrop-blur-md shrink-0 z-20">
-          {/* Mobile Menu & Page Title */}
-          <div className="flex items-center gap-3">
-            <div className="md:hidden">
-              <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-                <SheetTrigger
-                  render={
-                    <Button variant="ghost" size="icon" aria-label="Mở menu điều hướng">
-                      <Menu className="size-5" />
-                    </Button>
-                  }
-                />
-                <SheetContent side="left" className="p-0 w-72 bg-sidebar border-sidebar-border">
-                  <SheetTitle className="sr-only">Menu điều hướng EngSpeak</SheetTitle>
-                  <AppSidebar
-                    collapsed={false}
-                    onToggleCollapse={() => {}}
-                    onNavigateMobile={() => setMobileOpen(false)}
+        {!hideAppHeader && (
+          <header className="flex items-center justify-between h-16 px-4 md:px-6 border-b border-border/60 bg-background/80 backdrop-blur-md shrink-0 z-20">
+            {/* Mobile Menu & Page Title */}
+            <div className="flex items-center gap-3">
+              <div className="md:hidden">
+                <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+                  <SheetTrigger
+                    render={
+                      <Button variant="ghost" size="icon" aria-label="Mở menu điều hướng">
+                        <Menu className="size-5" />
+                      </Button>
+                    }
                   />
-                </SheetContent>
-              </Sheet>
+                  <SheetContent side="left" className="p-0 w-72 bg-sidebar border-sidebar-border">
+                    <SheetTitle className="sr-only">Menu điều hướng EngSpeak</SheetTitle>
+                    <AppSidebar
+                      collapsed={false}
+                      onToggleCollapse={() => {}}
+                      onNavigateMobile={() => setMobileOpen(false)}
+                    />
+                  </SheetContent>
+                </Sheet>
+              </div>
+
+              <div className="flex flex-col">
+                <h1 className="text-base md:text-lg font-serif font-bold tracking-tight text-foreground truncate flex items-center gap-2">
+                  {currentItem.label}
+                </h1>
+                <span className="text-xs text-muted-foreground hidden sm:inline-block">
+                  {currentItem.description}
+                </span>
+              </div>
             </div>
 
-            <div className="flex flex-col">
-              <h1 className="text-base md:text-lg font-serif font-bold tracking-tight text-foreground truncate flex items-center gap-2">
-                {currentItem.label}
-              </h1>
-              <span className="text-xs text-muted-foreground hidden sm:inline-block">
-                {currentItem.description}
-              </span>
+            {/* Quick Actions in Header */}
+            <div className="flex items-center gap-2">
+              {/* Quick Practice Pill */}
+              {pathname !== "/session" && (
+                <Link href="/session">
+                  <Button
+                    size="sm"
+                    variant="default"
+                    className="gap-2 font-medium shadow-xs rounded-full px-3.5 h-9 btn-spring"
+                  >
+                    <Mic className="size-4 animate-pulse" />
+                    <span className="hidden sm:inline">Phòng luyện nói</span>
+                  </Button>
+                </Link>
+              )}
+
+              {/* Universal Global AI Engine Selector (Header) */}
+              <GlobalAiSelector />
+
+              {/* Universal Global Speed Controller (Header) */}
+              <GlobalSpeedSelector />
+
+              {/* Universal Keybinding Button (Header) */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsKeybindingsOpen(true)}
+                className="rounded-full h-9 px-2.5 gap-1.5 text-muted-foreground hover:text-foreground border-border/70 hover:bg-secondary/60 btn-spring"
+                title="Phím tắt toàn hệ thống (Bấm ?)"
+                aria-label="Phím tắt toàn hệ thống (Bấm ?)"
+              >
+                <Keyboard className="size-4" />
+                <kbd className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-muted/80 border border-border/60 text-foreground">
+                  ?
+                </kbd>
+              </Button>
+
+              {/* Dark / Light Mode Toggle */}
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={toggleTheme}
+                className="rounded-full size-9 text-muted-foreground hover:text-foreground border-border/70 hover:bg-secondary/60 btn-spring"
+                aria-label="Chuyển đổi giao diện Sáng / Tối"
+              >
+                {isDark ? <Sun className="size-4 text-amber-500" /> : <Moon className="size-4" />}
+              </Button>
             </div>
-          </div>
+          </header>
+        )}
 
-          {/* Quick Actions in Header */}
-          <div className="flex items-center gap-2">
-            {/* Quick Practice Pill */}
-            {pathname !== "/session" && (
-              <Link href="/session">
-                <Button
-                  size="sm"
-                  variant="default"
-                  className="gap-2 font-medium shadow-xs rounded-full px-3.5 h-9 btn-spring"
-                >
-                  <Mic className="size-4 animate-pulse" />
-                  <span className="hidden sm:inline">Phòng luyện nói</span>
-                </Button>
-              </Link>
-            )}
-
-            {/* Universal Global AI Engine Selector (Header) */}
-            <GlobalAiSelector />
-
-            {/* Universal Global Speed Controller (Header) */}
-            <GlobalSpeedSelector />
-
-            {/* Universal Keybinding Button (Header) */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsKeybindingsOpen(true)}
-              className="rounded-full h-9 px-2.5 gap-1.5 text-muted-foreground hover:text-foreground border-border/70 hover:bg-secondary/60 btn-spring"
-              title="Phím tắt toàn hệ thống (Bấm ?)"
-              aria-label="Phím tắt toàn hệ thống (Bấm ?)"
-            >
-              <Keyboard className="size-4" />
-              <kbd className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-muted/80 border border-border/60 text-foreground">
-                ?
-              </kbd>
-            </Button>
-
-            {/* Dark / Light Mode Toggle */}
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={toggleTheme}
-              className="rounded-full size-9 text-muted-foreground hover:text-foreground border-border/70 hover:bg-secondary/60 btn-spring"
-              aria-label="Chuyển đổi giao diện Sáng / Tối"
-            >
-              {isDark ? <Sun className="size-4 text-amber-500" /> : <Moon className="size-4" />}
-            </Button>
-          </div>
-        </header>
-
-        {/* Scrollable Viewport */}
+        {/* Scrollable / Fullscreen Viewport */}
         <main
           className={cn(
-            "flex-1 overflow-y-auto overflow-x-hidden",
-            isStudioPage ? "p-2 sm:p-3 md:p-4" : "p-4 md:p-6 lg:p-8"
+            "flex-1 min-h-0",
+            hideAppHeader
+              ? "p-0 h-full overflow-hidden"
+              : cn(
+                  "overflow-y-auto overflow-x-hidden",
+                  isStudioPage ? "p-2 sm:p-3 md:p-4" : "p-4 md:p-6 lg:p-8"
+                )
           )}
         >
           <div
             className={cn(
               "mx-auto w-full animate-in fade-in-0 duration-200",
-              isStudioPage ? "max-w-[1500px] h-full" : "max-w-6xl"
+              hideAppHeader ? "h-full max-w-none" : (isStudioPage ? "max-w-[1500px] h-full" : "max-w-6xl")
             )}
           >
             {children}

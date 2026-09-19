@@ -119,6 +119,10 @@ export class GroqProvider implements AIProvider {
     form.append("model", model);
     if (input.language) form.append("language", input.language.replace("-", "-").toLowerCase().split("-")[0]); // en
     form.append("response_format", "verbose_json");
+    if (input.prompt) {
+      form.append("prompt", input.prompt);
+    }
+    form.append("temperature", "0");
     let res: Response;
     try {
       const controller = new AbortController();

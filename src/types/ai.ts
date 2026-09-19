@@ -59,6 +59,7 @@ export interface TranscriptionInput {
   mimeType?: string;
   language?: string; // e.g. "en-US"
   model?: string;
+  prompt?: string;
 }
 
 export interface TranscriptSegment {

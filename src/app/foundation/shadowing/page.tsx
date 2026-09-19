@@ -62,6 +62,10 @@ import {
   Mic,
   MicOff,
   Repeat,
+  Repeat1,
+  PauseCircle,
+  Headphones,
+  Square,
   Keyboard,
   Video,
   ChevronDown,
@@ -75,8 +79,13 @@ import {
   Library,
   Pencil,
   RotateCcw,
+  Sun,
+  Moon,
 } from "lucide-react";
+import { useUiStore } from "@/stores/ui-store";
 import { cn } from "@/lib/utils";
+
+export type ShadowingPlayMode = "continuous" | "pause_after_sentence" | "loop_sentence";
 
 declare global {
   interface Window {
@@ -100,12 +109,39 @@ export default function CorodomoShadowingStudioPage() {
   const router = useRouter();
   const settings = useSettingsStore();
   const tts = useBrowserTTS();
-  const recorder = useAudioRecorder();
+  const recorder = useAudioRecorder({ keepWarm: true });
   const speechRec = useSpeechRecognition("en-US");
 
   // ─── Top-Level View State: "hub" (Màn chính) | "studio" (Phòng học) ─
   const [currentView, setCurrentView] = useState<MainView>("hub");
   const [activeMode, setActiveMode] = useState<StudioMode>("shadowing");
+  const setHideAppHeader = useUiStore((s) => s.setHideAppHeader);
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
+  useEffect(() => {
+    setIsDarkMode(document.documentElement.classList.contains("dark"));
+  }, []);
+
+  const handleToggleTheme = () => {
+    setIsDarkMode((prev) => {
+      const next = !prev;
+      if (next) {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (currentView === "studio") {
+      setHideAppHeader(true);
+    } else {
+      setHideAppHeader(false);
+    }
+    return () => setHideAppHeader(false);
+  }, [currentView, setHideAppHeader]);
 
   // ─── Lesson & Practice State ─────────────────────────────────────────
   const [activeLesson, setActiveLesson] = useState<CorodomoVideoLesson>(CORODOMO_VIDEO_PRESETS[0]);
@@ -116,8 +152,17 @@ export default function CorodomoShadowingStudioPage() {
   // ─── Playback & Sync State ───────────────────────────────────────────
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
-  const [autoPauseEnabled, setAutoPauseEnabled] = useState(false);
-  const [isLooping, setIsLooping] = useState(false);
+  const [playMode, setPlayMode] = useState<ShadowingPlayMode>("continuous");
+  const playModeRef = useRef<ShadowingPlayMode>("continuous");
+  playModeRef.current = playMode;
+
+  const justPausedSegRef = useRef<number>(-1);
+  const isLoopSeekingRef = useRef<boolean>(false);
+  const [isAutoPaused, setIsAutoPaused] = useState(false);
+  const seekToSegmentRef = useRef<(index: number, autoPlay?: boolean) => void>(() => {});
+
+  const isLooping = playMode === "loop_sentence";
+  const autoPauseEnabled = playMode === "pause_after_sentence";
   const [currentTime, setCurrentTime] = useState(0);
   const [isVideoHidden, setIsVideoHidden] = useState(false);
   const [fontSizeLevel, setFontSizeLevel] = useState<"md" | "lg" | "xl">("lg");
@@ -132,8 +177,42 @@ export default function CorodomoShadowingStudioPage() {
   >("idle");
   const [score, setScore] = useState<ShadowingScoreResult | null>(null);
   const [userAudioUrl, setUserAudioUrl] = useState<string | null>(null);
+  const [spokenTranscript, setSpokenTranscript] = useState<string>("");
+  const [isPlayingUserAudio, setIsPlayingUserAudio] = useState(false);
+  const userAudioRef = useRef<HTMLAudioElement | null>(null);
   const [sentenceScores, setSentenceScores] = useState<Record<string, ShadowingScoreResult>>({});
   const [recordingStartMs, setRecordingStartMs] = useState(0);
+
+  // ─── Shadowing Mode Voice Recording & Preview State ──────────────────
+  const [shadowingRecordStatus, setShadowingRecordStatus] = useState<"idle" | "recording">("idle");
+  const [shadowingAudioUrl, setShadowingAudioUrl] = useState<string | null>(null);
+  const [isPlayingShadowingAudio, setIsPlayingShadowingAudio] = useState(false);
+  const [shadowingTranscript, setShadowingTranscript] = useState("");
+  const [showShadowingPreview, setShowShadowingPreview] = useState(true);
+  const shadowingAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // ─── Subtitle Synchronization Offset (Lead-time Compensation) ────────
+  const [subtitleSyncOffset, setSubtitleSyncOffset] = useState<number>(0.35); // Default +0.35s lead compensation
+  const subtitleSyncOffsetRef = useRef<number>(0.35);
+  subtitleSyncOffsetRef.current = subtitleSyncOffset;
+
+  const handleAdjustSyncOffset = useCallback((delta: number) => {
+    setSubtitleSyncOffset((prev) => {
+      const next = Math.round((prev + delta) * 100) / 100;
+      subtitleSyncOffsetRef.current = next;
+      toast.info(
+        "Căn chỉnh phụ đề",
+        `Lệch: ${next > 0 ? `+${next}s (Hiện sớm hơn)` : next < 0 ? `${next}s (Hiện muộn hơn)` : "0s (Khớp gốc)"}`
+      );
+      return next;
+    });
+  }, []);
+
+  const handleResetSyncOffset = useCallback(() => {
+    setSubtitleSyncOffset(0.35);
+    subtitleSyncOffsetRef.current = 0.35;
+    toast.success("Căn chỉnh phụ đề", "Đã đặt về mức bù chuẩn (+0.35s)");
+  }, []);
 
   // ─── UI & Input State ────────────────────────────────────────────────
   const [customUrlInput, setCustomUrlInput] = useState("");
@@ -302,8 +381,20 @@ export default function CorodomoShadowingStudioPage() {
               playerRef.current?.setPlaybackRate(playbackSpeed);
             },
             onStateChange: (event: any) => {
-              if (event.data === 1) setIsPlayingVideo(true);
-              else if (event.data === 2 || event.data === 0) setIsPlayingVideo(false);
+              if (event.data === 1) {
+                setIsPlayingVideo(true);
+                // If user unpaused directly on YouTube player while stopped at sentence end -> advance to next sentence!
+                if (playModeRef.current === "pause_after_sentence" && justPausedSegRef.current !== -1) {
+                  const cur = justPausedSegRef.current;
+                  const total = activeLesson?.segments?.length || 0;
+                  const nextIdx = cur < total - 1 ? cur + 1 : 0;
+                  justPausedSegRef.current = -1;
+                  setIsAutoPaused(false);
+                  seekToSegmentRef.current(nextIdx, true);
+                }
+              } else if (event.data === 2 || event.data === 0) {
+                setIsPlayingVideo(false);
+              }
             },
           },
         });
@@ -329,8 +420,31 @@ export default function CorodomoShadowingStudioPage() {
         } catch {}
         playerRef.current = null;
       }
+      if (userAudioRef.current) {
+        userAudioRef.current.pause();
+        userAudioRef.current = null;
+      }
+      if (shadowingAudioRef.current) {
+        shadowingAudioRef.current.pause();
+        shadowingAudioRef.current = null;
+      }
     };
   }, [currentView, activeLesson?.youtubeId, initYouTubePlayer]);
+
+  // ─── Player Controls ─────────────────────────────────────────────────
+  const playVideo = useCallback(() => {
+    if (playerRef.current && typeof playerRef.current.playVideo === "function") {
+      playerRef.current.playVideo();
+    }
+    setIsPlayingVideo(true);
+  }, []);
+
+  const pauseVideo = useCallback(() => {
+    if (playerRef.current && typeof playerRef.current.pauseVideo === "function") {
+      playerRef.current.pauseVideo();
+    }
+    setIsPlayingVideo(false);
+  }, []);
 
   // ─── Real-Time Sentence Synchronization Tracking (Hysteresis Engine) ───
   useEffect(() => {
@@ -342,7 +456,8 @@ export default function CorodomoShadowingStudioPage() {
     const syncLoop = () => {
       if (playerRef.current && typeof playerRef.current.getCurrentTime === "function") {
         const now = performance.now();
-        if (now - lastTimeCheck > 120) {
+        // High-precision 40 FPS synchronization polling (25ms instead of 80ms)
+        if (now - lastTimeCheck > 25) {
           lastTimeCheck = now;
           try {
             const time = playerRef.current.getCurrentTime();
@@ -353,39 +468,96 @@ export default function CorodomoShadowingStudioPage() {
               if (segments.length > 0) {
                 const curIdx = activeSegmentIndexRef.current;
                 const currentSeg = segments[curIdx];
+
+                // ─── 1. MODE: LẶP 1 CÂU (loop_sentence) ─────────────────────
+                if (playModeRef.current === "loop_sentence" && currentSeg) {
+                  const isAtEndOfSentence = time >= currentSeg.end_time - 0.08;
+                  if (isAtEndOfSentence && !isLoopSeekingRef.current) {
+                    isLoopSeekingRef.current = true;
+                    if (playerRef.current && typeof playerRef.current.seekTo === "function") {
+                      playerRef.current.seekTo(currentSeg.start_time, true);
+                    }
+                    setTimeout(() => {
+                      isLoopSeekingRef.current = false;
+                    }, 300);
+                  }
+                  // Lock sync engine to currently looping sentence, never advance automatically!
+                  animId = requestAnimationFrame(syncLoop);
+                  return;
+                }
+
+                // ─── 2. MODE: DỪNG SAU CÂU (pause_after_sentence) ───────────
+                if (playModeRef.current === "pause_after_sentence" && currentSeg) {
+                  const isAtEndOfSentence = time >= currentSeg.end_time - 0.08;
+
+                  // If user resumed playing while waiting at sentence end -> advance to next sentence!
+                  if (justPausedSegRef.current === curIdx) {
+                    const playerState =
+                      typeof playerRef.current.getPlayerState === "function"
+                        ? playerRef.current.getPlayerState()
+                        : -1;
+                    if (playerState === 1) {
+                      justPausedSegRef.current = -1;
+                      setIsAutoPaused(false);
+                      const nextIdx = curIdx < segments.length - 1 ? curIdx + 1 : 0;
+                      seekToSegmentRef.current(nextIdx, true);
+                      animId = requestAnimationFrame(syncLoop);
+                      return;
+                    }
+                    // While video is paused, stay on this sentence
+                    animId = requestAnimationFrame(syncLoop);
+                    return;
+                  }
+
+                  // If reaching sentence end, pause immediately!
+                  if (isAtEndOfSentence) {
+                    justPausedSegRef.current = curIdx;
+                    setIsAutoPaused(true);
+                    pauseVideo();
+                    animId = requestAnimationFrame(syncLoop);
+                    return;
+                  }
+
+                  // While playing inside current sentence, KEEP activeSegment locked to curIdx!
+                  // Never let continuous sync jump ahead before sentence finishes!
+                  animId = requestAnimationFrame(syncLoop);
+                  return;
+                }
+
+                // ─── Continuous Mode: High-Fidelity Lead-Compensated Sync ──
+                // Apply user sync offset (default +0.35s) to eliminate YouTube postMessage latency
+                const syncOffset = subtitleSyncOffsetRef.current;
+                const syncTime = time + syncOffset;
+
                 let matchedIdx = -1;
 
-                // 1. Fast Path: Check if playback is within the active sentence (+ 350ms hysteresis)
-                if (
+                // Priority 1: Next Segment Check (Early Transition)
+                // If next segment has begun or is within 50ms of beginning, switch to it immediately!
+                const nextSeg = segments[curIdx + 1];
+                if (nextSeg && syncTime >= nextSeg.start_time - 0.05) {
+                  matchedIdx = curIdx + 1;
+                } else if (
+                  // Priority 2: Active segment check
                   currentSeg &&
-                  time >= currentSeg.start_time - 0.15 &&
-                  time <= currentSeg.end_time + 0.35
+                  syncTime >= currentSeg.start_time - 0.1 &&
+                  syncTime < currentSeg.end_time + 0.1
                 ) {
                   matchedIdx = curIdx;
                 } else {
-                  // 2. Monotonic Lookahead: Next segment
-                  const nextSeg = segments[curIdx + 1];
-                  if (
-                    nextSeg &&
-                    time >= nextSeg.start_time - 0.15 &&
-                    time <= nextSeg.end_time + 0.35
-                  ) {
-                    matchedIdx = curIdx + 1;
-                  } else {
-                    // 3. Fallback scan with tight tolerance
-                    matchedIdx = segments.findIndex(
-                      (seg) => time >= seg.start_time - 0.15 && time < seg.end_time + 0.25
-                    );
+                  // Priority 3: Fallback exact scan
+                  matchedIdx = segments.findIndex(
+                    (seg) => syncTime >= seg.start_time - 0.1 && syncTime < seg.end_time + 0.1
+                  );
 
-                    // 4. Natural Pause Bridge: If between two sentences, stay attached without flickering
-                    if (matchedIdx === -1) {
-                      for (let s = 0; s < segments.length; s++) {
-                        const seg = segments[s];
-                        const next = segments[s + 1];
-                        if (time >= seg.end_time && next && time < next.start_time) {
-                          matchedIdx = time >= next.start_time - 0.15 ? s + 1 : s;
-                          break;
-                        }
+                  // Priority 4: Natural Pause Bridge between two sentences
+                  if (matchedIdx === -1) {
+                    for (let s = 0; s < segments.length; s++) {
+                      const seg = segments[s];
+                      const next = segments[s + 1];
+                      if (syncTime >= seg.end_time && next && syncTime < next.start_time) {
+                        // If within 250ms of next start, switch ahead to next segment so user can anticipate
+                        matchedIdx = syncTime >= next.start_time - 0.25 ? s + 1 : s;
+                        break;
                       }
                     }
                   }
@@ -405,7 +577,7 @@ export default function CorodomoShadowingStudioPage() {
 
     animId = requestAnimationFrame(syncLoop);
     return () => cancelAnimationFrame(animId);
-  }, [currentView, activeLesson.segments]);
+  }, [currentView, activeLesson.segments, pauseVideo]);
 
   // ─── Auto-Scroll Timeline Row into View as Video Plays ───────────────
   useEffect(() => {
@@ -426,19 +598,195 @@ export default function CorodomoShadowingStudioPage() {
 
 
   // ─── Player Controls ─────────────────────────────────────────────────
-  const playVideo = useCallback(() => {
-    if (playerRef.current && typeof playerRef.current.playVideo === "function") {
-      playerRef.current.playVideo();
+  const cyclePlayMode = useCallback(() => {
+    const current = playModeRef.current;
+    let next: ShadowingPlayMode;
+
+    if (current === "continuous") {
+      next = "pause_after_sentence";
+      toast.info(
+        "Chế độ: Dừng sau mỗi câu",
+        "Video sẽ tự động dừng ở cuối mỗi câu để bạn nói theo. Bấm Space hoặc Play/Next để sang câu tiếp."
+      );
+    } else if (current === "pause_after_sentence") {
+      next = "loop_sentence";
+      toast.info(
+        "Chế độ: Lặp lại 1 câu",
+        "Video sẽ tự động lặp lại liên tục câu hiện tại để luyện ngữ điệu sâu."
+      );
+    } else {
+      next = "continuous";
+      toast.info(
+        "Chế độ: Phát liên tục",
+        "Video sẽ chạy liền mạch từ đầu tới cuối mà không dừng."
+      );
     }
-    setIsPlayingVideo(true);
+
+    playModeRef.current = next;
+    justPausedSegRef.current = -1;
+    setIsAutoPaused(false);
+    isLoopSeekingRef.current = false;
+    setPlayMode(next);
   }, []);
 
-  const pauseVideo = useCallback(() => {
-    if (playerRef.current && typeof playerRef.current.pauseVideo === "function") {
-      playerRef.current.pauseVideo();
+  const handleSelectPlayMode = useCallback((mode: ShadowingPlayMode) => {
+    if (mode === "continuous") {
+      toast.info(
+        "Chế độ: Phát liên tục",
+        "Video sẽ chạy liền mạch từ đầu tới cuối mà không dừng."
+      );
+    } else if (mode === "pause_after_sentence") {
+      toast.info(
+        "Chế độ: Dừng sau mỗi câu",
+        "Video sẽ tự động dừng ở cuối mỗi câu để bạn nói theo. Bấm Space hoặc Play/Next để sang câu tiếp."
+      );
+    } else if (mode === "loop_sentence") {
+      toast.info(
+        "Chế độ: Lặp lại 1 câu",
+        "Video sẽ tự động lặp lại liên tục câu hiện tại để luyện ngữ điệu sâu."
+      );
+      const cur = activeSegmentIndexRef.current;
+      const seg = activeLesson?.segments?.[cur];
+      if (seg && playerRef.current && typeof playerRef.current.seekTo === "function") {
+        playerRef.current.seekTo(seg.start_time, true);
+        playerRef.current.playVideo?.();
+        setIsPlayingVideo(true);
+      }
     }
-    setIsPlayingVideo(false);
-  }, []);
+
+    playModeRef.current = mode;
+    justPausedSegRef.current = -1;
+    setIsAutoPaused(false);
+    isLoopSeekingRef.current = false;
+    setPlayMode(mode);
+  }, [activeLesson?.segments]);
+
+  const handleTogglePlayUserAudio = useCallback(() => {
+    if (!userAudioUrl) return;
+
+    if (userAudioRef.current && isPlayingUserAudio) {
+      userAudioRef.current.pause();
+      userAudioRef.current.currentTime = 0;
+      setIsPlayingUserAudio(false);
+      return;
+    }
+
+    if (userAudioRef.current) {
+      userAudioRef.current.pause();
+    }
+
+    const audio = new Audio(userAudioUrl);
+    userAudioRef.current = audio;
+    setIsPlayingUserAudio(true);
+
+    audio.onended = () => setIsPlayingUserAudio(false);
+    audio.onerror = () => setIsPlayingUserAudio(false);
+    audio.play().catch(() => setIsPlayingUserAudio(false));
+  }, [userAudioUrl, isPlayingUserAudio]);
+
+  // ─── Shadowing Audio Recording & Preview Handlers ─────────────────────
+  const handleTogglePlayShadowingAudio = useCallback(() => {
+    if (!shadowingAudioUrl) return;
+
+    if (shadowingAudioRef.current && isPlayingShadowingAudio) {
+      shadowingAudioRef.current.pause();
+      shadowingAudioRef.current.currentTime = 0;
+      setIsPlayingShadowingAudio(false);
+      return;
+    }
+
+    if (shadowingAudioRef.current) {
+      shadowingAudioRef.current.pause();
+    }
+
+    const audio = new Audio(shadowingAudioUrl);
+    shadowingAudioRef.current = audio;
+    setIsPlayingShadowingAudio(true);
+
+    audio.onended = () => setIsPlayingShadowingAudio(false);
+    audio.onerror = () => setIsPlayingShadowingAudio(false);
+    audio.play().catch(() => setIsPlayingShadowingAudio(false));
+  }, [shadowingAudioUrl, isPlayingShadowingAudio]);
+
+  const handleToggleShadowingRecord = useCallback(async () => {
+    if (shadowingRecordStatus === "recording") {
+      soundEffects.playMicStop();
+      const sttProvider = settings.stt?.provider || "browser";
+      if (sttProvider === "browser") {
+        speechRec.stopListening();
+      }
+      setShadowingRecordStatus("idle");
+      try {
+        const recording = await recorder.stop();
+        let spokenText = "";
+
+        if (sttProvider !== "browser" && recording?.blob) {
+          try {
+            const res = await transcribeViaServer(recording.blob, {
+              provider: sttProvider === "auto" ? "whisper-local" : sttProvider,
+              model: settings.stt?.model || "auto",
+              language: "en-US",
+              prompt: currentSegment.text,
+            });
+            spokenText = res.text.trim();
+          } catch {
+            spokenText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
+          }
+        } else {
+          await new Promise((r) => setTimeout(r, 200));
+          spokenText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
+        }
+
+        if (recording?.blob) {
+          const audioUrl = URL.createObjectURL(recording.blob);
+          setShadowingAudioUrl(audioUrl);
+        }
+
+        setShadowingTranscript(spokenText);
+        setShowShadowingPreview(true);
+
+        if (spokenText) {
+          toast.success("Đã thu âm xong!", "Kiểm tra những gì bạn vừa nói bên dưới.");
+        } else {
+          toast.info("Đã thu âm xong!", "Bấm 'Nghe lại' để kiểm tra giọng bạn.");
+        }
+      } catch (err) {
+        console.error("Lỗi dừng thu âm shadowing:", err);
+      }
+      return;
+    }
+
+    pauseVideo();
+    if (shadowingAudioRef.current) {
+      shadowingAudioRef.current.pause();
+      shadowingAudioRef.current = null;
+    }
+    setIsPlayingShadowingAudio(false);
+    setShadowingAudioUrl(null);
+    setShadowingTranscript("");
+    setShowShadowingPreview(true);
+    speechRec.resetTranscript();
+
+    const sttProvider = settings.stt?.provider || "browser";
+    try {
+      await recorder.start();
+      if (sttProvider === "browser") {
+        speechRec.startListening();
+      }
+      soundEffects.playMicStart();
+      setShadowingRecordStatus("recording");
+    } catch {
+      toast.error("Lỗi Microphone", "Vui lòng cho phép quyền truy cập micro.");
+      setShadowingRecordStatus("idle");
+    }
+  }, [
+    shadowingRecordStatus,
+    recorder,
+    pauseVideo,
+    speechRec,
+    settings.stt?.provider,
+    settings.stt?.model,
+  ]);
 
   const seekToSegment = useCallback(
     (index: number, autoPlay = true) => {
@@ -447,9 +795,29 @@ export default function CorodomoShadowingStudioPage() {
 
       setActiveSegmentIndex(index);
       activeSegmentIndexRef.current = index;
+      justPausedSegRef.current = -1;
+      setIsAutoPaused(false);
+      isLoopSeekingRef.current = false;
       setScore(null);
       setUserAudioUrl(null);
+      setSpokenTranscript("");
+      if (userAudioRef.current) {
+        userAudioRef.current.pause();
+        userAudioRef.current = null;
+      }
+      setIsPlayingUserAudio(false);
       speechRec.resetTranscript();
+
+      // Reset Shadowing mode audio preview & recording
+      setShadowingAudioUrl(null);
+      setShadowingTranscript("");
+      setShowShadowingPreview(false);
+      if (shadowingAudioRef.current) {
+        shadowingAudioRef.current.pause();
+        shadowingAudioRef.current = null;
+      }
+      setIsPlayingShadowingAudio(false);
+      setShadowingRecordStatus("idle");
 
       const seg = activeLesson.segments[index];
       if (playerRef.current && typeof playerRef.current.seekTo === "function") {
@@ -457,23 +825,41 @@ export default function CorodomoShadowingStudioPage() {
         if (autoPlay) {
           playerRef.current.playVideo();
           setIsPlayingVideo(true);
-
-          if (autoPauseEnabled) {
-            const durationSec = Math.max(1, seg.end_time - seg.start_time);
-            const durationMs = (durationSec / playbackSpeed) * 1000;
-            autoPauseTimerRef.current = setTimeout(() => {
-              pauseVideo();
-              if (isLooping) {
-                seekToSegment(index, true);
-              }
-            }, durationMs + 150);
-          }
         }
       }
-
     },
-    [activeLesson.segments, playbackSpeed, autoPauseEnabled, isLooping, pauseVideo, speechRec]
+    [activeLesson.segments, speechRec]
   );
+  seekToSegmentRef.current = seekToSegment;
+
+  const handleTogglePlayVideo = useCallback(() => {
+    if (isPlayingVideo) {
+      pauseVideo();
+    } else {
+      // Pause any ongoing shadowing voice playback
+      if (shadowingAudioRef.current && isPlayingShadowingAudio) {
+        shadowingAudioRef.current.pause();
+        setIsPlayingShadowingAudio(false);
+      }
+
+      const cur = activeSegmentIndexRef.current;
+      const currentSeg = activeLesson.segments[cur];
+
+      if (
+        playModeRef.current === "pause_after_sentence" &&
+        (justPausedSegRef.current !== -1 ||
+          (currentSeg && currentTime >= currentSeg.end_time - 0.2))
+      ) {
+        // Paused at end of sentence -> advance to next sentence!
+        const nextIdx = cur < activeLesson.segments.length - 1 ? cur + 1 : 0;
+        justPausedSegRef.current = -1;
+        setIsAutoPaused(false);
+        seekToSegment(nextIdx, true);
+      } else {
+        playVideo();
+      }
+    }
+  }, [isPlayingVideo, currentTime, activeLesson.segments, pauseVideo, playVideo, seekToSegment]);
 
   const handlePlayNative = useCallback(() => {
     seekToSegment(activeSegmentIndex, true);
@@ -505,6 +891,14 @@ export default function CorodomoShadowingStudioPage() {
   const handleStartRecord = useCallback(async () => {
     pauseVideo();
     soundEffects.playMicStart();
+    setScore(null);
+    setUserAudioUrl(null);
+    setSpokenTranscript("");
+    if (userAudioRef.current) {
+      userAudioRef.current.pause();
+      userAudioRef.current = null;
+    }
+    setIsPlayingUserAudio(false);
     speechRec.resetTranscript();
     setRecordingStartMs(Date.now());
     setRecordingStatus("recording");
@@ -539,6 +933,7 @@ export default function CorodomoShadowingStudioPage() {
             provider: sttProvider === "auto" ? "whisper-local" : sttProvider,
             model: settings.stt?.model || "auto",
             language: "en-US",
+            prompt: currentSegment.text,
           });
           spokenText = res.text.trim();
         } catch {
@@ -566,6 +961,7 @@ export default function CorodomoShadowingStudioPage() {
       );
 
       setScore(evalResult);
+      setSpokenTranscript(spokenText);
       const updatedScores = {
         ...sentenceScores,
         [currentSegment.segment_id]: evalResult,
@@ -614,8 +1010,7 @@ export default function CorodomoShadowingStudioPage() {
             handlePlayNative();
           }
         } else {
-          if (isPlayingVideo) pauseVideo();
-          else playVideo();
+          handleTogglePlayVideo();
         }
       } else if (e.code === "Enter") {
         e.preventDefault();
@@ -632,9 +1027,12 @@ export default function CorodomoShadowingStudioPage() {
       } else if (e.code === "ArrowLeft") {
         e.preventDefault();
         handlePrevSegment();
-      } else if (e.code === "ArrowRight") {
+      } else if (e.code === "KeyM" && activeMode === "shadowing") {
         e.preventDefault();
-        handleNextSegment();
+        handleToggleShadowingRecord();
+      } else if (e.code === "KeyL" && activeMode === "shadowing") {
+        e.preventDefault();
+        cyclePlayMode();
       }
     };
 
@@ -649,14 +1047,22 @@ export default function CorodomoShadowingStudioPage() {
     handleStartRecord,
     handleStopRecord,
     handlePlayNative,
-    playVideo,
-    pauseVideo,
+    handleTogglePlayVideo,
     handlePrevSegment,
     handleNextSegment,
+    handleToggleShadowingRecord,
+    cyclePlayMode,
   ]);
 
   // ─── Word Lookup Handler ─────────────────────────────────────────────
   const handleWordClick = (word: string, e?: React.MouseEvent<HTMLElement>) => {
+    // Automatically pause video so the pronunciation can be clearly heard without overlap
+    pauseVideo();
+    if (autoPauseTimerRef.current) {
+      clearTimeout(autoPauseTimerRef.current);
+      autoPauseTimerRef.current = null;
+    }
+
     const clean = word.toLowerCase().replace(/[^\w']/g, "");
     if (!clean) return;
 
@@ -766,6 +1172,13 @@ export default function CorodomoShadowingStudioPage() {
       setActiveSegmentIndex(0);
       setScore(null);
       setUserAudioUrl(null);
+      setShadowingAudioUrl(null);
+      if (shadowingAudioRef.current) {
+        shadowingAudioRef.current.pause();
+        shadowingAudioRef.current = null;
+      }
+      setIsPlayingShadowingAudio(false);
+      setShadowingRecordStatus("idle");
       setSentenceScores({});
       setCustomUrlInput("");
       setModalUrlInput("");
@@ -789,6 +1202,13 @@ export default function CorodomoShadowingStudioPage() {
     setActiveSegmentIndex(startIdx);
     setScore(null);
     setUserAudioUrl(null);
+    setShadowingAudioUrl(null);
+    if (shadowingAudioRef.current) {
+      shadowingAudioRef.current.pause();
+      shadowingAudioRef.current = null;
+    }
+    setIsPlayingShadowingAudio(false);
+    setShadowingRecordStatus("idle");
     setSentenceScores({});
 
     // Enter Studio View
@@ -849,39 +1269,195 @@ export default function CorodomoShadowingStudioPage() {
   };
 
   // ─── Mode 1: Subtitle Pill & Video Controls Bar (Shadowing Left) ─────
-  const renderShadowingLeftControls = () => (
-    <>
-      {/* Subtitle Pill & Translation Area (Placed Below Video, matching Corodomo) */}
-      <div className="flex-1 min-h-[90px] flex flex-col items-center justify-center px-4 py-2 text-center select-text">
-        {showSubtitle && (
-          <div className="inline-flex flex-wrap items-end justify-center gap-x-2 gap-y-1 bg-[#1e2329] dark:bg-[#181d24] text-white px-5 py-2.5 rounded-2xl border border-white/10 shadow-md">
-            {currentSentenceTokens.map((token, i) => (
-              <div
-                key={i}
-                onClick={(e) => handleWordClick(token.cleanWord, e)}
-                className="inline-flex flex-col items-center cursor-pointer group px-1 py-0.5 rounded transition-all hover:bg-white/10"
-                title={`Click để tra từ: "${token.cleanWord}"`}
-              >
-                <span className="text-[10px] sm:text-[11px] font-mono text-amber-300 font-semibold leading-none mb-0.5 select-none tracking-tight">
-                  {token.ipa || "—"}
+  const renderShadowingLeftControls = () => {
+    const targetWords = currentSegment.text
+      .toLowerCase()
+      .split(/\s+/)
+      .map((w) => w.replace(/[^\w']/g, ""))
+      .filter(Boolean);
+    const spokenWords = shadowingTranscript.trim().split(/\s+/).filter(Boolean);
+    const matchedCount = spokenWords.filter((w) =>
+      targetWords.includes(w.toLowerCase().replace(/[^\w']/g, ""))
+    ).length;
+
+    return (
+      <>
+        {/* Subtitle Pill & Translation Area (Placed Below Video, matching Corodomo) */}
+        <div className="shrink-0 flex flex-col items-center justify-center px-2 py-1 text-center select-text min-h-[64px]">
+          {showSubtitle && (
+            <div className="inline-flex flex-wrap items-end justify-center gap-x-2 gap-y-0.5 bg-[#1e2329] dark:bg-[#181d24] text-white px-3.5 py-1.5 rounded-xl border border-white/10 shadow-md">
+              {currentSentenceTokens.map((token, i) => (
+                <div
+                  key={i}
+                  onClick={(e) => handleWordClick(token.cleanWord, e)}
+                  className="inline-flex flex-col items-center cursor-pointer group px-1 py-0.5 rounded transition-all hover:bg-white/10"
+                  title={`Click để tra từ: "${token.cleanWord}"`}
+                >
+                  <span className="text-[10px] font-mono text-amber-300 font-semibold leading-none mb-0.5 select-none tracking-tight">
+                    {token.ipa || "—"}
+                  </span>
+                  <span className="text-sm sm:text-[15px] font-bold text-white group-hover:text-amber-200 transition-colors leading-tight">
+                    {token.word}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {showTranslation && currentSegment.translationVi && (
+            <p className="text-xs text-foreground/90 font-bold leading-tight mt-1 max-w-2xl line-clamp-2">
+              {currentSegment.translationVi}
+            </p>
+          )}
+
+          {/* Listen & Repeat (Pause After Sentence) Status Banner */}
+          {playMode === "pause_after_sentence" && (justPausedSegRef.current === activeSegmentIndex || isAutoPaused) && !isPlayingVideo && (
+            <div className="mt-1 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-semibold animate-in fade-in-0 zoom-in-95 shadow-xs">
+              <PauseCircle className="size-3.5 animate-pulse shrink-0" />
+              <span>Đã dừng cuối câu • Bấm Nói (phím M) để luyện theo, hoặc bấm Play / Space để sang câu sau</span>
+            </div>
+          )}
+        </div>
+
+        {/* ── Speech Preview in Shadowing Mode (Placed between Subtitle and Controls) ── */}
+        {/* 1. Live Speech Recognition Preview (While Recording) */}
+        {shadowingRecordStatus === "recording" && (
+          <div className="shrink-0 mb-1 px-3 py-2 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 animate-in fade-in-0 zoom-in-95 duration-150 shadow-xs flex flex-col items-center gap-1.5">
+            <div className="flex items-center justify-between w-full max-w-2xl px-1">
+              <div className="flex items-center gap-2">
+                <span className="relative flex size-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full size-2.5 bg-rose-500" />
                 </span>
-                <span className="text-sm sm:text-base font-bold text-white group-hover:text-amber-200 transition-colors leading-tight">
-                  {token.word}
+                <span className="text-[11px] font-bold uppercase tracking-wider">
+                  Đang nhận diện giọng nói (Phím M hoặc bấm Nói để dừng)
                 </span>
               </div>
-            ))}
+
+              {/* Live Audio Volume Visualizer Meter */}
+              <div className="flex items-center gap-1.5 bg-background/60 px-2 py-0.5 rounded-full border border-border/50">
+                <div className="flex items-end gap-0.5 h-3.5">
+                  {[0.4, 0.7, 1.0, 0.8, 0.5].map((multiplier, idx) => {
+                    const barHeight = Math.max(
+                      3,
+                      Math.min(14, Math.round((recorder.volume / 100) * 14 * multiplier + 2))
+                    );
+                    return (
+                      <span
+                        key={idx}
+                        className="w-1 rounded-full bg-rose-500 transition-all duration-75"
+                        style={{ height: `${barHeight}px` }}
+                      />
+                    );
+                  })}
+                </div>
+                <span className="text-[10px] font-mono font-bold text-rose-600 dark:text-rose-400 select-none">
+                  {recorder.volume}%
+                </span>
+              </div>
+            </div>
+
+            <div className="w-full max-w-2xl bg-background/80 backdrop-blur px-3 py-2 rounded-xl border border-border/60 min-h-[36px] flex items-center justify-center text-center select-text">
+              {speechRec.fullTranscript ? (
+                <p className="text-sm sm:text-base font-bold text-primary font-mono leading-snug">
+                  {speechRec.fullTranscript}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground/70 italic">
+                  Đang lắng nghe... Hãy nhại theo câu mẫu vào micro
+                </p>
+              )}
+            </div>
+
+            {/* Low-Volume Warning */}
+            {recorder.isTooQuiet && (
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2.5 py-0.5 rounded-full animate-in fade-in-0 duration-150">
+                <span>⚠️ Âm lượng micro đang rất nhỏ — hãy đưa micro gần lại hoặc nói to hơn nhé!</span>
+              </div>
+            )}
           </div>
         )}
 
-        {showTranslation && currentSegment.translationVi && (
-          <p className="text-xs sm:text-sm text-foreground font-bold leading-normal mt-2 max-w-2xl">
-            {currentSegment.translationVi}
-          </p>
+        {/* 2. Finished Speech Preview & Word Comparison (After Recording) */}
+        {shadowingRecordStatus === "idle" && showShadowingPreview && (shadowingTranscript || shadowingAudioUrl) && (
+          <div className="shrink-0 mb-1 px-3 py-2.5 rounded-2xl bg-card/95 backdrop-blur border border-primary/25 shadow-xs animate-in fade-in-0 zoom-in-95 duration-200 flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-1.5">
+              <div className="flex items-center gap-2 min-w-0">
+                <Mic className="size-3.5 text-primary shrink-0" />
+                <span className="text-xs font-extrabold text-foreground truncate">
+                  Bạn vừa nói:
+                </span>
+                {shadowingTranscript && (
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 shrink-0">
+                    {matchedCount}/{targetWords.length} từ khớp
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                {shadowingAudioUrl && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleTogglePlayShadowingAudio}
+                    className={cn(
+                      "h-6 px-2.5 rounded-lg text-[11px] font-bold gap-1 transition-all cursor-pointer",
+                      isPlayingShadowingAudio
+                        ? "bg-indigo-600 text-white border-indigo-700 shadow-xs"
+                        : "text-indigo-600 dark:text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/10"
+                    )}
+                  >
+                    {isPlayingShadowingAudio ? (
+                      <Square className="size-2.5 fill-current shrink-0" />
+                    ) : (
+                      <Headphones className="size-2.5 shrink-0" />
+                    )}
+                    <span>{isPlayingShadowingAudio ? "Dừng" : "Nghe lại giọng bạn"}</span>
+                  </Button>
+                )}
+
+                <button
+                  onClick={() => setShowShadowingPreview(false)}
+                  className="size-5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted flex items-center justify-center transition-colors cursor-pointer"
+                  title="Đóng bản xem trước"
+                >
+                  <X className="size-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Word Chips */}
+            {shadowingTranscript ? (
+              <div className="flex flex-wrap items-center justify-center gap-1.5 select-text py-0.5 max-h-24 overflow-y-auto">
+                {spokenWords.map((w, idx) => {
+                  const cleanW = w.toLowerCase().replace(/[^\w']/g, "");
+                  const isMatch = cleanW && targetWords.includes(cleanW);
+                  return (
+                    <span
+                      key={idx}
+                      className={cn(
+                        "px-2 py-0.5 rounded-lg text-xs sm:text-[13px] font-semibold font-mono border transition-all",
+                        isMatch
+                          ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                          : "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30"
+                      )}
+                      title={isMatch ? "Khớp với câu gốc" : "Khác hoặc chưa chuẩn với câu gốc"}
+                    >
+                      {w}
+                    </span>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground italic text-center py-0.5">
+                Chưa nhận diện rõ từ ngữ — hãy bấm &apos;Nghe lại giọng bạn&apos; hoặc thử nói to và rõ hơn.
+              </p>
+            )}
+          </div>
         )}
-      </div>
 
       {/* Video Controls Bar below Video */}
-      <div className="shrink-0 px-3.5 py-2 rounded-xl border border-border/60 bg-card flex items-center justify-between gap-2 shadow-2xs">
+      <div className="shrink-0 px-2.5 py-1.5 rounded-xl border border-border/60 bg-card flex items-center justify-between gap-1.5 shadow-2xs">
         {/* Left: Toggles for [Phụ đề] & [Bản dịch] */}
         <div className="flex items-center gap-2">
           <button
@@ -909,22 +1485,68 @@ export default function CorodomoShadowingStudioPage() {
             <Check className={cn("size-3", showTranslation ? "opacity-100" : "opacity-0")} />
             <span>Bản dịch</span>
           </button>
+
+          {/* Subtitle Sync Calibration (±0.25s) */}
+          <div className="hidden sm:flex items-center gap-1 pl-1.5 border-l border-border/50">
+            <span
+              className="text-[10px] font-mono font-bold text-muted-foreground select-none"
+              title="Khớp thời gian hiển thị phụ đề với tiếng nói trong video"
+            >
+              Sync:
+            </span>
+            <button
+              onClick={() => handleAdjustSyncOffset(-0.25)}
+              className="size-5 rounded bg-muted/40 hover:bg-muted text-[10px] font-mono font-bold text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors select-none cursor-pointer"
+              title="Hiện phụ đề muộn hơn 0.25s (-0.25s)"
+            >
+              -
+            </button>
+            <button
+              onClick={handleResetSyncOffset}
+              className={cn(
+                "px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border transition-colors select-none cursor-pointer",
+                subtitleSyncOffset === 0.35
+                  ? "bg-primary/10 text-primary border-primary/30"
+                  : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
+              )}
+              title="Click để reset về mức bù chuẩn (+0.35s)"
+            >
+              {subtitleSyncOffset > 0 ? `+${subtitleSyncOffset}s` : `${subtitleSyncOffset}s`}
+            </button>
+            <button
+              onClick={() => handleAdjustSyncOffset(0.25)}
+              className="size-5 rounded bg-muted/40 hover:bg-muted text-[10px] font-mono font-bold text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors select-none cursor-pointer"
+              title="Hiện phụ đề sớm hơn 0.25s (+0.25s)"
+            >
+              +
+            </button>
+          </div>
         </div>
 
-        {/* Center: Sentence Navigation & Loop */}
+        {/* Center: Play, Navigation & 3-Mode Playback Switcher */}
         <div className="flex items-center gap-1.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleTogglePlayVideo}
+            className="size-7 p-0 rounded-lg text-foreground hover:text-primary hover:bg-muted/60"
+            title={isPlayingVideo ? "Tạm dừng video (Space)" : "Phát video (Space)"}
+          >
+            {isPlayingVideo ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
+          </Button>
+
           <Button
             variant="ghost"
             size="sm"
             onClick={handlePrevSegment}
             disabled={activeSegmentIndex === 0}
             className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
-            title="Câu trước"
+            title="Câu trước (←)"
           >
             <ChevronLeft className="size-4" />
           </Button>
 
-          <span className="text-xs font-mono font-bold text-foreground px-1.5">
+          <span className="text-xs font-mono font-bold text-foreground px-1.5 select-none">
             {activeSegmentIndex + 1} / {activeLesson.segments.length}
           </span>
 
@@ -934,25 +1556,104 @@ export default function CorodomoShadowingStudioPage() {
             onClick={handleNextSegment}
             disabled={activeSegmentIndex === activeLesson.segments.length - 1}
             className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
-            title="Câu sau"
+            title="Câu sau (→)"
           >
             <ChevronRight className="size-4" />
           </Button>
 
-          <Button
-            variant={isLooping ? "default" : "outline"}
-            size="sm"
-            onClick={() => setIsLooping(!isLooping)}
+          {/* 3-Mode Playback Button Group */}
+          <div className="inline-flex items-center rounded-xl bg-muted/60 p-0.5 border border-border/60">
+            <button
+              onClick={() => handleSelectPlayMode("continuous")}
+              className={cn(
+                "h-7 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer select-none",
+                playMode === "continuous"
+                  ? "bg-sky-500 text-white shadow-xs font-extrabold"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              )}
+              title="Chế độ: Phát liên tục từ đầu tới cuối"
+            >
+              <Play className="size-3 shrink-0" />
+              <span className="text-[11px] whitespace-nowrap">Liên tục</span>
+            </button>
+
+            <button
+              onClick={() => handleSelectPlayMode("pause_after_sentence")}
+              className={cn(
+                "h-7 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer select-none",
+                playMode === "pause_after_sentence"
+                  ? "bg-amber-500 text-white shadow-xs font-extrabold ring-1 ring-amber-400/40"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              )}
+              title="Chế độ: Dừng sau mỗi câu để bạn nói theo (Bấm Space hoặc Play để sang câu tiếp)"
+            >
+              <PauseCircle className="size-3.5 shrink-0" />
+              <span className="text-[11px] whitespace-nowrap">Dừng sau câu</span>
+            </button>
+
+            <button
+              onClick={() => handleSelectPlayMode("loop_sentence")}
+              className={cn(
+                "h-7 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer select-none",
+                playMode === "loop_sentence"
+                  ? "bg-indigo-600 text-white shadow-xs font-extrabold ring-1 ring-indigo-400/40"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              )}
+              title="Chế độ: Lặp lại liên tục 1 câu hiện tại để luyện ngữ điệu sâu"
+            >
+              <Repeat1 className="size-3.5 shrink-0" />
+              <span className="text-[11px] whitespace-nowrap">Lặp 1 câu</span>
+            </button>
+          </div>
+
+          {/* Shadowing Quick Voice Recording & Preview Controls */}
+          <span className="w-px h-4 bg-border/60 mx-0.5 hidden xs:inline" />
+
+          <button
+            onClick={handleToggleShadowingRecord}
             className={cn(
-              "size-7 p-0 rounded-lg transition-all",
-              isLooping
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground border-border/60 hover:text-foreground"
+              "h-7 px-2 sm:px-2.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 border shadow-2xs cursor-pointer select-none",
+              shadowingRecordStatus === "recording"
+                ? "bg-rose-500 text-white border-rose-600 animate-pulse shadow-rose-500/20"
+                : "bg-muted/40 text-muted-foreground border-border/60 hover:text-foreground hover:bg-muted/70"
             )}
-            title="Lặp lại câu này"
+            title={
+              shadowingRecordStatus === "recording"
+                ? "Đang thu âm giọng bạn... (Bấm để dừng hoặc phím M)"
+                : "Thu âm giọng bạn nhại lại câu này (Phím M)"
+            }
           >
-            <Repeat className="size-3.5" />
-          </Button>
+            <Mic className={cn("size-3.5 shrink-0", shadowingRecordStatus === "recording" && "animate-bounce text-white")} />
+            <span className="text-[11px] font-semibold whitespace-nowrap hidden sm:inline">
+              {shadowingRecordStatus === "recording" ? "Đang thu..." : "Nói"}
+            </span>
+          </button>
+
+          {shadowingAudioUrl && (
+            <button
+              onClick={handleTogglePlayShadowingAudio}
+              className={cn(
+                "h-7 px-2 sm:px-2.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 border shadow-2xs cursor-pointer select-none animate-in fade-in-0 zoom-in-95",
+                isPlayingShadowingAudio
+                  ? "bg-indigo-600 text-white border-indigo-700 shadow-indigo-500/20"
+                  : "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/20"
+              )}
+              title={
+                isPlayingShadowingAudio
+                  ? "Dừng nghe lại giọng bạn"
+                  : "Nghe lại giọng bạn vừa nhại câu này"
+              }
+            >
+              {isPlayingShadowingAudio ? (
+                <Square className="size-3 fill-current shrink-0" />
+              ) : (
+                <Headphones className="size-3.5 shrink-0" />
+              )}
+              <span className="text-[11px] font-semibold whitespace-nowrap">
+                {isPlayingShadowingAudio ? "Dừng" : "Nghe lại"}
+              </span>
+            </button>
+          )}
         </div>
 
         {/* Right: Speed & Back to Hub */}
@@ -987,58 +1688,59 @@ export default function CorodomoShadowingStudioPage() {
       </div>
     </>
   );
+};
 
   // ─── Mode 1: Synchronized Subtitle Sidebar (Shadowing Right) ────────
   const renderShadowingSidebar = () => (
-    <div className="h-full flex flex-col rounded-3xl border border-border/80 bg-card overflow-hidden shadow-xs min-h-0">
+    <div className="h-full flex flex-col rounded-2xl border border-border/80 bg-card overflow-hidden shadow-xs min-h-0">
       {/* Header: "Phụ đề" + Download + Copy */}
-      <div className="px-4 py-2.5 border-b border-border/60 bg-muted/20 flex items-center justify-between gap-2 shrink-0">
-        <div className="flex items-center gap-2">
-          <h3 className="font-extrabold text-sm text-foreground">Phụ đề</h3>
-          <Badge variant="outline" className="text-[10px] font-mono h-5 text-muted-foreground">
+      <div className="px-3 py-1.5 border-b border-border/60 bg-muted/20 flex items-center justify-between gap-1.5 shrink-0">
+        <div className="flex items-center gap-1.5">
+          <h3 className="font-extrabold text-xs text-foreground">Phụ đề</h3>
+          <Badge variant="outline" className="text-[10px] font-mono h-4.5 px-1.5 text-muted-foreground">
             {activeLesson.segments.length} câu
           </Badge>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           <Button
             variant="ghost"
             size="sm"
             onClick={handleDownloadTranscript}
-            className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
+            className="size-6 p-0 rounded-md text-muted-foreground hover:text-foreground"
             title="Tải phụ đề về máy"
           >
-            <Download className="size-3.5" />
+            <Download className="size-3" />
           </Button>
 
           <Button
             variant="ghost"
             size="sm"
             onClick={handleCopyTranscript}
-            className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
+            className="size-6 p-0 rounded-md text-muted-foreground hover:text-foreground"
             title="Sao chép toàn bộ lời thoại"
           >
-            <Copy className="size-3.5" />
+            <Copy className="size-3" />
           </Button>
         </div>
       </div>
 
       {/* Search Bar */}
-      <div className="p-2 border-b border-border/40 shrink-0">
+      <div className="p-1.5 border-b border-border/40 shrink-0">
         <div className="relative">
-          <Search className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Search className="size-3 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={transcriptSearch}
             onChange={(e) => setTranscriptSearch(e.target.value)}
-            placeholder="Tìm kiếm câu thoại hoặc nghĩa tiếng Việt..."
-            className="h-8 pl-8 text-xs bg-muted/20 rounded-xl"
+            placeholder="Tìm câu hoặc nghĩa tiếng Việt..."
+            className="h-7 pl-6.5 text-[11px] bg-muted/20 rounded-lg"
           />
         </div>
       </div>
 
-      {/* Scrollable Sentence List with Real-time Auto-Scroll Highlight */}
+      {/* Scrollable Sentence List with Real-time Auto-Scroll Highlight (High Density) */}
       <div
-        className="flex-1 min-h-0 overflow-y-auto p-2.5 space-y-2"
+        className="flex-1 min-h-0 overflow-y-auto p-1.5 space-y-1"
         onMouseEnter={() => (isUserInteractingTimeline.current = true)}
         onMouseLeave={() => (isUserInteractingTimeline.current = false)}
       >
@@ -1056,31 +1758,31 @@ export default function CorodomoShadowingStudioPage() {
               }}
               onClick={() => seekToSegment(originalIndex, true)}
               className={cn(
-                "p-3 rounded-2xl border transition-all cursor-pointer select-text flex items-start gap-2.5",
+                "p-2 rounded-xl border transition-all cursor-pointer select-text flex items-start gap-2",
                 isActive
-                  ? "bg-primary/10 border-primary/50 shadow-xs ring-1 ring-primary/30"
-                  : "bg-card hover:bg-muted/30 border-border/60"
+                  ? "bg-primary/10 border-primary/50 shadow-2xs ring-1 ring-primary/30"
+                  : "bg-card hover:bg-muted/30 border-border/50"
               )}
             >
               <button
                 className={cn(
-                  "size-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 transition-colors",
+                  "size-5 rounded-md flex items-center justify-center shrink-0 mt-0.5 transition-colors",
                   isActive
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted text-muted-foreground hover:bg-muted/80"
                 )}
               >
                 {isActive && isPlayingVideo ? (
-                  <Pause className="size-3 fill-current" />
+                  <Pause className="size-2.5 fill-current" />
                 ) : (
-                  <Play className="size-3 fill-current ml-0.5" />
+                  <Play className="size-2.5 fill-current ml-0.5" />
                 )}
               </button>
 
               <div className="min-w-0 flex-1">
                 <p
                   className={cn(
-                    "text-xs sm:text-sm leading-snug",
+                    "text-xs sm:text-[13px] leading-snug",
                     isActive ? "font-bold text-foreground" : "text-foreground/90 font-medium"
                   )}
                 >
@@ -1088,7 +1790,7 @@ export default function CorodomoShadowingStudioPage() {
                 </p>
 
                 {seg.translationVi && (
-                  <p className="text-[11px] sm:text-xs text-muted-foreground mt-1 leading-normal">
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">
                     {seg.translationVi}
                   </p>
                 )}
@@ -1220,287 +1922,440 @@ export default function CorodomoShadowingStudioPage() {
   );
 
   // ─── Mode 2: Pronunciation & Scoring Panel (Pronounce Right) ─────────
-  const renderPronouncePanel = () => (
-    <div className="h-full flex flex-col rounded-3xl border border-border/80 bg-card overflow-hidden shadow-xs min-h-0">
-      <div className="px-4 py-2.5 border-b border-border/60 bg-muted/20 flex items-center justify-between shrink-0">
-        <h3 className="font-extrabold text-sm text-foreground">Luyện phát âm</h3>
-        <Badge variant="outline" className="text-xs font-mono font-bold h-6">
-          {activeSegmentIndex + 1}/{activeLesson.segments.length}
-        </Badge>
-      </div>
+  const renderPronouncePanel = () => {
+    const hasScore = !!score;
+    const overallScore = score?.overall ?? 0;
+    const scoreBg =
+      overallScore >= 85
+        ? "bg-emerald-500 text-white"
+        : overallScore >= 65
+        ? "bg-amber-500 text-white"
+        : "bg-rose-500 text-white";
 
-      {/* Sentence Pagination */}
-      <div className="px-4 py-2.5 border-b border-border/50 shrink-0 flex items-center justify-between gap-2 overflow-x-auto">
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handlePrevSegment}
-            disabled={activeSegmentIndex === 0}
-            className="size-7 p-0 rounded-lg"
-          >
-            <ChevronLeft className="size-3.5" />
-          </Button>
+    return (
+      <div className="h-full flex flex-col rounded-2xl border border-border/80 bg-card overflow-hidden shadow-xs min-h-0">
+        {/* ── Header: Title + Pagination + Quick Settings ── */}
+        <div className="px-3 py-1.5 border-b border-border/60 bg-muted/20 flex items-center justify-between gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5">
+            <h3 className="font-extrabold text-xs text-foreground">Luyện phát âm</h3>
+            <span className="text-[10px] font-mono font-bold text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded-full border border-border/50">
+              Câu {activeSegmentIndex + 1}/{activeLesson.segments.length}
+            </span>
+          </div>
 
-          {Array.from({ length: Math.min(10, activeLesson.segments.length) }, (_, i) => {
-            const startOffset = Math.max(
-              0,
-              Math.min(activeSegmentIndex - 4, activeLesson.segments.length - 10)
-            );
-            const sentenceNum = startOffset + i + 1;
-            const isCur = sentenceNum - 1 === activeSegmentIndex;
+          <div className="flex items-center gap-0.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handlePrevSegment}
+              disabled={activeSegmentIndex === 0}
+              className="size-6 p-0 rounded-md text-muted-foreground hover:text-foreground"
+              title="Câu trước (←)"
+            >
+              <ChevronLeft className="size-3" />
+            </Button>
 
-            return (
-              <button
-                key={sentenceNum}
-                onClick={() => seekToSegment(sentenceNum - 1, true)}
-                className={cn(
-                  "size-7 rounded-full text-xs font-mono font-bold transition-all flex items-center justify-center",
-                  isCur
-                    ? "bg-primary text-primary-foreground shadow-xs"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
-                )}
-              >
-                {sentenceNum}
-              </button>
-            );
-          })}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleNextSegment}
+              disabled={activeSegmentIndex === activeLesson.segments.length - 1}
+              className="size-6 p-0 rounded-md text-muted-foreground hover:text-foreground"
+              title="Câu sau (→)"
+            >
+              <ChevronRight className="size-3" />
+            </Button>
 
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleNextSegment}
-            disabled={activeSegmentIndex === activeLesson.segments.length - 1}
-            className="size-7 p-0 rounded-lg"
-          >
-            <ChevronRight className="size-3.5" />
-          </Button>
-        </div>
+            <span className="w-px h-3 bg-border/60 mx-0.5" />
 
-        <div className="hidden sm:flex items-center gap-1 text-[11px] text-muted-foreground font-medium">
-          <span>Số câu/lượt:</span>
-          <span className="font-bold text-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
-            1
-          </span>
-        </div>
-      </div>
-
-      {/* CÂU HIỆN TẠI */}
-      <div className="p-4 border-b border-border/60 bg-muted/10 space-y-3 shrink-0">
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-            CÂU HIỆN TẠI
-          </span>
-          <div className="flex items-center gap-1">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => tts.speak(currentSegment.text)}
-              className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
-              title="Nghe Audio mẫu"
+              className="size-6 p-0 rounded-md text-muted-foreground hover:text-foreground"
+              title="Nghe Audio mẫu (TTS)"
             >
-              <Volume2 className="size-3.5" />
+              <Volume2 className="size-3" />
             </Button>
+
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setShowSubtitle(!showSubtitle)}
-              className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
+              className="size-6 p-0 rounded-md text-muted-foreground hover:text-foreground"
               title="Ẩn/Hiện chữ"
             >
-              {showSubtitle ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+              {showSubtitle ? <Eye className="size-3" /> : <EyeOff className="size-3" />}
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setFontSizeLevel(
-                  fontSizeLevel === "md" ? "lg" : fontSizeLevel === "lg" ? "xl" : "md"
-                );
-              }}
-              className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
-              title="Cỡ chữ"
-            >
-              <Type className="size-3.5" />
-            </Button>
+
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setShowTranslation(!showTranslation)}
-              className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
+              className="size-6 p-0 rounded-md text-muted-foreground hover:text-foreground"
               title="Ẩn/Hiện dịch nghĩa"
             >
-              <Languages className="size-3.5" />
+              <Languages className="size-3" />
             </Button>
           </div>
         </div>
 
-        {/* Target Sentence Display with Stacked IPA */}
-        <div className="min-h-[56px] flex flex-col justify-center">
-          {showSubtitle ? (
-            <div className="flex flex-wrap items-end gap-x-2 gap-y-1">
-              {currentSentenceTokens.map((token, i) => (
-                <div
-                  key={i}
-                  onClick={(e) => handleWordClick(token.cleanWord, e)}
-                  className="inline-flex flex-col items-center cursor-pointer group px-0.5 rounded transition-all hover:bg-muted/40"
-                >
-                  <span className="text-[10px] font-mono text-primary font-semibold leading-none mb-0.5 select-none">
-                    {token.ipa || "—"}
+        {/* ── Scrollable Body: Target Sentence + Voice Preview + Score (Compact) ── */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-2.5 sm:p-3 space-y-2">
+          {/* 1. Target Sentence Box */}
+          <div className="p-2.5 rounded-xl bg-muted/20 border border-border/70 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                CÂU MỤC TIÊU
+              </span>
+              <span className="text-[10px] text-muted-foreground italic">
+                (Click từ để tra nghĩa & nghe phát âm)
+              </span>
+            </div>
+
+            {showSubtitle ? (
+              <div className="flex flex-wrap items-end gap-x-2 gap-y-1.5 py-1">
+                {currentSentenceTokens.map((token, i) => {
+                  const clean = token.cleanWord.toLowerCase();
+                  let wordClass = "hover:bg-primary/20 hover:text-primary";
+
+                  if (hasScore && clean) {
+                    const isCorrect = score.correctWords.some(
+                      (w) => w.toLowerCase() === clean
+                    );
+                    const isMissed = score.missedWords.some(
+                      (w) => w.toLowerCase() === clean
+                    );
+
+                    if (isCorrect) {
+                      wordClass =
+                        "text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/15 border border-emerald-500/30 rounded px-1";
+                    } else if (isMissed) {
+                      wordClass =
+                        "text-rose-600 dark:text-rose-400 line-through bg-rose-500/15 border border-rose-500/30 rounded px-1";
+                    } else {
+                      wordClass =
+                        "text-amber-600 dark:text-amber-400 font-semibold bg-amber-500/15 border border-amber-500/30 rounded px-1";
+                    }
+                  }
+
+                  return (
+                    <div
+                      key={i}
+                      onClick={(e) => handleWordClick(token.cleanWord, e)}
+                      className={cn(
+                        "inline-flex flex-col items-center cursor-pointer group px-1 py-0.5 rounded transition-all select-none",
+                        wordClass
+                      )}
+                      title={`Click để tra từ: "${token.cleanWord}"`}
+                    >
+                      <span className="text-[10px] font-mono font-semibold leading-none mb-0.5 opacity-80">
+                        {token.ipa || "—"}
+                      </span>
+                      <span className="text-base font-extrabold leading-tight">
+                        {token.word}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 text-muted-foreground py-2 italic text-xs">
+                <EyeOff className="size-4" />
+                <span>Nội dung đã ẩn để bạn tập trung luyện nghe & phản xạ</span>
+              </div>
+            )}
+
+            {showTranslation && currentSegment.translationVi && (
+              <p className="text-xs text-muted-foreground font-medium italic pt-1 border-t border-border/40">
+                {currentSegment.translationVi}
+              </p>
+            )}
+          </div>
+
+          {/* Live Recording & Speech Recognition Preview (While Recording) */}
+          {recordingStatus === "recording" && (
+            <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 shadow-xs space-y-2 animate-in fade-in-0 zoom-in-95 duration-200">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400 flex items-center gap-2">
+                  <span className="relative flex size-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full size-2.5 bg-rose-500" />
                   </span>
-                  <span
-                    className={cn(
-                      "font-extrabold text-foreground group-hover:text-primary transition-colors leading-tight",
-                      fontSizeLevel === "md"
-                        ? "text-base"
-                        : fontSizeLevel === "lg"
-                        ? "text-lg"
-                        : "text-xl"
-                    )}
-                  >
-                    {token.word}
+                  <span>Đang lắng nghe giọng nói của bạn...</span>
+                </span>
+
+                {/* Live Audio Volume Visualizer Meter */}
+                <div className="flex items-center gap-1.5 bg-background/60 px-2 py-0.5 rounded-full border border-border/50">
+                  <div className="flex items-end gap-0.5 h-3.5">
+                    {[0.4, 0.7, 1.0, 0.8, 0.5].map((multiplier, idx) => {
+                      const barHeight = Math.max(
+                        3,
+                        Math.min(14, Math.round((recorder.volume / 100) * 14 * multiplier + 2))
+                      );
+                      return (
+                        <span
+                          key={idx}
+                          className="w-1 rounded-full bg-rose-500 transition-all duration-75"
+                          style={{ height: `${barHeight}px` }}
+                        />
+                      );
+                    })}
+                  </div>
+                  <span className="text-[10px] font-mono font-bold text-rose-600 dark:text-rose-400 select-none">
+                    {recorder.volume}%
                   </span>
                 </div>
-              ))}
+              </div>
+
+              <div className="bg-background/80 backdrop-blur p-2.5 rounded-xl border border-border/60 min-h-[44px] flex items-center select-text">
+                {speechRec.fullTranscript ? (
+                  <p className="text-sm sm:text-base font-bold text-primary font-mono leading-relaxed">
+                    {speechRec.fullTranscript}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground/70 italic">
+                    Hãy đọc to câu trên vào micro... chữ bạn nói sẽ xuất hiện ở đây theo thời gian thực.
+                  </p>
+                )}
+              </div>
+
+              {/* Low-Volume Warning */}
+              {recorder.isTooQuiet && (
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2.5 py-0.5 rounded-full animate-in fade-in-0 duration-150">
+                  <span>⚠️ Âm lượng micro đang rất nhỏ — hãy đưa micro gần lại hoặc nói to hơn nhé!</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Evaluating State Preview */}
+          {recordingStatus === "evaluating" && (
+            <div className="p-3 rounded-2xl bg-primary/10 border border-primary/25 shadow-xs flex items-center gap-2.5 animate-in fade-in-0 duration-200">
+              <Loader2 className="size-4 animate-spin text-primary shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-foreground">
+                  Đang phân tích ngữ âm & tính điểm phát âm...
+                </p>
+                {speechRec.fullTranscript && (
+                  <p className="text-[11px] text-muted-foreground font-mono truncate mt-0.5">
+                    &ldquo;{speechRec.fullTranscript}&rdquo;
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 2. Audio Comparison & Spoken Preview (Appears when user has recorded) */}
+          {(userAudioUrl || spokenTranscript) && (
+            <div className="p-3.5 rounded-2xl bg-card border border-primary/20 shadow-xs space-y-2.5 animate-in fade-in-0 duration-200">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-[11px] font-bold text-foreground flex items-center gap-1.5">
+                  <Headphones className="size-3.5 text-primary" />
+                  <span>Đối chiếu âm thanh</span>
+                </span>
+
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handlePlayNative}
+                    className="h-7 px-2.5 rounded-xl text-xs font-bold gap-1 border-border/80 hover:bg-primary/10 hover:text-primary transition-all"
+                  >
+                    <Volume2 className="size-3 text-primary" />
+                    <span>1. Giọng bản xứ</span>
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleTogglePlayUserAudio}
+                    disabled={!userAudioUrl}
+                    className={cn(
+                      "h-7 px-2.5 rounded-xl text-xs font-bold gap-1 border-border/80 transition-all cursor-pointer",
+                      isPlayingUserAudio
+                        ? "bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border-indigo-500/50 shadow-xs animate-pulse"
+                        : "hover:bg-indigo-500/10 hover:text-indigo-600 dark:hover:text-indigo-400"
+                    )}
+                  >
+                    {isPlayingUserAudio ? (
+                      <Square className="size-3 fill-current text-indigo-500" />
+                    ) : (
+                      <Headphones className="size-3 text-indigo-500" />
+                    )}
+                    <span>{isPlayingUserAudio ? "Dừng nghe" : "2. Nghe lại giọng bạn"}</span>
+                  </Button>
+                </div>
+              </div>
+
+              {/* Spoken Words Transcript Preview */}
+              {spokenTranscript && (
+                <div className="p-2.5 rounded-xl bg-muted/40 border border-border/50 space-y-1">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                    <span>Những gì bạn vừa nói:</span>
+                    {hasScore && (
+                      <span className="font-mono text-emerald-600 dark:text-emerald-400 lowercase font-medium">
+                        ✓ {score.correctWords.length} từ khớp
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 pt-0.5 select-text">
+                    {spokenTranscript
+                      .split(/\s+/)
+                      .filter(Boolean)
+                      .map((w, idx) => {
+                        const cleanSpk = w.toLowerCase().replace(/[^\w']/g, "");
+                        const isMatch =
+                          hasScore &&
+                          score.correctWords.some(
+                            (cw) => cw.toLowerCase() === cleanSpk
+                          );
+                        return (
+                          <span
+                            key={idx}
+                            className={cn(
+                              "px-1.5 py-0.5 rounded text-xs font-semibold font-mono border",
+                              isMatch
+                                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                                : "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30"
+                            )}
+                          >
+                            {w}
+                          </span>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 3. Compact Score Summary Card */}
+          {hasScore ? (
+            <div className="p-3.5 rounded-2xl bg-card border border-border/80 shadow-xs flex items-center justify-between gap-3 animate-in fade-in-0 duration-200">
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  className={cn(
+                    "size-12 rounded-2xl flex items-center justify-center font-black font-mono text-xl shadow-xs shrink-0",
+                    scoreBg
+                  )}
+                >
+                  {overallScore.toFixed(0)}
+                </div>
+
+                <div className="min-w-0 space-y-1">
+                  <p className="font-bold text-xs text-foreground truncate">
+                    {score.coachRemarkVi ||
+                      (overallScore >= 85
+                        ? "Phát âm rất chuẩn xác!"
+                        : overallScore >= 65
+                        ? "Khá tốt, hãy giữ vững nhịp điệu!"
+                        : "Cần luyện tập phát âm thêm.")}
+                  </p>
+
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="px-2 py-0.5 rounded-md bg-muted/60 text-[11px] font-mono text-muted-foreground border border-border/40">
+                      Chính xác:{" "}
+                      <b className="text-emerald-600 dark:text-emerald-400">
+                        {score.accuracy.toFixed(0)}%
+                      </b>
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md bg-muted/60 text-[11px] font-mono text-muted-foreground border border-border/40">
+                      Lưu loát:{" "}
+                      <b className="text-sky-600 dark:text-sky-400">
+                        {score.fluency.toFixed(0)}%
+                      </b>
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md bg-muted/60 text-[11px] font-mono text-muted-foreground border border-border/40">
+                      Hoàn thiện:{" "}
+                      <b className="text-purple-600 dark:text-purple-400">
+                        {score.completeness.toFixed(0)}%
+                      </b>
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5 text-muted-foreground py-2 italic text-xs">
-              <EyeOff className="size-4" />
-              <span>Nội dung đã ẩn để bạn tập trung luyện nghe</span>
+            <div className="p-3 rounded-2xl bg-muted/20 border border-border/50 text-center py-4 text-xs text-muted-foreground space-y-1">
+              <Sparkles className="size-4 text-primary mx-auto opacity-70" />
+              <p className="font-medium text-foreground">Sẵn sàng kiểm tra phát âm</p>
+              <p className="text-[11px]">
+                Bấm nút <b>Kiểm tra phát âm</b> (hoặc nhấn <b>Enter</b>) để thu âm câu trên.
+              </p>
             </div>
           )}
+        </div>
 
-          {showTranslation && currentSegment.translationVi && (
-            <p className="text-xs text-muted-foreground font-medium italic mt-2">
-              {currentSegment.translationVi}
-            </p>
-          )}
+        {/* ── Footer: Main Action Toolbar ── */}
+        <div className="p-3 sm:p-3.5 border-t border-border/60 bg-muted/15 shrink-0 flex items-center justify-between gap-2.5">
+          <Button
+            variant="outline"
+            size="default"
+            onClick={handlePlayNative}
+            className="h-10 px-3 sm:px-4 rounded-xl font-bold text-xs border-border/80 flex items-center gap-1.5 hover:bg-muted/50 shrink-0"
+            title="Nghe phát lại câu này (Space)"
+          >
+            <Play className="size-3.5 fill-current text-muted-foreground" />
+            <span className="hidden sm:inline">Phát lại</span>
+            <kbd className="text-[9px] font-mono px-1 py-0.5 bg-muted rounded text-muted-foreground">
+              space
+            </kbd>
+          </Button>
+
+          <Button
+            size="default"
+            onClick={recordingStatus === "recording" ? handleStopRecord : handleStartRecord}
+            disabled={recordingStatus === "evaluating"}
+            className={cn(
+              "h-10 px-4 sm:px-6 rounded-xl font-black text-xs sm:text-sm flex-1 flex items-center justify-center gap-2 text-white shadow-md transition-all cursor-pointer",
+              recordingStatus === "recording"
+                ? "bg-rose-500 hover:bg-rose-600 animate-pulse ring-4 ring-rose-500/25"
+                : "bg-primary hover:bg-primary/90 text-primary-foreground"
+            )}
+          >
+            {recordingStatus === "evaluating" ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                <span>Đang chấm...</span>
+              </>
+            ) : recordingStatus === "recording" ? (
+              <>
+                <MicOff className="size-4" />
+                <span>Dừng & Chấm điểm</span>
+              </>
+            ) : (
+              <>
+                <Mic className="size-4" />
+                <span>Kiểm tra phát âm</span>
+                <kbd className="text-[9px] font-mono px-1.5 py-0.5 bg-white/20 rounded ml-1">
+                  enter
+                </kbd>
+              </>
+            )}
+          </Button>
+
+          <Button
+            variant="outline"
+            size="default"
+            onClick={handleNextSegment}
+            disabled={activeSegmentIndex === activeLesson.segments.length - 1}
+            className="h-10 px-3 sm:px-4 rounded-xl font-bold text-xs border-border/80 flex items-center gap-1 hover:bg-muted/50 shrink-0"
+            title="Sang câu tiếp theo (→)"
+          >
+            <span className="hidden sm:inline">Tiếp</span>
+            <ChevronRight className="size-3.5" />
+          </Button>
         </div>
       </div>
-
-      {/* Big Action Buttons */}
-      <div className="p-4 border-b border-border/50 shrink-0 flex items-center justify-between gap-3">
-        <Button
-          variant="outline"
-          size="lg"
-          onClick={handlePlayNative}
-          className="h-11 px-4 rounded-2xl font-bold text-xs sm:text-sm border-border/80 flex-1 flex items-center justify-center gap-1.5 hover:bg-muted/50"
-        >
-          <Play className="size-4 fill-current text-muted-foreground" />
-          <span>Phát lại</span>
-          <kbd className="text-[9px] font-mono px-1 py-0.5 bg-muted rounded text-muted-foreground ml-1">
-            space
-          </kbd>
-        </Button>
-
-        <Button
-          size="lg"
-          onClick={recordingStatus === "recording" ? handleStopRecord : handleStartRecord}
-          disabled={recordingStatus === "evaluating"}
-          className={cn(
-            "h-11 px-6 rounded-2xl font-black text-xs sm:text-sm flex-2 flex items-center justify-center gap-2 text-white shadow-md transition-all",
-            recordingStatus === "recording"
-              ? "bg-rose-500 hover:bg-rose-600 animate-pulse ring-4 ring-rose-500/25"
-              : "bg-primary hover:bg-primary/90 text-primary-foreground"
-          )}
-        >
-          {recordingStatus === "evaluating" ? (
-            <>
-              <Loader2 className="size-4 animate-spin" />
-              <span>Đang chấm...</span>
-            </>
-          ) : recordingStatus === "recording" ? (
-            <>
-              <MicOff className="size-4" />
-              <span>Dừng & Chấm điểm</span>
-            </>
-          ) : (
-            <>
-              <Mic className="size-4" />
-              <span>Kiểm tra phát âm</span>
-              <kbd className="text-[9px] font-mono px-1 py-0.5 bg-white/20 rounded ml-1">
-                enter
-              </kbd>
-            </>
-          )}
-        </Button>
-
-        <Button
-          variant="outline"
-          size="lg"
-          onClick={handleNextSegment}
-          disabled={activeSegmentIndex === activeLesson.segments.length - 1}
-          className="h-11 px-4 rounded-2xl font-bold text-xs sm:text-sm border-border/80 flex-1 flex items-center justify-center gap-1 hover:bg-muted/50"
-        >
-          <span>Tiếp</span>
-          <ChevronRight className="size-4" />
-        </Button>
-      </div>
-
-      {/* 4 Score Metric Cards */}
-      <div className="flex-1 min-h-0 p-4 grid grid-cols-2 gap-3 overflow-y-auto">
-        <div className="p-3.5 rounded-2xl bg-card border border-border/70 flex flex-col justify-between shadow-2xs">
-          <span className="text-xs font-bold text-muted-foreground">Điểm phát âm</span>
-          <span
-            className={cn(
-              "text-2xl sm:text-3xl font-black font-mono mt-1",
-              score?.overall
-                ? score.overall >= 80
-                  ? "text-emerald-500"
-                  : score.overall >= 60
-                  ? "text-amber-500"
-                  : "text-rose-500"
-                : "text-rose-500/80"
-            )}
-          >
-            {score?.overall ? score.overall.toFixed(1) : "0.0"}
-          </span>
-        </div>
-
-        <div className="p-3.5 rounded-2xl bg-card border border-border/70 flex flex-col justify-between shadow-2xs">
-          <span className="text-xs font-bold text-muted-foreground">Độ chính xác</span>
-          <span
-            className={cn(
-              "text-2xl sm:text-3xl font-black font-mono mt-1",
-              score?.accuracy ? "text-emerald-500" : "text-rose-500/80"
-            )}
-          >
-            {score?.accuracy ? score.accuracy.toFixed(1) : "0.0"}
-          </span>
-        </div>
-
-        <div className="p-3.5 rounded-2xl bg-card border border-border/70 flex flex-col justify-between shadow-2xs">
-          <span className="text-xs font-bold text-muted-foreground">Độ trôi chảy</span>
-          <span
-            className={cn(
-              "text-2xl sm:text-3xl font-black font-mono mt-1",
-              score?.fluency ? "text-emerald-500" : "text-rose-500/80"
-            )}
-          >
-            {score?.fluency ? score.fluency.toFixed(1) : "0.0"}
-          </span>
-        </div>
-
-        <div className="p-3.5 rounded-2xl bg-card border border-border/70 flex flex-col justify-between shadow-2xs">
-          <span className="text-xs font-bold text-muted-foreground">Độ hoàn thiện</span>
-          <span
-            className={cn(
-              "text-2xl sm:text-3xl font-black font-mono mt-1",
-              score?.completeness ? "text-emerald-500" : "text-rose-500/80"
-            )}
-          >
-            {score?.completeness ? score.completeness.toFixed(1) : "0.0"}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div
       className={cn(
         "flex flex-col bg-background select-none",
-        currentView === "studio" ? "h-[calc(100vh-3.5rem)] overflow-hidden" : "min-h-full"
+        currentView === "studio" ? "h-full overflow-hidden" : "min-h-full"
       )}
     >
       <WordLookupPopup
@@ -1816,27 +2671,28 @@ export default function CorodomoShadowingStudioPage() {
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════
-          VIEW 2: STUDIO PLAYER (PHÒNG LUYỆN SHADOWING & PHÁT ÂM)
+          VIEW 2: STUDIO PLAYER (PHÒNG LUYỆN SHADOWING & PHÁT ÂM - ZERO-SCROLL)
       ══════════════════════════════════════════════════════════════════════ */}
       {currentView === "studio" && (
         <>
-          {/* ── STUDIO TOP NAV BAR ── */}
-          <header className="h-14 border-b border-border/80 bg-card/90 backdrop-blur-md px-3 sm:px-5 flex items-center justify-between gap-3 shrink-0 z-20">
-            {/* Left: Back to Hub + Video Title */}
-            <div className="flex items-center gap-2.5 min-w-0">
+          {/* ── STUDIO TOP NAV BAR (Compact 44px) ── */}
+          <header className="h-11 border-b border-border/80 bg-card/95 backdrop-blur-md px-3 sm:px-4 flex items-center justify-between gap-2 shrink-0 z-20">
+            {/* Left: Back to Hub + Video Title + Add Video */}
+            <div className="flex items-center gap-2 min-w-0">
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 onClick={() => setCurrentView("hub")}
-                className="h-8 px-2.5 rounded-xl text-xs font-bold gap-1 border-border/80 hover:bg-muted text-foreground"
+                className="h-7 px-2 rounded-lg text-xs font-bold gap-1 text-muted-foreground hover:text-foreground hover:bg-muted/80"
                 title="Quay về Màn Chính (Hub)"
               >
                 <ArrowLeft className="size-3.5" />
                 <span className="hidden sm:inline">Màn chính</span>
               </Button>
 
-              <div className="flex items-center gap-2 min-w-0">
-                <h1 className="font-extrabold text-xs sm:text-sm tracking-tight text-foreground truncate max-w-[160px] sm:max-w-[280px] md:max-w-[400px]">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-muted-foreground/40 hidden sm:inline">•</span>
+                <h1 className="font-extrabold text-xs sm:text-sm tracking-tight text-foreground truncate max-w-[140px] sm:max-w-[260px] md:max-w-[380px]">
                   {activeLesson.title}
                 </h1>
               </div>
@@ -1846,62 +2702,95 @@ export default function CorodomoShadowingStudioPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setShowAddVideoModal(true)}
-                className="h-8 px-2.5 rounded-xl text-xs font-bold gap-1.5 border-primary/40 text-primary hover:bg-primary/10 shrink-0 hidden sm:flex"
+                className="h-7 px-2 rounded-lg text-xs font-semibold gap-1 border-border/80 text-muted-foreground hover:text-primary hover:border-primary/40 shrink-0 hidden md:flex"
                 title="Dán link nạp video YouTube mới"
               >
-                <PlusCircle className="size-3.5" />
+                <PlusCircle className="size-3" />
                 <span>Nạp video khác</span>
               </Button>
             </div>
 
-            {/* Right: Mode Tabs: [Shadowing] [Phát âm] */}
+            {/* Right: Theme Toggle + Mode Tabs [Shadowing] [Phát âm] */}
             <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                onClick={() => {
-                  if (isPlayingVideo) pauseVideo();
-                  setActiveMode("shadowing");
-                }}
-                className={cn(
-                  "px-3 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5",
-                  activeMode === "shadowing"
-                    ? "bg-primary text-primary-foreground shadow-xs"
-                    : "bg-muted/40 text-muted-foreground hover:text-foreground border border-border/60"
-                )}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleToggleTheme}
+                className="size-7 rounded-lg text-muted-foreground hover:text-foreground"
+                title="Đổi giao diện Sáng / Tối"
+                aria-label="Đổi giao diện Sáng / Tối"
               >
-                <span>Shadowing</span>
-              </button>
+                {isDarkMode ? <Sun className="size-3.5 text-amber-500" /> : <Moon className="size-3.5" />}
+              </Button>
 
-              <button
-                onClick={() => {
-                  if (isPlayingVideo) pauseVideo();
-                  setActiveMode("pronounce");
-                }}
-                className={cn(
-                  "px-3 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5",
-                  activeMode === "pronounce"
-                    ? "bg-primary text-primary-foreground shadow-xs"
-                    : "bg-muted/40 text-muted-foreground hover:text-foreground border border-border/60"
-                )}
-              >
-                <span>Phát âm</span>
-              </button>
+              <div className="flex items-center bg-muted/50 p-0.5 rounded-lg border border-border/60">
+                <button
+                  onClick={() => {
+                    if (isPlayingVideo) pauseVideo();
+                    if (recordingStatus === "recording") {
+                      speechRec.stopListening();
+                      speechRec.resetTranscript();
+                      recorder.stop().catch(() => {});
+                      setRecordingStatus("idle");
+                    }
+                    if (userAudioRef.current) {
+                      userAudioRef.current.pause();
+                      setIsPlayingUserAudio(false);
+                    }
+                    setActiveMode("shadowing");
+                  }}
+                  className={cn(
+                    "px-2.5 sm:px-3 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1",
+                    activeMode === "shadowing"
+                      ? "bg-primary text-primary-foreground shadow-2xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <span>Shadowing</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (isPlayingVideo) pauseVideo();
+                    if (shadowingRecordStatus === "recording") {
+                      speechRec.stopListening();
+                      speechRec.resetTranscript();
+                      recorder.stop().catch(() => {});
+                      setShadowingRecordStatus("idle");
+                    }
+                    if (shadowingAudioRef.current) {
+                      shadowingAudioRef.current.pause();
+                      setIsPlayingShadowingAudio(false);
+                    }
+                    setActiveMode("pronounce");
+                  }}
+                  className={cn(
+                    "px-2.5 sm:px-3 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1",
+                    activeMode === "pronounce"
+                      ? "bg-primary text-primary-foreground shadow-2xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <span>Phát âm</span>
+                </button>
+              </div>
             </div>
           </header>
 
-          {/* ── PERSISTENT STUDIO WORKSPACE (Single Grid for both modes) ── */}
-          <main className="flex-1 p-2.5 sm:p-3 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-3 min-h-0">
+          {/* ── PERSISTENT STUDIO WORKSPACE (Zero-Scroll Single Grid) ── */}
+          <main className="flex-1 p-1.5 sm:p-2.5 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-2 sm:gap-2.5 min-h-0">
             {/* LEFT COLUMN: 8 cols in Shadowing, 6 cols in Pronounce */}
             <div
               className={cn(
-                "h-full flex flex-col gap-2 min-h-0 overflow-hidden",
-                activeMode === "shadowing" ? "lg:col-span-8" : "lg:col-span-6 gap-2.5"
+                "h-full flex flex-col gap-1.5 min-h-0 overflow-hidden",
+                activeMode === "shadowing" ? "lg:col-span-8" : "lg:col-span-6 gap-2"
               )}
             >
-              {/* Persistent Video Player Container - NEVER unmounted to preserve YouTube iframe */}
+              {/* Persistent Video Player Container - Max-height constrained for Zero-Scroll */}
               <div
                 ref={playerContainerRef}
                 className={cn(
-                  "shrink-0 aspect-video w-full rounded-2xl overflow-hidden bg-black border border-border/80 shadow-lg relative",
+                  "shrink-0 aspect-video w-full max-h-[44vh] sm:max-h-[48vh] mx-auto rounded-xl sm:rounded-2xl overflow-hidden bg-black border border-border/80 shadow-md relative",
                   activeMode === "pronounce" && isVideoHidden && "hidden"
                 )}
               >
@@ -1941,6 +2830,13 @@ export default function CorodomoShadowingStudioPage() {
               setActiveSegmentIndex(0);
               setScore(null);
               setUserAudioUrl(null);
+              setShadowingAudioUrl(null);
+              if (shadowingAudioRef.current) {
+                shadowingAudioRef.current.pause();
+                shadowingAudioRef.current = null;
+              }
+              setIsPlayingShadowingAudio(false);
+              setShadowingRecordStatus("idle");
               setSentenceScores({});
               setShowCompletedModal(false);
             }}
