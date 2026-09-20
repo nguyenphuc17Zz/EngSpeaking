@@ -44,10 +44,13 @@ export function useShadowingKeybindings({
           e.preventDefault();
           onToggleRecord?.();
           break;
+        case "ArrowLeft":
         case "BracketLeft":
           e.preventDefault();
           onPrevSegment?.();
           break;
+        case "Enter":
+        case "ArrowRight":
         case "BracketRight":
           e.preventDefault();
           onNextSegment?.();

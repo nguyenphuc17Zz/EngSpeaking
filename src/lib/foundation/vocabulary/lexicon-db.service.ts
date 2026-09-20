@@ -201,6 +201,97 @@ export function lookupLexiconWord(word: string): SpokenWordItem | null {
 }
 
 /**
+ * Clean and format raw dictionary definitions into concise, punchy Vietnamese meanings
+ * Takes the top 1-2 prominent meanings and removes verbose parenthetical annotations.
+ */
+export function formatConciseMeaning(raw: string): string {
+  if (!raw) return "";
+  let text = raw.trim();
+
+  // Strip complex leading parentheticals like ((viết tắt) của ...) or ((thường) ...)
+  text = text.replace(/^\(\([^)]*\)[^)]*\)\s*,?\s*/g, "");
+  text = text.replace(/^\(\([^)]*\)\)\s*,?\s*/g, "");
+
+  // Strip repeated leading domain tags like (từ Mỹ, nghĩa Mỹ), (thông tục)
+  while (/^\([^)]*\)\s*,?\s*/.test(text)) {
+    text = text.replace(/^\([^)]*\)\s*,?\s*/, "");
+  }
+
+  // Split by semicolons
+  const parts = text.split(/[;；]/).map((p) => p.trim()).filter(Boolean);
+  const selected: string[] = [];
+  for (let part of parts) {
+    // Strip leading domain tags in each part like (y học), (quân sự), (kỹ thuật)
+    while (/^\([^)]*\)\s*,?\s*/.test(part)) {
+      part = part.replace(/^\([^)]*\)\s*,?\s*/, "");
+    }
+    part = part.trim();
+    if (part && !selected.includes(part)) {
+      selected.push(part);
+    }
+    if (selected.length >= 2) break;
+  }
+  const result = selected.join("; ") || text;
+  if (!result) return "";
+  return result.charAt(0).toUpperCase() + result.slice(1);
+}
+
+/**
+ * Standardize parts of speech to user-friendly Vietnamese & international labels
+ * E.g., 'tính từ' -> 'Tính từ (adj)', 'danh từ' -> 'Danh từ (noun)', etc.
+ */
+export function formatPartOfSpeech(pos: string): string {
+  if (!pos) return "Từ vựng";
+  const p = pos.toLowerCase().trim();
+  if (p.includes("tính từ") || p === "adjective" || p === "adj") return "Tính từ (adj)";
+  if (p.includes("danh từ") || p === "noun") return "Danh từ (noun)";
+  if (p.includes("động từ") || p === "verb") return "Động từ (verb)";
+  if (p.includes("phó từ") || p.includes("trạng từ") || p === "adverb" || p === "adv") return "Trạng từ (adv)";
+  if (p.includes("giới từ") || p === "preposition" || p === "prep") return "Giới từ (prep)";
+  if (p.includes("liên từ") || p === "conjunction" || p === "conj") return "Liên từ (conj)";
+  if (p.includes("thán từ") || p === "interjection" || p.includes("khuấy thán từ")) return "Thán từ (interj)";
+  if (p === "word" || p === "từ") return "Từ vựng";
+  return p.charAt(0).toUpperCase() + p.slice(1);
+}
+
+/**
+ * Asynchronously fetch word definition and standardized part of speech from the offline 103k dictionary
+ */
+export async function fetchDictionaryDefinition(word: string): Promise<{
+  found: boolean;
+  meaningVi: string;
+  partOfSpeech: string;
+  ipa?: string;
+  baseWord?: string;
+} | null> {
+  const clean = word.trim().toLowerCase().replace(/[^\w']/g, "");
+  if (!clean) return null;
+
+  try {
+    if (typeof window !== "undefined") {
+      const res = await fetch(`/api/foundation/vocabulary/dict-lookup?word=${encodeURIComponent(clean)}`, {
+        signal: AbortSignal.timeout(3000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.found) {
+          return {
+            found: true,
+            meaningVi: data.meaningVi || "",
+            partOfSpeech: data.partOfSpeech || "Từ vựng",
+            ipa: data.ipa,
+            baseWord: data.baseWord,
+          };
+        }
+      }
+    }
+  } catch (err) {
+    console.error("fetchDictionaryDefinition error:", err);
+  }
+  return null;
+}
+
+/**
  * Fast random selection by CEFR Level & Part of Speech (<1ms)
  */
 export function getRandomLexiconWord(options: {

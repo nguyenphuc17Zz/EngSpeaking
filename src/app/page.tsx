@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Mic,
@@ -12,261 +12,309 @@ import {
   ArrowRight,
   Target,
   ShieldCheck,
-  Quote,
   Sparkles,
+  Radio,
+  LifeBuoy,
+  RotateCcw,
+  Brain,
+  Layers,
 } from "lucide-react";
 
 export default function Home() {
-  const modules = [
+  const foundationStudios = [
     {
-      title: "Phòng luyện nói Live",
-      desc: "Vòng lặp khẩu ngữ tự do thời gian thực cùng gia sư AI",
-      href: "/session",
-      icon: Mic,
-      badge: "Voice Loop",
-      btnText: "Bắt đầu nói",
+      title: "Sentence Builder",
+      desc: "Ráp câu phản xạ 3 tầng: Khung ngữ pháp, từ vựng theo chủ đề & âm thanh chuẩn",
+      href: "/foundation/sentence-builder",
+      icon: Layers,
+      badge: "SB Core",
+      color: "text-primary bg-primary/10 border-primary/20",
     },
     {
       title: "VN → EN Speaking",
-      desc: "Truy xuất trực tiếp từ ý niệm tiếng Việt sang tiếng Anh phản xạ",
+      desc: "Truy xuất trực tiếp từ ý niệm tiếng Việt sang phản xạ tiếng Anh, loại bỏ dịch nhẩm",
       href: "/foundation/vn-to-en",
       icon: Target,
-      badge: "Phản xạ nhanh",
-      btnText: "Luyện ngay",
+      badge: "Tư duy trực tiếp",
+      color: "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
     },
     {
-      title: "Hội thoại AI nhập vai",
-      desc: "14 kịch bản thực tế: Du lịch, công sở, phỏng vấn, tranh luận",
+      title: "Corodomo Shadowing",
+      desc: "Nhại âm song song đa tốc độ, rèn nhịp điệu và ngữ điệu tự nhiên như người bản xứ",
+      href: "/foundation/shadowing",
+      icon: Radio,
+      badge: "Nhại âm nhịp điệu",
+      color: "text-sky-600 dark:text-sky-400 bg-sky-500/10 border-sky-500/20",
+    },
+    {
+      title: "Survival Speaking",
+      desc: "Phản xạ tức thì khi bí từ, câu cứu sinh thoát kẹt và giữ nhịp trò chuyện liên tục",
+      href: "/foundation/survival",
+      icon: LifeBuoy,
+      badge: "Thoát kẹt bí từ",
+      color: "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20",
+    },
+    {
+      title: "Repair Lab & Latency",
+      desc: "Sửa lỗi tức thì qua vòng lặp Retry và ép tốc độ phản xạ bật từ dưới 2 giây",
+      href: "/foundation/retry-lab",
+      icon: RotateCcw,
+      badge: "Sửa lỗi & Tốc độ",
+      color: "text-orange-600 dark:text-orange-400 bg-orange-500/10 border-orange-500/20",
+    },
+  ];
+
+  const immersiveStudios = [
+    {
+      title: "Phòng Luyện Nói Live",
+      desc: "Vòng lặp khẩu ngữ tự do thời gian thực cùng Gia sư AI thông minh có hỗ trợ ngắt câu VAD",
+      href: "/session",
+      icon: Mic,
+      badge: "Real-time AI",
+      color: "text-primary bg-primary/10 border-primary/20",
+      highlight: true,
+    },
+    {
+      title: "Hội Thoại AI Nhập Vai",
+      desc: "11+ kịch bản thực tế đa dạng: Phỏng vấn xin việc, công sở, du lịch, đàm phán và tranh luận",
       href: "/conversation",
       icon: MessageSquareText,
-      badge: "14 Scenarios",
-      btnText: "Chọn kịch bản",
+      badge: "11+ Kịch bản",
+      color: "text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 border-indigo-500/20",
+      highlight: false,
     },
-
     {
-      title: "Thử thách nâng cao",
-      desc: "3 track (Phản xạ · Lập luận · Diễn thuyết) × 3 level L1-L3 liên thông Foundation",
+      title: "Thử Thách Nâng Cao",
+      desc: "3 Tracks (Phản xạ · Lập luận Toulmin · Diễn thuyết) × 3 Levels liên thông nền tảng vững chắc",
       href: "/advanced",
       icon: Zap,
-      badge: "3 Tracks",
-      btnText: "Vào thử thách",
+      badge: "3 Tracks × 3 Lv",
+      color: "text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/20",
+      highlight: false,
     },
     {
-      title: "Cài đặt & Âm thanh",
-      desc: "Tùy chỉnh AI Provider (Gemini / Groq / Browser), Giọng đọc & Micro",
-      href: "/settings",
-      icon: Settings,
-      badge: "Cấu hình",
-      btnText: "Mở cài đặt",
+      title: "Ngân Hàng Lỗi Cá Nhân",
+      desc: "Trí nhớ khẩu ngữ FSRS, đo lường xác suất nắm vững BKT và cảnh báo nguy cơ hóa đá L1",
+      href: "/foundation/error-bank",
+      icon: Brain,
+      badge: "FSRS • BKT",
+      color: "text-violet-600 dark:text-violet-400 bg-violet-500/10 border-violet-500/20",
+      highlight: false,
     },
   ];
 
   return (
-    <div className="space-y-7 pb-12">
-      {/* Hero Welcome & Daily Commitment */}
-      <section className="relative overflow-hidden rounded-3xl border border-border/80 bg-card p-6 md:p-8 paper-shadow">
-        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div className="space-y-3 max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-secondary border border-border/60 text-foreground/80 text-xs font-medium">
-              <span className="size-2 rounded-full bg-primary animate-pulse" />
-              <span>Khẩu Ngữ Tự Nhiên • The Art of Spoken Fluency</span>
+    <div className="w-full max-w-none space-y-4 sm:space-y-5 pb-12 animate-in fade-in-0 duration-200">
+      {/* ── 1. WELCOME ACTION BAR (Compact Single Row) ── */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 bg-card/80 backdrop-blur-md border border-border/80 rounded-2xl px-4 py-3 shadow-xs w-full">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="size-9 rounded-xl bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0">
+            <Sparkles className="size-4.5" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h1 className="font-serif font-bold text-sm sm:text-base md:text-lg tracking-tight text-foreground truncate">
+                Chào ngày mới! Mục tiêu hôm nay: 10 phút luyện phản xạ nói
+              </h1>
+              <Badge variant="secondary" className="text-[10px] font-mono h-5 hidden lg:inline-flex rounded-full px-2">
+                The Art of Spoken Fluency
+              </Badge>
             </div>
-            <h1 className="text-2xl md:text-3xl lg:text-4xl font-serif font-bold tracking-tight text-foreground leading-snug">
-              Chào buổi sáng! Mục tiêu hôm nay: 10 phút luyện phản xạ nói
-            </h1>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Tập trung vào <strong>speaking production & automaticity</strong> — rèn luyện bản năng bật ra câu nói tức thì mà không cần dịch nhẩm tiếng Việt trong đầu.
-            </p>
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full md:w-auto">
-            <Link href="/session" className="w-full sm:w-auto">
-              <Button size="lg" className="w-full gap-2 font-semibold h-11 px-6 rounded-xl btn-spring shadow-xs">
-                <span>Bắt đầu luyện nói ngay</span>
-                <ArrowRight className="size-4" />
-              </Button>
-            </Link>
-            <Link href="/foundation/sentence-builder" className="w-full sm:w-auto">
-              <Button size="lg" variant="outline" className="w-full gap-2 h-11 px-5 rounded-xl border-border/80 hover:bg-secondary/70 btn-spring">
-                <Sparkles className="size-4 text-primary" />
-                <span>Sentence Builder</span>
-              </Button>
-            </Link>
-          </div>
-        </div>
-
-        {/* Ambient subtle warm glow */}
-        <div className="absolute -right-16 -bottom-16 size-64 rounded-full bg-primary/5 blur-3xl pointer-events-none" />
-      </section>
-
-      {/* Daily Speaking Wisdom Banner (Friendly Micro-interaction) */}
-      <div className="rounded-2xl border border-border/80 bg-card/90 p-4 md:p-5 paper-shadow-sm paper-shadow-hover flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-start gap-3.5">
-          <div className="size-10 rounded-xl bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
-            <Quote className="size-4.5" />
-          </div>
-          <div className="space-y-1">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
-              <span>Lời khuyên khẩu ngữ hôm nay</span>
-              <span className="size-1 rounded-full bg-primary" />
-              <span className="text-muted-foreground font-normal lowercase">chìa khóa nhịp điệu</span>
-            </div>
-            <p className="font-serif italic text-sm md:text-[15px] text-foreground leading-snug">
-              &ldquo;Fluency is not about speaking fast without pauses; it&rsquo;s about feeling relaxed in your natural rhythm.&rdquo;
-            </p>
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              💡 Thả lỏng cơ hàm, chia câu thành các khối cụm từ (chunks) tự nhiên thay vì ghép từng từ rời rạc.
+            <p className="text-xs text-muted-foreground truncate hidden md:block">
+              Rèn luyện phản xạ bật câu tức thì — Automaticity & Speaking Production không cần dịch nhẩm
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+        <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
           <Link href="/session">
-            <Button
-              variant="outline"
-              size="sm"
-              className="rounded-xl text-xs gap-1.5 border-border/80 hover:bg-secondary/80 h-9 btn-spring shadow-2xs"
-            >
-              <Mic className="size-3.5 text-primary" />
-              <span>Nói thử câu này</span>
+            <Button size="sm" className="h-9 px-3.5 rounded-xl font-bold text-xs gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 shadow-xs cursor-pointer">
+              <Mic className="size-3.5" />
+              <span>Bắt đầu luyện nói ngay</span>
+              <ArrowRight className="size-3.5" />
+            </Button>
+          </Link>
+          <Link href="/foundation/sentence-builder">
+            <Button variant="outline" size="sm" className="h-9 px-3 rounded-xl font-semibold text-xs gap-1.5 border-border/80 hover:bg-secondary cursor-pointer">
+              <Layers className="size-3.5 text-primary" />
+              <span>Sentence Builder</span>
             </Button>
           </Link>
         </div>
       </div>
 
-      {/* Bento Grid: Speaking Performance & Streak */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        <Card className="rounded-2xl border-border/80 bg-card paper-shadow-sm paper-shadow-hover">
-          <CardContent className="p-4 md:p-5 flex items-center gap-3.5">
-            <div className="size-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0 border border-primary/20">
-              <Flame className="size-5 fill-primary/20 animate-cozy-flame" />
+      {/* ── 2. BENTO METRICS BAR (Compact 4 KPIs) ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3 w-full">
+        <Card className="rounded-2xl border-border/80 bg-card p-3.5 shadow-xs">
+          <CardContent className="p-0 flex items-center gap-3">
+            <div className="size-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0 border border-primary/20">
+              <Flame className="size-4.5 fill-primary/20 animate-cozy-flame" />
             </div>
-            <div>
-              <div className="text-xl md:text-2xl font-serif font-bold tracking-tight text-foreground">3 ngày</div>
-              <div className="text-xs text-muted-foreground mt-0.5">Chuỗi rèn luyện</div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl border-border/80 bg-card paper-shadow-sm paper-shadow-hover">
-          <CardContent className="p-4 md:p-5 flex items-center gap-3.5">
-            <div className="size-11 rounded-xl bg-secondary text-foreground/80 flex items-center justify-center shrink-0 border border-border/60">
-              <Clock className="size-5 text-muted-foreground" />
-            </div>
-            <div>
-              <div className="text-xl md:text-2xl font-serif font-bold tracking-tight text-foreground">25 phút</div>
-              <div className="text-xs text-muted-foreground mt-0.5">Đã nói tuần này</div>
+            <div className="min-w-0">
+              <div className="text-lg sm:text-xl font-serif font-bold tracking-tight text-foreground truncate">3 ngày</div>
+              <div className="text-[11px] text-muted-foreground font-medium truncate">Chuỗi rèn luyện</div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl border-border/80 bg-card paper-shadow-sm paper-shadow-hover">
-          <CardContent className="p-4 md:p-5 flex items-center gap-3.5">
-            <div className="size-11 rounded-xl bg-chart-2/10 text-chart-2 flex items-center justify-center shrink-0 border border-chart-2/20">
-              <Zap className="size-5" />
+        <Card className="rounded-2xl border-border/80 bg-card p-3.5 shadow-xs">
+          <CardContent className="p-0 flex items-center gap-3">
+            <div className="size-10 rounded-xl bg-secondary text-foreground/80 flex items-center justify-center shrink-0 border border-border/60">
+              <Clock className="size-4.5 text-muted-foreground" />
             </div>
-            <div>
-              <div className="text-xl md:text-2xl font-serif font-bold tracking-tight text-foreground">1.6s</div>
-              <div className="text-xs text-muted-foreground mt-0.5">Tốc độ bật từ (TTFW)</div>
+            <div className="min-w-0">
+              <div className="text-lg sm:text-xl font-serif font-bold tracking-tight text-foreground truncate">25 phút</div>
+              <div className="text-[11px] text-muted-foreground font-medium truncate">Đã nói tuần này</div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl border-border/80 bg-card paper-shadow-sm paper-shadow-hover">
-          <CardContent className="p-4 md:p-5 flex items-center gap-3.5">
-            <div className="size-11 rounded-xl bg-secondary text-foreground/80 flex items-center justify-center shrink-0 border border-border/60">
-              <Target className="size-5 text-primary" />
+        <Card className="rounded-2xl border-border/80 bg-card p-3.5 shadow-xs">
+          <CardContent className="p-0 flex items-center gap-3">
+            <div className="size-10 rounded-xl bg-chart-2/10 text-chart-2 flex items-center justify-center shrink-0 border border-chart-2/20">
+              <Zap className="size-4.5" />
             </div>
-            <div>
-              <div className="text-xl md:text-2xl font-serif font-bold tracking-tight text-foreground">Level 4</div>
-              <div className="text-xs text-muted-foreground mt-0.5">Khả năng độc lập</div>
+            <div className="min-w-0">
+              <div className="text-lg sm:text-xl font-serif font-bold tracking-tight text-foreground truncate">1.6s</div>
+              <div className="text-[11px] text-muted-foreground font-medium truncate">Tốc độ bật từ (TTFW)</div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-border/80 bg-card p-3.5 shadow-xs">
+          <CardContent className="p-0 flex items-center gap-3">
+            <div className="size-10 rounded-xl bg-secondary text-foreground/80 flex items-center justify-center shrink-0 border border-border/60">
+              <Target className="size-4.5 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-lg sm:text-xl font-serif font-bold tracking-tight text-foreground truncate">Level 4</div>
+              <div className="text-[11px] text-muted-foreground font-medium truncate">Khả năng độc lập</div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Study Disciplines Grid (Warm Editorial Cards) */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <h2 className="text-lg md:text-xl font-serif font-bold tracking-tight text-foreground">
-              Chuyên đề Luyện tập & Phản xạ
+      {/* ── 3. GROUP 1: NỀN TẢNG PHẢN XẠ KHẨU NGỮ (5 PHÒNG CORE) ── */}
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between px-0.5">
+          <div className="flex items-center gap-2">
+            <span className="size-2 rounded-full bg-primary" />
+            <h2 className="font-serif font-bold text-sm sm:text-base tracking-tight text-foreground">
+              Nền Tảng Phản Xạ Khẩu Ngữ (Foundation Studios)
             </h2>
-            <p className="text-xs text-muted-foreground">
-              Các phương pháp khẩu ngữ chuyên sâu nâng tầm phản xạ tự nhiên
-            </p>
           </div>
-          <span className="text-xs font-mono text-muted-foreground hidden sm:inline-block">
-            5 Disciplines
+          <span className="text-[11px] font-mono text-muted-foreground bg-secondary/80 px-2.5 py-0.5 rounded-full border border-border/50">
+            5 Phòng luyện tập
           </span>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {modules.map((m) => {
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+          {foundationStudios.map((m) => {
             const Icon = m.icon;
             return (
-              <Card
-                key={m.href}
-                className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card hover:border-primary/50 paper-shadow-sm paper-shadow-hover flex flex-col justify-between"
-              >
-                <div className="p-4 pb-0 flex items-center justify-between">
-                  <div className="size-9 rounded-xl bg-secondary flex items-center justify-center border border-border/60 group-hover:scale-105 transition-transform">
-                    <Icon className="size-4.5 text-primary" />
+              <Link key={m.href} href={m.href} className="group block focus:outline-hidden">
+                <div className="h-full rounded-2xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-primary/50 hover:bg-muted/20 transition-all flex flex-col justify-between gap-2.5 relative cursor-pointer">
+                  <div className="flex items-center justify-between">
+                    <div className={`size-8.5 rounded-xl flex items-center justify-center border ${m.color}`}>
+                      <Icon className="size-4" />
+                    </div>
+                    <Badge variant="outline" className="text-[10px] font-mono border-border/70 text-muted-foreground">
+                      {m.badge}
+                    </Badge>
                   </div>
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] font-medium border-border/80 text-muted-foreground"
-                  >
-                    {m.badge}
-                  </Badge>
+
+                  <div className="space-y-1">
+                    <h3 className="font-serif font-bold text-xs sm:text-sm text-foreground group-hover:text-primary transition-colors truncate">
+                      {m.title}
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                      {m.desc}
+                    </p>
+                  </div>
+
+                  <div className="pt-1 flex items-center justify-between text-[11px] font-semibold text-muted-foreground group-hover:text-primary transition-colors border-t border-border/40">
+                    <span>Luyện ngay</span>
+                    <ArrowRight className="size-3 group-hover:translate-x-1 transition-transform" />
+                  </div>
                 </div>
-
-                <CardHeader className="p-4 pb-2">
-                  <CardTitle className="text-base font-serif font-bold text-foreground group-hover:text-primary transition-colors">
-                    {m.title}
-                  </CardTitle>
-                  <CardDescription className="text-xs text-muted-foreground line-clamp-2 leading-relaxed mt-1">
-                    {m.desc}
-                  </CardDescription>
-                </CardHeader>
-
-                <CardContent className="p-4 pt-2">
-                  <Link href={m.href} className="block">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="w-full justify-between text-xs font-semibold group-hover:bg-primary group-hover:text-primary-foreground transition-all rounded-xl h-8.5"
-                    >
-                      <span>{m.btnText}</span>
-                      <ArrowRight className="size-3.5 group-hover:translate-x-1 transition-transform" />
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
+              </Link>
             );
           })}
         </div>
       </div>
 
-      {/* Assurance Note & Privacy */}
-      <Card className="rounded-2xl border border-border/70 bg-card/70 paper-shadow-sm">
-        <CardContent className="p-4 md:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs text-muted-foreground">
-          <div className="flex items-center gap-3">
-            <div className="size-8 rounded-xl bg-chart-2/10 text-chart-2 flex items-center justify-center shrink-0 border border-chart-2/20">
-              <ShieldCheck className="size-4" />
-            </div>
-            <div className="leading-relaxed">
-              <span className="font-semibold text-foreground">Bảo mật giọng nói & Tối ưu trình duyệt:</span>{" "}
-              Mặc định sử dụng Web Speech API và SpeechSynthesis trên trình duyệt (hoàn toàn miễn phí, không tốn quota). Không lưu trữ file âm thanh thô.
-            </div>
+      {/* ── 4. GROUP 2: TƯƠNG TÁC & THỬ THÁCH THỰC CHIẾN (4 PHÒNG ADVANCED) ── */}
+      <div className="space-y-2.5 pt-1">
+        <div className="flex items-center justify-between px-0.5">
+          <div className="flex items-center gap-2">
+            <span className="size-2 rounded-full bg-indigo-500" />
+            <h2 className="font-serif font-bold text-sm sm:text-base tracking-tight text-foreground">
+              Thực Chiến & Thử Thách (Immersive & Advanced Studios)
+            </h2>
           </div>
-          <Link href="/settings" className="shrink-0">
-            <Button variant="outline" size="sm" className="text-xs rounded-xl h-8 border-border/80 hover:bg-secondary">
-              Cài đặt Provider
-            </Button>
-          </Link>
-        </CardContent>
-      </Card>
+          <span className="text-[11px] font-mono text-muted-foreground bg-secondary/80 px-2.5 py-0.5 rounded-full border border-border/50">
+            4 Phòng thực chiến
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {immersiveStudios.map((m) => {
+            const Icon = m.icon;
+            return (
+              <Link key={m.href} href={m.href} className="group block focus:outline-hidden">
+                <div className={`h-full rounded-2xl border bg-card p-3.5 shadow-xs transition-all flex flex-col justify-between gap-3 relative cursor-pointer ${
+                  m.highlight
+                    ? "border-primary/50 bg-primary/[0.02] hover:border-primary ring-1 ring-primary/20"
+                    : "border-border/80 hover:border-primary/50 hover:bg-muted/20"
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <div className={`size-9 rounded-xl flex items-center justify-center border ${m.color}`}>
+                      <Icon className="size-4.5" />
+                    </div>
+                    <Badge variant="outline" className={`text-[10px] font-mono ${
+                      m.highlight ? "border-primary/40 text-primary font-bold" : "border-border/70 text-muted-foreground"
+                    }`}>
+                      {m.badge}
+                    </Badge>
+                  </div>
+
+                  <div className="space-y-1">
+                    <h3 className="font-serif font-bold text-sm text-foreground group-hover:text-primary transition-colors">
+                      {m.title}
+                    </h3>
+                    <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                      {m.desc}
+                    </p>
+                  </div>
+
+                  <div className="pt-1 flex items-center justify-between text-xs font-semibold text-muted-foreground group-hover:text-primary transition-colors border-t border-border/40">
+                    <span>Vào phòng</span>
+                    <ArrowRight className="size-3.5 group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── 5. COMPACT PRIVACY & SETTINGS FOOTER NOTE ── */}
+      <div className="rounded-2xl border border-border/70 bg-card/60 px-4 py-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="size-6.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/20">
+            <ShieldCheck className="size-3.5" />
+          </div>
+          <span className="truncate">
+            <strong className="text-foreground">Bảo mật giọng nói:</strong> Xử lý Web Speech API cục bộ trên trình duyệt, không lưu trữ âm thanh thô.
+          </span>
+        </div>
+        <Link href="/settings" className="shrink-0 self-end sm:self-auto">
+          <Button variant="ghost" size="sm" className="h-7 px-2.5 text-xs rounded-lg text-muted-foreground hover:text-foreground cursor-pointer">
+            <Settings className="size-3 mr-1" />
+            <span>Cài đặt & Âm thanh</span>
+          </Button>
+        </Link>
+      </div>
     </div>
   );
 }

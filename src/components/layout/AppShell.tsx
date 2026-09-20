@@ -88,8 +88,8 @@ export function AppShell({ children }: AppShellProps) {
 
   const isStudioPage =
     pathname === "/session" ||
-    pathname === "/conversation/session" ||
-    pathname === "/advanced/session" ||
+    pathname.startsWith("/conversation") ||
+    pathname.startsWith("/advanced") ||
     pathname.startsWith("/foundation/");
 
   return (
@@ -193,16 +193,19 @@ export function AppShell({ children }: AppShellProps) {
             "flex-1 min-h-0",
             hideAppHeader
               ? "p-0 h-full overflow-hidden"
-              : cn(
-                  "overflow-y-auto overflow-x-hidden",
-                  isStudioPage ? "p-2 sm:p-3 md:p-4" : "p-4 md:p-6 lg:p-8"
-                )
+              : isStudioPage || pathname === "/"
+              ? "p-3 sm:p-4 md:p-5 overflow-y-auto overflow-x-hidden"
+              : "overflow-y-auto overflow-x-hidden p-4 md:p-6 lg:p-8"
           )}
         >
           <div
             className={cn(
               "mx-auto w-full animate-in fade-in-0 duration-200",
-              hideAppHeader ? "h-full max-w-none" : (isStudioPage ? "max-w-[1500px] h-full" : "max-w-6xl")
+              hideAppHeader
+                ? "h-full max-w-none"
+                : isStudioPage || pathname === "/settings" || pathname === "/"
+                ? "w-full max-w-none"
+                : "max-w-6xl"
             )}
           >
             {children}

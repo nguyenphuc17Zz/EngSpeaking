@@ -23,10 +23,16 @@ import {
 import type { LinguisticAnalysisResult } from "@/types/shadowing";
 import type { ShadowingScoreResult } from "@/lib/foundation/shadowing/pronunciation-scorer";
 import type { CorodomoSegment } from "@/lib/foundation/shadowing/corodomo-presets";
-import { WordLookupPopup } from "./WordLookupPopup";
+import { WordLookupPopup, type VocabWord } from "./WordLookupPopup";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 import { sanitizeTextForTTS } from "@/lib/tts/browser";
-import { lookupLexiconWord } from "@/lib/foundation/vocabulary/lexicon-db.service";
+import {
+  lookupLexiconWord,
+  formatConciseMeaning,
+  formatPartOfSpeech,
+  fetchDictionaryDefinition,
+} from "@/lib/foundation/vocabulary/lexicon-db.service";
+import { getWordIpa } from "@/lib/foundation/shadowing/ipa-dictionary";
 
 export type SubtitleLayer = "en" | "vi" | "thought_groups" | "ipa" | "hidden";
 
@@ -84,7 +90,7 @@ export function SentencePracticeCard({
   onSaveWordToDeck,
 }: SentencePracticeCardProps) {
   const tts = useBrowserTTS();
-  const [popupWord, setPopupWord] = useState<any | null>(null);
+  const [popupWord, setPopupWord] = useState<VocabWord | null>(null);
   const [popupAnchor, setPopupAnchor] = useState<HTMLElement | null>(null);
   const [isPlayingUserAudio, setIsPlayingUserAudio] = useState(false);
   const userAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -108,12 +114,14 @@ export function SentencePracticeCard({
 
   const translationVi = segment.translationVi || "";
 
-  // 1-Click Word Lookup powered by local CEFR Lexicon Database
+  // 1-Click Word Lookup powered by local CEFR Lexicon & 103k Offline Dictionary
   const handleWordClick = useCallback(
-    (word: string, e: React.MouseEvent<HTMLElement>) => {
+    async (word: string, e: React.MouseEvent<HTMLElement>) => {
       if (subtitleLayer === "hidden" || subtitleLayer === "ipa") return;
       const cleanWord = word.toLowerCase().replace(/[^\w']/g, "");
       if (!cleanWord) return;
+
+      const clickToken = Date.now();
 
       // Stop user voice playback if currently active
       if (userAudioRef.current) {
@@ -121,31 +129,62 @@ export function SentencePracticeCard({
         setIsPlayingUserAudio(false);
       }
 
+      setPopupAnchor(e.currentTarget);
+
+      // 1. Check synchronous Oxford 5000 Lexicon (0ms instant match)
       const lexiconMatch = lookupLexiconWord(cleanWord);
-      let popupData: any;
 
       if (lexiconMatch) {
-        popupData = {
+        const derivedIpa = getWordIpa(cleanWord);
+        const popupData: VocabWord = {
           word: lexiconMatch.word,
-          ipa: lexiconMatch.ipaUS || lexiconMatch.ipaUK || "",
-          meaning: lexiconMatch.meaningVi,
-          partOfSpeech: lexiconMatch.partOfSpeech,
+          ipa: lexiconMatch.ipaUS || lexiconMatch.ipaUK || (derivedIpa ? `/${derivedIpa}/` : ""),
+          meaning: formatConciseMeaning(lexiconMatch.meaningVi),
+          partOfSpeech: formatPartOfSpeech(lexiconMatch.partOfSpeech),
           contextSentence: lexiconMatch.contextSentences?.[0]?.sentenceEn || segment.text,
           cefrLevel: lexiconMatch.cefrLevel,
+          isLoading: false,
+          playToken: clickToken,
         };
-      } else {
-        popupData = {
-          word: cleanWord,
-          ipa: "",
-          meaning: "Từ vựng trong ngữ cảnh câu",
-          partOfSpeech: "word",
-          contextSentence: segment.text,
-          cefrLevel: "Daily",
-        };
+        setPopupWord(popupData);
+        return;
       }
 
-      setPopupWord(popupData);
-      setPopupAnchor(e.currentTarget);
+      // 2. Not in Oxford 5000: derive IPA instantly and display popup with micro-shimmer
+      const initialIpa = getWordIpa(cleanWord);
+      const initialPopupData: VocabWord = {
+        word: cleanWord,
+        ipa: initialIpa ? `/${initialIpa}/` : `/${cleanWord}/`,
+        meaning: "",
+        partOfSpeech: "Từ vựng",
+        contextSentence: segment.text,
+        cefrLevel: undefined,
+        isLoading: true,
+        playToken: clickToken,
+      };
+      setPopupWord(initialPopupData);
+
+      // 3. Asynchronously fetch from the 103k offline dictionary (~2-5ms)
+      const dictResult = await fetchDictionaryDefinition(cleanWord);
+
+      setPopupWord((prev) => {
+        if (!prev || prev.word !== cleanWord) return prev;
+        if (dictResult && dictResult.found) {
+          return {
+            ...prev,
+            ipa: dictResult.ipa || prev.ipa,
+            meaning: dictResult.meaningVi,
+            partOfSpeech: dictResult.partOfSpeech || "Từ vựng",
+            isLoading: false,
+          };
+        }
+        return {
+          ...prev,
+          meaning: `Từ tiếng Anh: ${cleanWord}`,
+          partOfSpeech: "Từ vựng",
+          isLoading: false,
+        };
+      });
     },
     [subtitleLayer, segment.text]
   );

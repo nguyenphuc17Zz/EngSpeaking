@@ -32,6 +32,7 @@ import {
   Check,
   Coffee,
   HeartPulse,
+  History,
 } from "lucide-react";
 import { useConversationStore } from "@/stores/conversation-store";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -39,7 +40,6 @@ import { toast } from "@/lib/toast";
 import type { ConversationMode, ConversationSettings } from "@/types/conversation-world";
 import type { ConversationSessionMode } from "@/types/conversation";
 import { cn } from "@/lib/utils";
-import { GlobalAiSelector } from "@/components/common/GlobalAiSelector";
 import { PRESET_TOPICS, getTopicDisplay, resolveTopicForPrompt } from "@/lib/foundation/sentence-builder/topics";
 import {
   Dialog,
@@ -338,16 +338,16 @@ export default function ConversationModesPage() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] bg-background select-none overflow-hidden">
-      {/* ── TOP NAV BAR (Compact 52px) ── */}
-      <header className="h-13 border-b border-border/80 bg-card/80 backdrop-blur-md px-3 sm:px-4 flex items-center justify-between gap-3 shrink-0 z-10">
+    <div className="flex flex-col w-full select-none gap-3 sm:gap-3.5 animate-in fade-in-0 duration-200">
+      {/* ── TOP TOOLBAR FULL WIDTH (Compact Single Row) ── */}
+      <div className="flex items-center justify-between gap-2.5 bg-card/80 backdrop-blur-md border border-border/80 rounded-2xl px-3.5 py-2.5 shadow-xs w-full">
         {/* Left: Back + Title + Badge */}
         <div className="flex items-center gap-2 min-w-0">
           <Link href="/">
             <Button
               variant="ghost"
-              size="sm"
-              className="size-8 p-0 rounded-xl hover:bg-secondary border border-transparent hover:border-border/60"
+              size="icon"
+              className="size-8 rounded-xl shrink-0 text-muted-foreground hover:text-foreground"
               title="Quay lại Trang chủ"
             >
               <ArrowLeft className="size-4" />
@@ -355,14 +355,14 @@ export default function ConversationModesPage() {
           </Link>
 
           <div className="flex items-center gap-2 shrink-0">
-            <div className="size-7 rounded-xl bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0">
-              <Globe className="size-3.5" />
+            <div className="size-7.5 rounded-xl bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0">
+              <Globe className="size-4" />
             </div>
             <span className="font-serif font-bold text-sm sm:text-base tracking-tight text-foreground">
               Thế Giới Giao Tiếp AI
             </span>
-            <Badge variant="secondary" className="text-[10px] font-mono h-5 hidden sm:inline-flex bg-secondary/80 text-foreground/80 border border-border/60 rounded-full px-2">
-              11+ Kịch Bản Nhập Vai
+            <Badge variant="secondary" className="text-[10px] font-mono h-5 hidden sm:inline-flex rounded-full px-2">
+              11+ Kịch Bản
             </Badge>
           </div>
         </div>
@@ -373,135 +373,146 @@ export default function ConversationModesPage() {
             <button
               key={cat.id}
               onClick={() => setActiveCategory(cat.id)}
-              className={`text-xs px-3 py-1 rounded-full transition-all ${
+              className={cn(
+                "text-xs px-2.5 py-1 rounded-full transition-all cursor-pointer",
                 activeCategory === cat.id
                   ? "bg-primary text-primary-foreground font-semibold shadow-xs"
                   : "text-muted-foreground hover:text-foreground font-medium"
-              }`}
+              )}
             >
               {cat.label}
             </button>
           ))}
         </div>
 
-        {/* Right: Random + Global AI Selector */}
+        {/* Right: History + Random Button */}
         <div className="flex items-center gap-2 shrink-0">
+          <Link href="/conversation/history">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 rounded-xl text-xs font-semibold gap-1.5 cursor-pointer border-border/80 hover:bg-muted/50"
+            >
+              <History className="size-3.5 text-muted-foreground" />
+              <span className="hidden sm:inline">Lịch sử</span>
+            </Button>
+          </Link>
+
           <Button
             variant="outline"
             size="sm"
             onClick={handleRandomLaunch}
             disabled={loading}
-            className="h-8 px-3 rounded-xl text-xs font-semibold gap-1.5 border-border/80 bg-background hover:bg-secondary/60 text-foreground paper-shadow-sm hidden sm:flex"
+            className="h-8 px-3 rounded-xl text-xs font-semibold gap-1.5 cursor-pointer border-border/80 hover:bg-muted/50"
             title="Chọn ngẫu nhiên tình huống"
           >
             <Shuffle className="size-3.5 text-primary" />
             <span>Ngẫu Nhiên</span>
           </Button>
-
-          <GlobalAiSelector />
         </div>
-      </header>
+      </div>
 
-      {/* ── MAIN CONTENT (7:5 Ratio, Zero Body Scroll) ── */}
-      <main className="flex-1 p-2.5 sm:p-3 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-2.5 sm:gap-3 min-h-0">
-        {/* LEFT (7 cols): Scenario Card Grid strictly scrollable inside */}
-        <div className="lg:col-span-7 h-full flex flex-col min-h-0 rounded-3xl border border-border/80 bg-card overflow-hidden paper-shadow-sm">
-          <div className="px-4 py-2.5 border-b border-border/60 bg-muted/20 flex items-center justify-between shrink-0">
-            <span className="font-serif font-bold text-xs sm:text-sm text-foreground flex items-center gap-1.5">
-              <span>Chọn tình huống nhập vai</span>
+      {/* ── 2-COLUMN FULL-WIDTH GRID ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 w-full items-start">
+        {/* CỘT TRÁI (7 COLS): CHỌN TÌNH HUỐNG (Lưới 3 Cột trên màn hình rộng) */}
+        <div className="lg:col-span-7 rounded-2xl border border-border/80 bg-card p-3 sm:p-3.5 shadow-xs space-y-2.5">
+          <div className="flex items-center justify-between pb-1.5 border-b border-border/50">
+            <span className="font-serif font-bold text-xs sm:text-sm text-foreground flex items-center gap-2">
+              <span className="size-5 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-[10px] font-mono font-bold">
+                1
+              </span>
+              <span>Chọn Tình Huống Nhập Vai</span>
             </span>
-            <span className="text-[11px] text-muted-foreground font-mono bg-secondary px-2.5 py-0.5 rounded-full border border-border/50">
-              {filteredModes.length} kịch bản khả dụng
+            <span className="text-[11px] text-muted-foreground font-mono bg-secondary/80 px-2.5 py-0.5 rounded-full border border-border/50">
+              {filteredModes.length} kịch bản
             </span>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto p-3.5 space-y-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {filteredModes.map((m) => {
-                const Icon = m.icon;
-                const isSelected = selectedModeId === m.id;
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
+            {filteredModes.map((m) => {
+              const Icon = m.icon;
+              const isSelected = selectedModeId === m.id;
 
-                return (
-                  <div
-                    key={m.id}
-                    onClick={() => setSelectedModeId(m.id)}
-                    className={cn(
-                      "p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between space-y-2.5 relative group paper-shadow-sm",
-                      isSelected
-                        ? "border-primary bg-primary/[0.03] ring-1 ring-primary/40 shadow-xs"
-                        : "border-border/70 bg-card hover:border-primary/40 hover:bg-muted/20 hover:paper-shadow-hover"
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className={cn("size-9 rounded-xl flex items-center justify-center shrink-0 border border-border/40", m.color)}>
-                          <Icon className="size-4.5" />
-                        </div>
-                        <div className="min-w-0">
-                          <h4 className="font-serif font-bold text-sm text-foreground group-hover:text-primary transition-colors truncate">
-                            {m.label}
-                          </h4>
-                          <span className="text-[10px] font-mono text-muted-foreground block truncate">
-                            {m.level}
-                          </span>
-                        </div>
+              return (
+                <div
+                  key={m.id}
+                  onClick={() => setSelectedModeId(m.id)}
+                  className={cn(
+                    "p-3 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-2 relative group select-none shadow-xs",
+                    isSelected
+                      ? "border-primary bg-primary/[0.04] ring-2 ring-primary/40 shadow-sm"
+                      : "border-border/70 bg-card hover:border-primary/40 hover:bg-muted/20"
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className={cn("size-8.5 rounded-xl flex items-center justify-center shrink-0 border border-border/40", m.color)}>
+                        <Icon className="size-4" />
                       </div>
-                      {isSelected && (
-                        <span className="size-2 rounded-full bg-primary shrink-0 animate-pulse mt-1" />
-                      )}
+                      <div className="min-w-0">
+                        <h4 className="font-serif font-bold text-xs sm:text-sm text-foreground group-hover:text-primary transition-colors truncate">
+                          {m.label}
+                        </h4>
+                        <span className="text-[10px] font-mono text-muted-foreground block truncate">
+                          {m.level}
+                        </span>
+                      </div>
                     </div>
-
-                    <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-                      {m.desc}
-                    </p>
+                    {isSelected && (
+                      <Badge className="text-[9px] font-mono px-1.5 py-0 bg-primary text-primary-foreground font-semibold shrink-0">
+                        Đang chọn
+                      </Badge>
+                    )}
                   </div>
-                );
-              })}
-            </div>
+
+                  <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                    {m.desc}
+                  </p>
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        {/* RIGHT (5 cols): Selected Scenario Blueprint & Quick Launcher */}
-        <div className="lg:col-span-5 h-full flex flex-col min-h-0 rounded-3xl border border-border/80 bg-card overflow-hidden paper-shadow-sm">
-          {/* Header Preview Banner */}
-          <div className="p-4 sm:p-5 border-b border-border/60 bg-gradient-to-b from-primary/[0.06] via-card to-card shrink-0">
-            <div className="flex items-center gap-3 mb-2.5">
-              <div className={cn("size-12 rounded-2xl flex items-center justify-center shrink-0 border border-border/50 paper-shadow-sm", selectedMode.color)}>
-                <selectedMode.icon className="size-6" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-serif font-bold text-base text-foreground truncate">
-                    {selectedMode.label}
-                  </h3>
-                  <Badge variant="outline" className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-secondary text-foreground/80 border border-border/60">
-                    {selectedMode.level}
-                  </Badge>
+        {/* CỘT PHẢI (5 COLS): BLUEPRINT & CẤU HÌNH PHIÊN */}
+        <div className="lg:col-span-5">
+          <div className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs space-y-3.5">
+            {/* Header Preview Banner (Compact) */}
+            <div className="p-3 rounded-xl border border-border/60 bg-muted/20 space-y-2">
+              <div className="flex items-center gap-2.5">
+                <div className={cn("size-9 rounded-xl flex items-center justify-center shrink-0 border border-border/50", selectedMode.color)}>
+                  <selectedMode.icon className="size-4.5" />
                 </div>
-                <p className="text-xs text-muted-foreground truncate mt-0.5">{selectedMode.desc}</p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="font-serif font-bold text-xs sm:text-sm text-foreground truncate">
+                      {selectedMode.label}
+                    </h3>
+                    <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 rounded-md">
+                      {selectedMode.level}
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground truncate">{selectedMode.desc}</p>
+                </div>
+              </div>
+
+              <div className="p-2 rounded-lg bg-card border border-border/50 space-y-1 text-xs">
+                <div className="flex items-center gap-1.5 text-muted-foreground text-[11px]">
+                  <Users className="size-3 text-primary shrink-0" />
+                  <span className="font-medium">Nhân vật:</span>
+                  <span className="font-semibold text-foreground truncate">{selectedMode.defaultRole}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-muted-foreground text-[11px]">
+                  <Target className="size-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span className="font-medium">Mục tiêu:</span>
+                  <span className="text-foreground truncate">{selectedMode.defaultGoal}</span>
+                </div>
               </div>
             </div>
 
-            {/* Quick Context Strip */}
-            <div className="p-3 rounded-2xl bg-secondary/50 border border-border/60 space-y-1.5 text-xs">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Users className="size-3.5 text-primary shrink-0" />
-                <span className="font-medium">Nhân vật AI:</span>
-                <span className="font-semibold text-foreground truncate">{selectedMode.defaultRole}</span>
-              </div>
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Target className="size-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                <span className="font-medium">Nhiệm vụ:</span>
-                <span className="text-foreground truncate">{selectedMode.defaultGoal}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Configuration Form strictly scrollable inside */}
-          <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 space-y-4">
             {/* Custom Prompt Textarea if ai_generated */}
             {selectedModeId === "ai_generated" && (
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <label className="text-xs font-serif font-bold text-foreground">
                   Mô tả tình huống bạn muốn (Prompt)
                 </label>
@@ -509,16 +520,16 @@ export default function ConversationModesPage() {
                   value={aiPrompt}
                   onChange={(e) => setAiPrompt(e.target.value)}
                   placeholder="Ví dụ: Tôi là kỹ sư phần mềm muốn xin sếp cho làm việc từ xa 2 ngày/tuần..."
-                  rows={3}
-                  className="text-xs bg-background rounded-2xl resize-none p-3 border-border/80 focus:border-primary paper-shadow-sm"
+                  rows={2}
+                  className="text-xs bg-background rounded-xl resize-none p-2.5 border-border/80 focus:border-primary"
                 />
               </div>
             )}
 
-            {/* Topic selector (PRESET_TOPICS chuẩn SB/VN-EN/Survival/Drill) */}
-            <div className="space-y-1.5">
+            {/* Topic selector (Grounding Context) */}
+            <div className="space-y-1">
               <span className="text-xs font-serif font-bold text-foreground block">
-                Chủ đề grounding
+                Chủ đề neo bối cảnh (Grounding)
               </span>
               <button
                 type="button"
@@ -526,10 +537,12 @@ export default function ConversationModesPage() {
                   setCustomInputVal(customTopicText || "");
                   setIsTopicModalOpen(true);
                 }}
-                className="w-full flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/30 text-foreground text-xs font-mono transition-all cursor-pointer group"
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/10 hover:bg-primary/15 border border-primary/30 text-foreground text-xs font-mono transition-all cursor-pointer"
               >
-                <Compass className="size-3.5 text-primary shrink-0 group-hover:rotate-45 transition-transform" />
-                <span className="truncate font-medium flex-1 text-left">{getTopicDisplay(resolveTopicForPrompt(selectedTopicId, customTopicText)).label}</span>
+                <Compass className="size-3.5 text-primary shrink-0" />
+                <span className="truncate font-medium flex-1 text-left">
+                  {getTopicDisplay(resolveTopicForPrompt(selectedTopicId, customTopicText)).label}
+                </span>
                 <ChevronDown className="size-3.5 text-muted-foreground shrink-0" />
               </button>
             </div>
@@ -545,11 +558,12 @@ export default function ConversationModesPage() {
                     key={m.id}
                     onClick={() => setSessionMode(m.id)}
                     title={m.desc}
-                    className={`text-[11px] font-semibold py-1.5 px-1 rounded-xl border transition-all ${
+                    className={cn(
+                      "text-[11px] font-semibold py-1.5 px-1 rounded-xl border transition-all cursor-pointer text-center",
                       sessionMode === m.id
-                        ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                        ? "bg-primary text-primary-foreground border-primary shadow-xs font-bold"
                         : "border-border/70 text-muted-foreground hover:text-foreground bg-background"
-                    }`}
+                    )}
                   >
                     {m.label}
                   </button>
@@ -557,108 +571,111 @@ export default function ConversationModesPage() {
               </div>
             </div>
 
-            {/* Quick Parameters */}
-            <div className="space-y-2">
-              <span className="text-xs font-serif font-bold text-foreground block">
-                Độ khó & Thử thách phản xạ
-              </span>
-
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: "auto", label: "Tự động" },
-                  { id: "b1", label: "B1 (Vừa)" },
-                  { id: "b2", label: "B2 (Cao)" },
-                ].map((d) => (
-                  <button
-                    key={d.id}
-                    onClick={() => setDifficulty(d.id)}
-                    className={`text-xs font-semibold py-2 px-2.5 rounded-xl border transition-all ${
-                      difficulty === d.id
-                        ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                        : "border-border/70 text-muted-foreground hover:text-foreground bg-background"
-                    }`}
-                  >
-                    {d.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Surprise & Conflict level */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
+            {/* Compact Parameters Grid: Độ khó, Bất ngờ, Xung đột */}
+            <div className="space-y-2 pt-1 border-t border-border/40">
+              <div className="space-y-1">
                 <span className="text-[11px] font-semibold text-muted-foreground">
-                  Yếu tố bất ngờ
+                  Độ khó phản xạ
                 </span>
-                <div className="flex gap-1.5">
+                <div className="grid grid-cols-3 gap-1.5">
                   {[
-                    { id: "low", label: "Ít" },
-                    { id: "medium", label: "Vừa" },
-                    { id: "high", label: "Cao" },
-                  ].map((s) => (
+                    { id: "auto", label: "Tự động" },
+                    { id: "b1", label: "B1 (Vừa)" },
+                    { id: "b2", label: "B2 (Cao)" },
+                  ].map((d) => (
                     <button
-                      key={s.id}
-                      onClick={() => setSurprise(s.id)}
-                      className={`flex-1 text-xs font-medium py-1.5 rounded-xl border transition-all ${
-                        surprise === s.id
-                          ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40 font-semibold"
-                          : "border-border/70 text-muted-foreground bg-background"
-                      }`}
+                      key={d.id}
+                      onClick={() => setDifficulty(d.id)}
+                      className={cn(
+                        "text-xs font-semibold py-1 px-2 rounded-xl border transition-all cursor-pointer text-center",
+                        difficulty === d.id
+                          ? "bg-primary text-primary-foreground border-primary shadow-xs font-bold"
+                          : "border-border/70 text-muted-foreground hover:text-foreground bg-background"
+                      )}
                     >
-                      {s.label}
+                      {d.label}
                     </button>
                   ))}
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <span className="text-[11px] font-semibold text-muted-foreground">
-                  Mức độ xung đột
-                </span>
-                <div className="flex gap-1.5">
-                  {[
-                    { id: "low", label: "Êm" },
-                    { id: "medium", label: "Thử thách" },
-                  ].map((c) => (
-                    <button
-                      key={c.id}
-                      onClick={() => setConflict(c.id)}
-                      className={`flex-1 text-xs font-medium py-1.5 rounded-xl border transition-all ${
-                        conflict === c.id
-                          ? "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/40 font-semibold"
-                          : "border-border/70 text-muted-foreground bg-background"
-                      }`}
-                    >
-                      {c.label}
-                    </button>
-                  ))}
+              <div className="grid grid-cols-2 gap-2 pt-0.5">
+                <div className="space-y-1">
+                  <span className="text-[11px] font-semibold text-muted-foreground">
+                    Yếu tố bất ngờ
+                  </span>
+                  <div className="flex gap-1">
+                    {[
+                      { id: "low", label: "Ít" },
+                      { id: "medium", label: "Vừa" },
+                      { id: "high", label: "Cao" },
+                    ].map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => setSurprise(s.id)}
+                        className={cn(
+                          "flex-1 text-[11px] font-medium py-1 rounded-lg border transition-all cursor-pointer text-center",
+                          surprise === s.id
+                            ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40 font-bold"
+                            : "border-border/70 text-muted-foreground bg-background"
+                        )}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <span className="text-[11px] font-semibold text-muted-foreground">
+                    Mức độ xung đột
+                  </span>
+                  <div className="flex gap-1">
+                    {[
+                      { id: "low", label: "Êm" },
+                      { id: "medium", label: "Thử thách" },
+                    ].map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() => setConflict(c.id)}
+                        className={cn(
+                          "flex-1 text-[11px] font-medium py-1 rounded-lg border transition-all cursor-pointer text-center",
+                          conflict === c.id
+                            ? "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/40 font-bold"
+                            : "border-border/70 text-muted-foreground bg-background"
+                        )}
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* Launch Button Footer */}
-          <div className="p-4 border-t border-border/60 bg-secondary/20 shrink-0">
-            <Button
-              onClick={() => handleLaunchWorld()}
-              disabled={loading}
-              className="w-full h-12 rounded-2xl font-serif font-bold text-sm sm:text-base gap-2 bg-primary text-primary-foreground btn-spring shadow-sm"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  <span>Đang khởi tạo thế giới...</span>
-                </>
-              ) : (
-                <>
-                  <Play className="size-4.5 fill-current" />
-                  <span>Khởi Tạo & Vào Nhập Vai</span>
-                </>
-              )}
-            </Button>
+            {/* Launch Button */}
+            <div className="pt-1">
+              <Button
+                onClick={() => handleLaunchWorld()}
+                disabled={loading}
+                className="w-full h-11 rounded-xl font-serif font-bold text-sm sm:text-base gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-md shadow-primary/20 cursor-pointer"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="size-4.5 animate-spin" />
+                    <span>Đang khởi tạo thế giới...</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="size-4.5 fill-current" />
+                    <span>Khởi Tạo & Vào Nhập Vai</span>
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
-      </main>
+      </div>
 
       {/* Topic Selector Dialog (chuẩn SB/VN-EN/Survival/Drill) */}
       <Dialog open={isTopicModalOpen} onOpenChange={setIsTopicModalOpen}>

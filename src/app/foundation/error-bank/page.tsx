@@ -62,7 +62,7 @@ import { ErrorAnalyticsOverview } from "@/components/foundation/error-bank/Error
 import { ErrorCard } from "@/components/foundation/error-bank/ErrorCard";
 import { ErrorDetailModal } from "@/components/foundation/error-bank/ErrorDetailModal";
 import { DiagnosticReportCard } from "@/components/foundation/error-bank/DiagnosticReportCard";
-import { GlobalAiSelector } from "@/components/common/GlobalAiSelector";
+import { cn } from "@/lib/utils";
 import { ErrorDrillPromptCard } from "@/components/foundation/error-bank/ErrorDrillPromptCard";
 import { ErrorDrillContextCard } from "@/components/foundation/error-bank/ErrorDrillContextCard";
 import { ErrorDrillFeedbackCard } from "@/components/foundation/error-bank/ErrorDrillFeedbackCard";
@@ -478,7 +478,6 @@ export default function ErrorBankDashboardPage() {
               <span className="truncate font-medium">{getTopicDisplay(selectedTopicId).label}</span>
               <ChevronDown className="size-3 text-muted-foreground shrink-0 ml-0.5" />
             </button>
-            <GlobalAiSelector size="sm" />
           </div>
 
           {/* Center */}
@@ -754,96 +753,121 @@ export default function ErrorBankDashboardPage() {
   // ── TAB 1: OVERVIEW DASHBOARD ────────────────────────────────────────
   // ════════════════════════════════════════════════════════════════════
   return (
-    <div className="space-y-8 pb-16 animate-in fade-in-0 duration-300 max-w-5xl mx-auto px-2 sm:px-4">
-      {/* Top Header Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-        <div className="flex items-center gap-2.5">
+    <div className="w-full max-w-none space-y-3 sm:space-y-3.5 pb-12 animate-in fade-in-0 duration-200">
+      {/* ── TOP TOOLBAR FULL WIDTH (Compact Single Row) ── */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-card/80 backdrop-blur-md border border-border/80 rounded-2xl px-3.5 py-2.5 shadow-xs w-full">
+        {/* Left: Back + Title + Badge */}
+        <div className="flex items-center gap-2 min-w-0">
           <Link href="/">
-            <Button variant="ghost" size="sm" className="size-9 p-0 rounded-full">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 rounded-xl shrink-0 text-muted-foreground hover:text-foreground"
+              title="Quay lại Trang chủ"
+            >
               <ArrowLeft className="size-4" />
             </Button>
           </Link>
-          <div>
-            <h1 className="text-base sm:text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
-              <Brain className="size-4 text-primary" />
-              <span>Personal Error Bank & Spoken Memory</span>
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              FSRS Spaced Repetition, Bayesian Knowledge Tracing & Bản đồ Hóa đá L1
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <GlobalAiSelector size="sm" />
-          <Badge variant="outline" className="text-xs font-mono border-primary/30 text-primary">
-            FSRS • BKT • L1
-          </Badge>
-        </div>
-      </div>
 
-      {/* Tab Switcher */}
-      <div className="flex gap-2 p-1 rounded-2xl bg-muted/50 border border-border/50 w-fit">
-        <button
-          onClick={() => setActiveTab("overview")}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all bg-card text-foreground shadow-xs border border-border/50"
-        >
-          <Brain className="size-3.5" />
-          Tổng quan
-          {records.length > 0 && (
-            <span className="px-1.5 py-0.5 rounded-full bg-primary/15 text-primary text-[10px] font-mono">
-              {records.length}
-            </span>
-          )}
-        </button>
-        <button
-          onClick={handleDrillAll}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all text-muted-foreground hover:text-foreground ${
-            records.filter((r) => r.status !== "mastered").length === 0 ? "opacity-50 cursor-not-allowed" : ""
-          }`}
-          disabled={records.filter((r) => r.status !== "mastered").length === 0}
-        >
-          <Target className="size-3.5" />
-          Error Drill Studio
-          {contextPack.reviewDueList.length > 0 && (
-            <span className="px-1.5 py-0.5 rounded-full bg-rose-500/15 text-rose-600 text-[10px] font-mono animate-pulse">
-              {contextPack.reviewDueList.length} cần ôn
-            </span>
-          )}
-        </button>
-      </div>
-
-      {/* Hero Banner with AI Doctor */}
-      <div className="p-6 md:p-8 rounded-3xl border border-primary/30 bg-gradient-to-br from-primary/10 via-card to-background shadow-sm space-y-4">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="space-y-2 max-w-2xl">
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-primary/15 text-primary text-xs font-bold w-fit">
-              <Activity className="size-3.5" />
-              <span>AI Bác Sĩ Khẩu Ngữ (Spoken Pathologist)</span>
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="size-7.5 rounded-xl bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0">
+              <Brain className="size-4" />
             </div>
-            <h2 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
-              Chẩn đoán nguyên nhân gốc rễ: Retrieval Gap vs Knowledge Gap
-            </h2>
-            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-              Bạn biết ngữ pháp trên giấy nhưng khi nói thì bị tắc nghẽn? AI kết hợp Bayesian Knowledge Tracing và ma trận chuyển di tiếng mẹ đẻ để tách biệt lỗi do kiến thức với phản xạ nói chậm, kê đơn 3 bài tập trọng tâm trong tuần.
-            </p>
-            {diagError && <p className="text-xs text-red-500 font-medium">⚠️ {diagError}</p>}
+            <span className="font-serif font-bold text-sm sm:text-base tracking-tight text-foreground">
+              Ngân Hàng Lỗi & Trí Nhớ Khẩu Ngữ
+            </span>
+            <Badge variant="secondary" className="text-[10px] font-mono h-5 hidden sm:inline-flex rounded-full px-2">
+              FSRS • BKT • L1
+            </Badge>
           </div>
+        </div>
+
+        {/* Right: Tab Switcher (Tổng quan vs Drill Studio) */}
+        <div className="flex items-center gap-1 bg-secondary/50 p-1 rounded-full border border-border/60">
+          <button
+            onClick={() => setActiveTab("overview")}
+            className="flex items-center gap-1.5 text-xs px-3 py-1 rounded-full transition-all cursor-pointer bg-primary text-primary-foreground font-semibold shadow-xs"
+          >
+            <Brain className="size-3.5" />
+            <span>Tổng quan</span>
+            {records.length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-primary-foreground/20 text-primary-foreground text-[10px] font-mono font-bold">
+                {records.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={handleDrillAll}
+            disabled={records.filter((r) => r.status !== "mastered").length === 0}
+            className={cn(
+              "flex items-center gap-1.5 text-xs px-3 py-1 rounded-full transition-all cursor-pointer",
+              records.filter((r) => r.status !== "mastered").length === 0
+                ? "opacity-50 cursor-not-allowed text-muted-foreground"
+                : "text-muted-foreground hover:text-foreground font-medium"
+            )}
+          >
+            <Target className="size-3.5" />
+            <span>Error Drill Studio</span>
+            {contextPack.reviewDueList.length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-rose-500/15 text-rose-600 text-[10px] font-mono font-bold animate-pulse">
+                {contextPack.reviewDueList.length}
+              </span>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* ── COMPACT AI DOCTOR & FSRS DUE ACTION BAR (Single Row) ── */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2.5 p-3 sm:px-4 sm:py-2.5 rounded-2xl border border-primary/25 bg-gradient-to-r from-primary/10 via-card to-background shadow-xs">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="size-8 rounded-xl bg-primary/15 text-primary flex items-center justify-center shrink-0 border border-primary/20">
+            <Activity className="size-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-serif font-bold text-xs sm:text-sm text-foreground">
+                AI Bác Sĩ Khẩu Ngữ (Spoken Pathologist)
+              </span>
+              {diagError && <span className="text-xs text-destructive font-medium">⚠️ {diagError}</span>}
+            </div>
+            <p className="text-[11px] text-muted-foreground truncate hidden sm:block">
+              Phân lập Retrieval Gap vs Knowledge Gap • Tự động kê đơn 3 bài tập khắc phục thói quen L1
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+          {contextPack.reviewDueList.length > 0 && (
+            <Button
+              size="sm"
+              onClick={() => {
+                const dueRecords = records.filter(
+                  (r) => contextPack.reviewDueList.some((d) => d.patternKey === r.patternKey)
+                );
+                initDrillSession(dueRecords.length > 0 ? dueRecords : records);
+              }}
+              className="h-8 px-3 rounded-xl font-bold text-xs gap-1.5 bg-rose-600 hover:bg-rose-700 text-white cursor-pointer shadow-xs"
+            >
+              <Clock className="size-3.5" />
+              <span>Drill {contextPack.reviewDueList.length} lỗi đến hạn</span>
+            </Button>
+          )}
 
           <Button
-            size="lg"
+            size="sm"
             onClick={handleRunDiagnostic}
             disabled={isDiagnosing}
-            className="rounded-2xl font-bold text-xs sm:text-sm h-12 px-6 gap-2 btn-spring shadow-md shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white w-full md:w-auto"
+            className="h-8 px-3.5 rounded-xl font-bold text-xs gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer shadow-xs"
           >
             {isDiagnosing ? (
               <>
-                <Loader2 className="size-4 animate-spin" />
-                <span>AI đang chẩn đoán...</span>
+                <Loader2 className="size-3.5 animate-spin" />
+                <span>Đang chẩn đoán...</span>
               </>
             ) : (
               <>
-                <Sparkles className="size-4" />
-                <span>{diagnosticReport ? "Cập nhật Chẩn Đoán" : "🩺 Nhận Chẩn Đoán Khẩu Ngữ"}</span>
+                <Sparkles className="size-3.5" />
+                <span>{diagnosticReport ? "Cập nhật Chẩn Đoán" : "🩺 Nhận Chẩn Đoán"}</span>
               </>
             )}
           </Button>
@@ -856,118 +880,105 @@ export default function ErrorBankDashboardPage() {
       {/* 4 KPI Cards */}
       <ErrorAnalyticsOverview records={records} contextPack={contextPack} />
 
-      {/* Quick Drill Banner — Lỗi cần ôn hôm nay */}
-      {contextPack.reviewDueList.length > 0 && (
-        <div className="p-5 rounded-3xl border-2 border-rose-500/40 bg-gradient-to-br from-card via-card to-rose-500/10 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 text-xs font-bold">
-                <Clock className="size-4" />
-                <span>Hàng đợi ôn tập FSRS hôm nay</span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Có <b>{contextPack.reviewDueList.length} mẫu lỗi</b> đã suy giảm Retrievability &lt;90%, cần drill ngay để tránh quên!
-              </p>
-            </div>
-            <Button
-              size="sm"
-              onClick={() => {
-                const dueRecords = records.filter(
-                  (r) => contextPack.reviewDueList.some((d) => d.patternKey === r.patternKey)
-                );
-                initDrillSession(dueRecords.length > 0 ? dueRecords : records);
-              }}
-              className="rounded-2xl font-bold text-xs gap-1.5 h-10 px-5 bg-rose-600 hover:bg-rose-700 text-white btn-spring shadow-xs shrink-0"
-            >
-              <Target className="size-3.5" />
-              <span>Drill {contextPack.reviewDueList.length} lỗi đến hạn</span>
-              <ArrowRight className="size-3.5" />
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Filters */}
-      <div className="space-y-4">
-        {/* Category Tabs */}
-        <div className="flex flex-wrap gap-2 border-b border-border/60 pb-3">
-          {MAIN_CATEGORY_TABS.map((tab) => {
-            const isActive = selectedCategory === tab.id;
-            return (
-              <Button
-                key={tab.id}
-                variant={isActive ? "default" : "outline"}
-                size="sm"
-                onClick={() => setCategory(tab.id)}
-                className={`rounded-full text-xs font-semibold h-8 px-3.5 ${isActive ? "shadow-xs" : "border-border/80 text-muted-foreground"
-                  }`}
-              >
-                {tab.label}
-              </Button>
-            );
-          })}
-        </div>
-
-        {/* Fossilization & Due Filters */}
-        <div className="flex flex-wrap items-center justify-between gap-2.5">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs text-muted-foreground font-medium mr-1 flex items-center gap-1">
-              <Flame className="size-3 text-rose-500" /> Hóa đá:
-            </span>
-            {FOSSILIZATION_FILTERS.map((f) => {
-              const isActive = selectedFossilization === f.id;
+      {/* ── INTEGRATED COMPACT FILTER BAR ── */}
+      <div className="rounded-2xl border border-border/80 bg-card p-3 shadow-xs space-y-2.5">
+        {/* Row 1: Category Tabs + Search */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5">
+          <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
+            {MAIN_CATEGORY_TABS.map((tab) => {
+              const isActive = selectedCategory === tab.id;
               return (
                 <button
-                  key={f.id}
-                  onClick={() => setFossilization(f.id)}
-                  className={`text-[11px] font-medium px-2.5 py-1 rounded-full transition-colors ${isActive
-                      ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 font-bold border border-rose-500/30"
-                      : "text-muted-foreground hover:text-foreground"
-                    }`}
+                  key={tab.id}
+                  onClick={() => setCategory(tab.id)}
+                  className={cn(
+                    "text-xs px-3 py-1.5 rounded-xl border transition-all cursor-pointer font-semibold",
+                    isActive
+                      ? "bg-primary text-primary-foreground border-primary shadow-xs font-bold"
+                      : "border-border/70 text-muted-foreground hover:text-foreground bg-background"
+                  )}
                 >
-                  {f.label}
+                  {tab.label}
                 </button>
               );
             })}
           </div>
-          <button
-            onClick={() => setDueFilter(dueFilter === "all" ? "due_today" : "all")}
-            className={`text-xs font-semibold px-3 py-1 rounded-full border transition-all flex items-center gap-1.5 ${dueFilter === "due_today"
-                ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
-                : "border-border/80 text-muted-foreground hover:text-foreground"
-              }`}
-          >
-            <Clock className="size-3.5" />
-            <span>Chỉ xem FSRS ({contextPack.reviewDueList.length})</span>
-          </button>
-        </div>
 
-        {/* Search & Status */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="relative w-full sm:w-72">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
             <Input
               placeholder="Tìm kiếm mẫu lỗi..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-9 rounded-2xl text-xs bg-card border-border/80"
+              className="pl-8 h-8 rounded-xl text-xs bg-background border-border/80"
             />
           </div>
-          <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
-            {STATUS_FILTERS.map((st) => {
-              const isActive = selectedStatus === st.id;
-              return (
-                <button
-                  key={st.id}
-                  onClick={() => setStatus(st.id)}
-                  className={`text-[11px] font-medium px-2.5 py-1 rounded-full transition-colors ${isActive ? "bg-muted text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
-                    }`}
-                >
-                  {st.label}
-                </button>
-              );
-            })}
+        </div>
+
+        {/* Row 2: Fossilization + Status + Due */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/40">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] text-muted-foreground font-medium flex items-center gap-1 mr-1">
+                <Flame className="size-3 text-rose-500" /> Hóa đá:
+              </span>
+              {FOSSILIZATION_FILTERS.map((f) => {
+                const isActive = selectedFossilization === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    onClick={() => setFossilization(f.id)}
+                    className={cn(
+                      "text-[11px] font-medium px-2 py-0.5 rounded-lg border transition-colors cursor-pointer",
+                      isActive
+                        ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 font-bold border-rose-500/30"
+                        : "border-border/50 text-muted-foreground hover:text-foreground bg-background"
+                    )}
+                  >
+                    {f.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="h-3.5 w-px bg-border/60 hidden sm:block" />
+
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] text-muted-foreground font-medium mr-1 hidden sm:inline">
+                Trạng thái:
+              </span>
+              {STATUS_FILTERS.map((st) => {
+                const isActive = selectedStatus === st.id;
+                return (
+                  <button
+                    key={st.id}
+                    onClick={() => setStatus(st.id)}
+                    className={cn(
+                      "text-[11px] font-medium px-2 py-0.5 rounded-lg border transition-colors cursor-pointer",
+                      isActive
+                        ? "bg-muted text-foreground font-bold border-border/80"
+                        : "border-border/50 text-muted-foreground hover:text-foreground bg-background"
+                    )}
+                  >
+                    {st.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
+
+          <button
+            onClick={() => setDueFilter(dueFilter === "all" ? "due_today" : "all")}
+            className={cn(
+              "text-xs font-semibold px-2.5 py-1 rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer",
+              dueFilter === "due_today"
+                ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                : "border-border/80 text-muted-foreground hover:text-foreground bg-background"
+            )}
+          >
+            <Clock className="size-3.5" />
+            <span>Chỉ xem FSRS ({contextPack.reviewDueList.length})</span>
+          </button>
         </div>
       </div>
 
@@ -1031,7 +1042,7 @@ export default function ErrorBankDashboardPage() {
             </div>
           )}
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-3.5">
             {filteredRecords.map((rec) => (
               <ErrorCard
                 key={rec.id}

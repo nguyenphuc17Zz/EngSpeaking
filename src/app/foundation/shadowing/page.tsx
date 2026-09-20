@@ -14,7 +14,7 @@ import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { transcribeViaServer } from "@/lib/stt/service";
 import { useSettingsStore } from "@/stores/settings-store";
 import { soundEffects } from "@/lib/audio/audio-chimes";
-import { WordLookupPopup } from "@/components/foundation/shadowing/WordLookupPopup";
+import { WordLookupPopup, type VocabWord } from "@/components/foundation/shadowing/WordLookupPopup";
 import {
   computeShadowingScore,
   type ShadowingScoreResult,
@@ -37,8 +37,15 @@ import {
   resetVideoLibraryToDefaults,
   type SavedVideoLesson,
 } from "@/lib/foundation/shadowing/shadowing-library.service";
-import { lookupLexiconWord } from "@/lib/foundation/vocabulary/lexicon-db.service";
+import {
+  lookupLexiconWord,
+  formatConciseMeaning,
+  formatPartOfSpeech,
+  fetchDictionaryDefinition,
+} from "@/lib/foundation/vocabulary/lexicon-db.service";
+import { getWordIpa } from "@/lib/foundation/shadowing/ipa-dictionary";
 import { SessionCompletedModal } from "@/components/voice/SessionCompletedModal";
+import { mergeFragmentedSegments } from "@/lib/foundation/shadowing/transcript-stitcher";
 import {
   ArrowLeft,
   Play,
@@ -109,8 +116,13 @@ export default function CorodomoShadowingStudioPage() {
   const router = useRouter();
   const settings = useSettingsStore();
   const tts = useBrowserTTS();
-  const recorder = useAudioRecorder({ keepWarm: true });
+  const recorder = useAudioRecorder();
   const speechRec = useSpeechRecognition("en-US");
+  const recorderRef = useRef(recorder);
+  recorderRef.current = recorder;
+  const speechRecRef = useRef(speechRec);
+  speechRecRef.current = speechRec;
+  const currentVideoIdRef = useRef<string | null>(null);
 
   // ─── Top-Level View State: "hub" (Màn chính) | "studio" (Phòng học) ─
   const [currentView, setCurrentView] = useState<MainView>("hub");
@@ -143,21 +155,43 @@ export default function CorodomoShadowingStudioPage() {
     return () => setHideAppHeader(false);
   }, [currentView, setHideAppHeader]);
 
-  // ─── Lesson & Practice State ─────────────────────────────────────────
-  const [activeLesson, setActiveLesson] = useState<CorodomoVideoLesson>(CORODOMO_VIDEO_PRESETS[0]);
+  const [activeLesson, setActiveLesson] = useState<CorodomoVideoLesson>(() => {
+    const defaultLesson = CORODOMO_VIDEO_PRESETS[0];
+    return {
+      ...defaultLesson,
+      segments: mergeFragmentedSegments(defaultLesson.segments || []),
+    };
+  });
   const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
   const activeSegmentIndexRef = useRef(0);
   activeSegmentIndexRef.current = activeSegmentIndex;
 
+  // Auto-heal fragmented 1-2 word sentences in activeLesson so current view is 100% clean
+  useEffect(() => {
+    if (!activeLesson?.segments || activeLesson.segments.length <= 1) return;
+    const healed = mergeFragmentedSegments(activeLesson.segments);
+    if (healed.length !== activeLesson.segments.length) {
+      setActiveLesson((prev) => ({
+        ...prev,
+        segments: healed,
+      }));
+    }
+  }, [activeLesson?.id]);
+
   // ─── Playback & Sync State ───────────────────────────────────────────
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
+  const playbackSpeedRef = useRef<number>(1.0);
+  playbackSpeedRef.current = playbackSpeed;
   const [playMode, setPlayMode] = useState<ShadowingPlayMode>("continuous");
   const playModeRef = useRef<ShadowingPlayMode>("continuous");
   playModeRef.current = playMode;
 
   const justPausedSegRef = useRef<number>(-1);
+  const isAutoPausingRef = useRef<boolean>(false);
   const isLoopSeekingRef = useRef<boolean>(false);
+  const seekGraceUntilRef = useRef<number>(0);
+  const seekTargetTimeRef = useRef<number>(0);
   const [isAutoPaused, setIsAutoPaused] = useState(false);
   const seekToSegmentRef = useRef<(index: number, autoPlay?: boolean) => void>(() => {});
 
@@ -233,7 +267,7 @@ export default function CorodomoShadowingStudioPage() {
   } | null>(null);
 
   // ─── Word Lookup Popup State ─────────────────────────────────────────
-  const [popupWord, setPopupWord] = useState<any | null>(null);
+  const [popupWord, setPopupWord] = useState<VocabWord | null>(null);
   const [popupAnchor, setPopupAnchor] = useState<HTMLElement | null>(null);
   const [vocabDeck, setVocabDeck] = useState<any[]>([]);
 
@@ -247,6 +281,7 @@ export default function CorodomoShadowingStudioPage() {
   // ─── Video Library (CRUD) State ──────────────────────────────────────
   const [videoLibrary, setVideoLibrary] = useState<SavedVideoLesson[]>([]);
   const [librarySearch, setLibrarySearch] = useState<string>("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [editingLesson, setEditingLesson] = useState<SavedVideoLesson | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editChannel, setEditChannel] = useState("");
@@ -296,14 +331,27 @@ export default function CorodomoShadowingStudioPage() {
 
   const filteredLibrary = useMemo(() => {
     const q = librarySearch.trim().toLowerCase();
-    if (!q) return videoLibrary;
     return videoLibrary.filter((item) => {
-      return (
+      const matchQuery =
+        !q ||
         item.title.toLowerCase().includes(q) ||
-        item.channel.toLowerCase().includes(q)
-      );
+        item.channel.toLowerCase().includes(q);
+      if (!matchQuery) return false;
+
+      if (selectedCategory === "A1-A2") {
+        const lvl = (item.cefrLevel || "").toUpperCase();
+        return lvl === "A1" || lvl === "A2";
+      }
+      if (selectedCategory === "B1-B2") {
+        const lvl = (item.cefrLevel || "").toUpperCase();
+        return lvl === "B1" || lvl === "B2" || lvl === "C1" || lvl === "C2";
+      }
+      if (selectedCategory === "custom") {
+        return item.isCustom === true;
+      }
+      return true;
     });
-  }, [videoLibrary, librarySearch]);
+  }, [videoLibrary, librarySearch, selectedCategory]);
 
   const currentSegment: CorodomoSegment =
     activeLesson.segments[activeSegmentIndex] || activeLesson.segments[0];
@@ -332,13 +380,23 @@ export default function CorodomoShadowingStudioPage() {
       if (typeof window === "undefined" || currentView !== "studio") return;
 
       const createPlayer = () => {
-        // If player already exists and is healthy, just load the video directly
+        // If player already exists for this video, do nothing
+        if (
+          playerRef.current &&
+          currentVideoIdRef.current === videoId &&
+          document.getElementById("corodomo-yt-player")
+        ) {
+          return;
+        }
+
+        // If player already exists for another video, just load the video directly
         if (
           playerRef.current &&
           typeof playerRef.current.loadVideoById === "function" &&
           document.getElementById("corodomo-yt-player")
         ) {
           try {
+            currentVideoIdRef.current = videoId;
             playerRef.current.loadVideoById(videoId);
             playerRef.current.setPlaybackRate(playbackSpeed);
             return;
@@ -366,8 +424,10 @@ export default function CorodomoShadowingStudioPage() {
           container.appendChild(el);
         }
 
+        currentVideoIdRef.current = videoId;
         playerRef.current = new window.YT.Player(el, {
           videoId,
+          host: "https://www.youtube.com",
           playerVars: {
             enablejsapi: 1,
             rel: 0,
@@ -382,17 +442,18 @@ export default function CorodomoShadowingStudioPage() {
             },
             onStateChange: (event: any) => {
               if (event.data === 1) {
+                // If delayed playing event during auto-pause transition, ignore to avoid race condition
+                if (isAutoPausingRef.current) return;
                 setIsPlayingVideo(true);
-                // If user unpaused directly on YouTube player while stopped at sentence end -> advance to next sentence!
+                // If user unpaused directly on YouTube player while stopped at sentence end -> replay current sentence!
                 if (playModeRef.current === "pause_after_sentence" && justPausedSegRef.current !== -1) {
                   const cur = justPausedSegRef.current;
-                  const total = activeLesson?.segments?.length || 0;
-                  const nextIdx = cur < total - 1 ? cur + 1 : 0;
                   justPausedSegRef.current = -1;
                   setIsAutoPaused(false);
-                  seekToSegmentRef.current(nextIdx, true);
+                  seekToSegmentRef.current(cur, true);
                 }
               } else if (event.data === 2 || event.data === 0) {
+                isAutoPausingRef.current = false;
                 setIsPlayingVideo(false);
               }
             },
@@ -419,6 +480,7 @@ export default function CorodomoShadowingStudioPage() {
           playerRef.current.destroy();
         } catch {}
         playerRef.current = null;
+        currentVideoIdRef.current = null;
       }
       if (userAudioRef.current) {
         userAudioRef.current.pause();
@@ -428,6 +490,10 @@ export default function CorodomoShadowingStudioPage() {
         shadowingAudioRef.current.pause();
         shadowingAudioRef.current = null;
       }
+      try {
+        recorderRef.current?.cancel();
+      } catch {}
+      speechRecRef.current?.stopListening();
     };
   }, [currentView, activeLesson?.youtubeId, initYouTubePlayer]);
 
@@ -471,7 +537,25 @@ export default function CorodomoShadowingStudioPage() {
 
                 // ─── 1. MODE: LẶP 1 CÂU (loop_sentence) ─────────────────────
                 if (playModeRef.current === "loop_sentence" && currentSeg) {
-                  const isAtEndOfSentence = time >= currentSeg.end_time - 0.08;
+                  // Transient Seek Grace Guard: When seeking to start of sentence (or jumping to another segment via [→]),
+                  // YouTube iframe postMessage IPC takes ~100-300ms to update reported player time.
+                  // During this grace window, do NOT trigger loop seek!
+                  if (Date.now() < seekGraceUntilRef.current) {
+                    animId = requestAnimationFrame(syncLoop);
+                    return;
+                  }
+
+                  const nextSeg = segments[curIdx + 1];
+                  const speed = playbackSpeedRef.current || 1.0;
+                  const leadCompensation = Math.max(0.12, 0.12 * speed);
+                  let stopThreshold = currentSeg.end_time - leadCompensation;
+
+                  // If next segment starts very soon (gap < 250ms), tighten stopThreshold so next speech never leaks
+                  if (nextSeg && nextSeg.start_time - currentSeg.end_time < 0.25) {
+                    stopThreshold = Math.min(stopThreshold, nextSeg.start_time - 0.18);
+                  }
+
+                  const isAtEndOfSentence = time >= stopThreshold;
                   if (isAtEndOfSentence && !isLoopSeekingRef.current) {
                     isLoopSeekingRef.current = true;
                     if (playerRef.current && typeof playerRef.current.seekTo === "function") {
@@ -479,8 +563,23 @@ export default function CorodomoShadowingStudioPage() {
                     }
                     setTimeout(() => {
                       isLoopSeekingRef.current = false;
-                    }, 300);
+                    }, 400);
                   }
+
+                  // Auto Catch-up: If video has progressed into another segment (e.g. user navigated or seeked),
+                  // advance curIdx to match the active sentence so loop engine and subtitles lock onto the new sentence!
+                  if (time >= currentSeg.end_time + 0.15 || time < currentSeg.start_time - 1.0) {
+                    const matchedIdx = segments.findIndex(
+                      (seg) => time >= seg.start_time - 0.1 && time < seg.end_time + 0.1
+                    );
+                    if (matchedIdx !== -1 && matchedIdx !== curIdx) {
+                      activeSegmentIndexRef.current = matchedIdx;
+                      setActiveSegmentIndex(matchedIdx);
+                      animId = requestAnimationFrame(syncLoop);
+                      return;
+                    }
+                  }
+
                   // Lock sync engine to currently looping sentence, never advance automatically!
                   animId = requestAnimationFrame(syncLoop);
                   return;
@@ -488,34 +587,74 @@ export default function CorodomoShadowingStudioPage() {
 
                 // ─── 2. MODE: DỪNG SAU CÂU (pause_after_sentence) ───────────
                 if (playModeRef.current === "pause_after_sentence" && currentSeg) {
-                  const isAtEndOfSentence = time >= currentSeg.end_time - 0.08;
+                  const playerState =
+                    typeof playerRef.current?.getPlayerState === "function"
+                      ? playerRef.current.getPlayerState()
+                      : -1;
 
-                  // If user resumed playing while waiting at sentence end -> advance to next sentence!
-                  if (justPausedSegRef.current === curIdx) {
-                    const playerState =
-                      typeof playerRef.current.getPlayerState === "function"
-                        ? playerRef.current.getPlayerState()
-                        : -1;
-                    if (playerState === 1) {
-                      justPausedSegRef.current = -1;
-                      setIsAutoPaused(false);
-                      const nextIdx = curIdx < segments.length - 1 ? curIdx + 1 : 0;
-                      seekToSegmentRef.current(nextIdx, true);
-                      animId = requestAnimationFrame(syncLoop);
-                      return;
-                    }
-                    // While video is paused, stay on this sentence
+                  // If video is actively playing (e.g. user resumed or navigated), clear paused flags
+                  if (playerState === 1 && justPausedSegRef.current !== -1) {
+                    justPausedSegRef.current = -1;
+                    setIsAutoPaused(false);
+                  }
+
+                  // If already paused at sentence end and player is not playing, keep locked to curIdx
+                  if (justPausedSegRef.current === curIdx && playerState !== 1) {
                     animId = requestAnimationFrame(syncLoop);
                     return;
                   }
 
-                  // If reaching sentence end, pause immediately!
-                  if (isAtEndOfSentence) {
-                    justPausedSegRef.current = curIdx;
-                    setIsAutoPaused(true);
-                    pauseVideo();
+                  // Transient Seek Grace Guard: When seeking back to start of sentence (or jumping to another segment),
+                  // YouTube iframe postMessage IPC takes ~100-300ms to update reported player time.
+                  // During this grace window, do NOT trigger stopThreshold auto-pause!
+                  if (Date.now() < seekGraceUntilRef.current) {
                     animId = requestAnimationFrame(syncLoop);
                     return;
+                  }
+
+                  const nextSeg = segments[curIdx + 1];
+                  const speed = playbackSpeedRef.current || 1.0;
+                  // Dynamic lead compensation for YouTube iframe postMessage IPC latency (~100-200ms)
+                  const leadCompensation = Math.max(0.12, 0.12 * speed);
+                  let stopThreshold = currentSeg.end_time - leadCompensation;
+
+                  // If next segment starts very soon (gap < 250ms), tighten stopThreshold so next speech never leaks
+                  if (nextSeg && nextSeg.start_time - currentSeg.end_time < 0.25) {
+                    stopThreshold = Math.min(stopThreshold, nextSeg.start_time - 0.18);
+                  }
+
+                  const isAtEndOfSentence = time >= stopThreshold;
+
+                  // If reaching sentence end, pause immediately (do NOT call seekTo which unpauses YouTube!)
+                  if (isAtEndOfSentence && time < currentSeg.end_time + 0.35) {
+                    justPausedSegRef.current = curIdx;
+                    setIsAutoPaused(true);
+                    isAutoPausingRef.current = true;
+                    pauseVideo();
+                    if (typeof window !== "undefined") {
+                      try {
+                        window.focus();
+                      } catch {}
+                    }
+
+                    animId = requestAnimationFrame(syncLoop);
+                    return;
+                  }
+
+                  // Auto Catch-up: If video has progressed into subsequent sentences,
+                  // immediately advance curIdx to match the active sentence so subtitles never get stuck!
+                  if (time >= currentSeg.end_time + 0.15) {
+                    const matchedIdx = segments.findIndex(
+                      (seg) => time >= seg.start_time - 0.1 && time < seg.end_time + 0.1
+                    );
+                    if (matchedIdx !== -1 && matchedIdx !== curIdx) {
+                      activeSegmentIndexRef.current = matchedIdx;
+                      setActiveSegmentIndex(matchedIdx);
+                      justPausedSegRef.current = -1;
+                      setIsAutoPaused(false);
+                      animId = requestAnimationFrame(syncLoop);
+                      return;
+                    }
                   }
 
                   // While playing inside current sentence, KEEP activeSegment locked to curIdx!
@@ -525,6 +664,12 @@ export default function CorodomoShadowingStudioPage() {
                 }
 
                 // ─── Continuous Mode: High-Fidelity Lead-Compensated Sync ──
+                // If currently in a seek grace window (e.g. user pressed next/prev or clicked a segment),
+                // do NOT let continuous sync engine overwrite activeSegmentIndexRef with stale pre-seek time!
+                if (Date.now() < seekGraceUntilRef.current) {
+                  animId = requestAnimationFrame(syncLoop);
+                  return;
+                }
                 // Apply user sync offset (default +0.35s) to eliminate YouTube postMessage latency
                 const syncOffset = subtitleSyncOffsetRef.current;
                 const syncTime = time + syncOffset;
@@ -606,7 +751,7 @@ export default function CorodomoShadowingStudioPage() {
       next = "pause_after_sentence";
       toast.info(
         "Chế độ: Dừng sau mỗi câu",
-        "Video sẽ tự động dừng ở cuối mỗi câu để bạn nói theo. Bấm Space hoặc Play/Next để sang câu tiếp."
+        "Video sẽ tự động dừng ở cuối mỗi câu. Bấm phím [→] hoặc nút Tiếp để sang câu sau, bấm [Space] để nghe lại."
       );
     } else if (current === "pause_after_sentence") {
       next = "loop_sentence";
@@ -614,6 +759,15 @@ export default function CorodomoShadowingStudioPage() {
         "Chế độ: Lặp lại 1 câu",
         "Video sẽ tự động lặp lại liên tục câu hiện tại để luyện ngữ điệu sâu."
       );
+      const cur = activeSegmentIndexRef.current;
+      const seg = activeLesson?.segments?.[cur];
+      if (seg && playerRef.current && typeof playerRef.current.seekTo === "function") {
+        seekGraceUntilRef.current = Date.now() + 600;
+        seekTargetTimeRef.current = seg.start_time;
+        playerRef.current.seekTo(seg.start_time, true);
+        playerRef.current.playVideo?.();
+        setIsPlayingVideo(true);
+      }
     } else {
       next = "continuous";
       toast.info(
@@ -627,7 +781,7 @@ export default function CorodomoShadowingStudioPage() {
     setIsAutoPaused(false);
     isLoopSeekingRef.current = false;
     setPlayMode(next);
-  }, []);
+  }, [activeLesson?.segments]);
 
   const handleSelectPlayMode = useCallback((mode: ShadowingPlayMode) => {
     if (mode === "continuous") {
@@ -638,7 +792,7 @@ export default function CorodomoShadowingStudioPage() {
     } else if (mode === "pause_after_sentence") {
       toast.info(
         "Chế độ: Dừng sau mỗi câu",
-        "Video sẽ tự động dừng ở cuối mỗi câu để bạn nói theo. Bấm Space hoặc Play/Next để sang câu tiếp."
+        "Video sẽ tự động dừng ở cuối mỗi câu. Bấm phím [→] hoặc nút Tiếp để sang câu sau, bấm [Space] để nghe lại."
       );
     } else if (mode === "loop_sentence") {
       toast.info(
@@ -648,6 +802,8 @@ export default function CorodomoShadowingStudioPage() {
       const cur = activeSegmentIndexRef.current;
       const seg = activeLesson?.segments?.[cur];
       if (seg && playerRef.current && typeof playerRef.current.seekTo === "function") {
+        seekGraceUntilRef.current = Date.now() + 600;
+        seekTargetTimeRef.current = seg.start_time;
         playerRef.current.seekTo(seg.start_time, true);
         playerRef.current.playVideo?.();
         setIsPlayingVideo(true);
@@ -656,6 +812,7 @@ export default function CorodomoShadowingStudioPage() {
 
     playModeRef.current = mode;
     justPausedSegRef.current = -1;
+    isAutoPausingRef.current = false;
     setIsAutoPaused(false);
     isLoopSeekingRef.current = false;
     setPlayMode(mode);
@@ -709,12 +866,10 @@ export default function CorodomoShadowingStudioPage() {
   }, [shadowingAudioUrl, isPlayingShadowingAudio]);
 
   const handleToggleShadowingRecord = useCallback(async () => {
+    const sttProvider = settings.stt?.provider || "browser";
     if (shadowingRecordStatus === "recording") {
       soundEffects.playMicStop();
-      const sttProvider = settings.stt?.provider || "browser";
-      if (sttProvider === "browser") {
-        speechRec.stopListening();
-      }
+      speechRec.stopListening();
       setShadowingRecordStatus("idle");
       try {
         const recording = await recorder.stop();
@@ -767,7 +922,6 @@ export default function CorodomoShadowingStudioPage() {
     setShowShadowingPreview(true);
     speechRec.resetTranscript();
 
-    const sttProvider = settings.stt?.provider || "browser";
     try {
       await recorder.start();
       if (sttProvider === "browser") {
@@ -797,6 +951,7 @@ export default function CorodomoShadowingStudioPage() {
       activeSegmentIndexRef.current = index;
       justPausedSegRef.current = -1;
       setIsAutoPaused(false);
+      isAutoPausingRef.current = false;
       isLoopSeekingRef.current = false;
       setScore(null);
       setUserAudioUrl(null);
@@ -808,7 +963,10 @@ export default function CorodomoShadowingStudioPage() {
       setIsPlayingUserAudio(false);
       speechRec.resetTranscript();
 
-      // Reset Shadowing mode audio preview & recording
+      // Reset Shadowing mode audio preview & recording, release mic
+      try {
+        recorder.cancel();
+      } catch {}
       setShadowingAudioUrl(null);
       setShadowingTranscript("");
       setShowShadowingPreview(false);
@@ -820,6 +978,8 @@ export default function CorodomoShadowingStudioPage() {
       setShadowingRecordStatus("idle");
 
       const seg = activeLesson.segments[index];
+      seekGraceUntilRef.current = Date.now() + 600;
+      seekTargetTimeRef.current = seg.start_time;
       if (playerRef.current && typeof playerRef.current.seekTo === "function") {
         playerRef.current.seekTo(seg.start_time, true);
         if (autoPlay) {
@@ -846,38 +1006,59 @@ export default function CorodomoShadowingStudioPage() {
       const currentSeg = activeLesson.segments[cur];
 
       if (
-        playModeRef.current === "pause_after_sentence" &&
-        (justPausedSegRef.current !== -1 ||
-          (currentSeg && currentTime >= currentSeg.end_time - 0.2))
+        (playModeRef.current === "pause_after_sentence" &&
+          (justPausedSegRef.current !== -1 ||
+            isAutoPaused ||
+            (currentSeg && currentTime >= currentSeg.end_time - 0.2))) ||
+        (playModeRef.current === "loop_sentence" &&
+          currentSeg &&
+          currentTime >= currentSeg.end_time - 0.2)
       ) {
-        // Paused at end of sentence -> advance to next sentence!
-        const nextIdx = cur < activeLesson.segments.length - 1 ? cur + 1 : 0;
+        // Paused at end of sentence -> Replay current sentence from the beginning!
         justPausedSegRef.current = -1;
         setIsAutoPaused(false);
-        seekToSegment(nextIdx, true);
+        isAutoPausingRef.current = false;
+        seekToSegment(cur, true);
       } else {
         playVideo();
       }
     }
-  }, [isPlayingVideo, currentTime, activeLesson.segments, pauseVideo, playVideo, seekToSegment]);
+  }, [isPlayingVideo, isAutoPaused, currentTime, activeLesson.segments, pauseVideo, playVideo, seekToSegment]);
 
   const handlePlayNative = useCallback(() => {
-    seekToSegment(activeSegmentIndex, true);
-  }, [activeSegmentIndex, seekToSegment]);
+    seekToSegment(activeSegmentIndexRef.current, true);
+    if (typeof window !== "undefined") {
+      try {
+        window.focus();
+      } catch {}
+    }
+  }, [seekToSegment]);
 
   const handlePrevSegment = useCallback(() => {
-    if (activeSegmentIndex > 0) {
-      seekToSegment(activeSegmentIndex - 1, true);
+    const cur = activeSegmentIndexRef.current;
+    if (cur > 0) {
+      seekToSegment(cur - 1, true);
+      if (typeof window !== "undefined") {
+        try {
+          window.focus();
+        } catch {}
+      }
     }
-  }, [activeSegmentIndex, seekToSegment]);
+  }, [seekToSegment]);
 
   const handleNextSegment = useCallback(() => {
-    if (activeSegmentIndex < activeLesson.segments.length - 1) {
-      seekToSegment(activeSegmentIndex + 1, true);
+    const cur = activeSegmentIndexRef.current;
+    if (cur < activeLesson.segments.length - 1) {
+      seekToSegment(cur + 1, true);
+      if (typeof window !== "undefined") {
+        try {
+          window.focus();
+        } catch {}
+      }
     } else {
       setShowCompletedModal(true);
     }
-  }, [activeSegmentIndex, activeLesson.segments.length, seekToSegment]);
+  }, [activeLesson.segments.length, seekToSegment]);
 
   const handleSpeedChange = (speed: number) => {
     setPlaybackSpeed(speed);
@@ -917,11 +1098,9 @@ export default function CorodomoShadowingStudioPage() {
 
   const handleStopRecord = useCallback(async () => {
     soundEffects.playMicStop();
-    const sttProvider = settings.stt?.provider || "browser";
-    if (sttProvider === "browser") {
-      speechRec.stopListening();
-    }
+    speechRec.stopListening();
     setRecordingStatus("evaluating");
+    const sttProvider = settings.stt?.provider || "browser";
 
     try {
       const recording = await recorder.stop();
@@ -1001,7 +1180,7 @@ export default function CorodomoShadowingStudioPage() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (["INPUT", "TEXTAREA"].includes((e.target as HTMLElement)?.tagName)) return;
 
-      if (e.code === "Space") {
+      if (e.code === "Space" || e.key === " ") {
         e.preventDefault();
         if (activeMode === "pronounce") {
           if (recordingStatus === "recording") {
@@ -1012,7 +1191,7 @@ export default function CorodomoShadowingStudioPage() {
         } else {
           handleTogglePlayVideo();
         }
-      } else if (e.code === "Enter") {
+      } else if (e.code === "Enter" || e.key === "Enter") {
         e.preventDefault();
         if (activeMode === "pronounce") {
           if (recordingStatus === "idle") {
@@ -1020,17 +1199,37 @@ export default function CorodomoShadowingStudioPage() {
           } else if (recordingStatus === "recording") {
             handleStopRecord();
           }
+        } else {
+          // In Shadowing mode: Enter key advances to the next segment
+          handleNextSegment();
         }
-      } else if (e.code === "KeyR" && score) {
+      } else if (e.code === "KeyR" || e.key === "r" || e.key === "R") {
         e.preventDefault();
         handlePlayNative();
-      } else if (e.code === "ArrowLeft") {
+      } else if (
+        e.code === "ArrowLeft" ||
+        e.key === "ArrowLeft" ||
+        e.code === "BracketLeft"
+      ) {
         e.preventDefault();
         handlePrevSegment();
-      } else if (e.code === "KeyM" && activeMode === "shadowing") {
+      } else if (
+        e.code === "ArrowRight" ||
+        e.key === "ArrowRight" ||
+        e.code === "BracketRight"
+      ) {
+        e.preventDefault();
+        handleNextSegment();
+      } else if (
+        (e.code === "KeyM" || e.key === "m" || e.key === "M") &&
+        activeMode === "shadowing"
+      ) {
         e.preventDefault();
         handleToggleShadowingRecord();
-      } else if (e.code === "KeyL" && activeMode === "shadowing") {
+      } else if (
+        (e.code === "KeyL" || e.key === "l" || e.key === "L") &&
+        activeMode === "shadowing"
+      ) {
         e.preventDefault();
         cyclePlayMode();
       }
@@ -1055,7 +1254,7 @@ export default function CorodomoShadowingStudioPage() {
   ]);
 
   // ─── Word Lookup Handler ─────────────────────────────────────────────
-  const handleWordClick = (word: string, e?: React.MouseEvent<HTMLElement>) => {
+  const handleWordClick = async (word: string, e?: React.MouseEvent<HTMLElement>) => {
     // Automatically pause video so the pronunciation can be clearly heard without overlap
     pauseVideo();
     if (autoPauseTimerRef.current) {
@@ -1066,35 +1265,68 @@ export default function CorodomoShadowingStudioPage() {
     const clean = word.toLowerCase().replace(/[^\w']/g, "");
     if (!clean) return;
 
-    const lexiconMatch = lookupLexiconWord(clean);
-    let popupData: any;
+    const clickToken = Date.now();
 
-    if (lexiconMatch) {
-      popupData = {
-        word: lexiconMatch.word,
-        ipa: lexiconMatch.ipaUS || lexiconMatch.ipaUK || "",
-        meaning: lexiconMatch.meaningVi,
-        partOfSpeech: lexiconMatch.partOfSpeech,
-        contextSentence: currentSegment.text,
-        cefrLevel: lexiconMatch.cefrLevel,
-      };
-    } else {
-      popupData = {
-        word: clean,
-        ipa: "",
-        meaning: "Từ vựng trong câu thoại video",
-        partOfSpeech: "word",
-        contextSentence: currentSegment.text,
-        cefrLevel: "B1",
-      };
-    }
-
-    setPopupWord(popupData);
     if (e?.currentTarget) {
       setPopupAnchor(e.currentTarget);
     } else {
       setPopupAnchor(document.body);
     }
+
+    // 1. Check synchronous Oxford 5000 Lexicon (0ms instant match)
+    const lexiconMatch = lookupLexiconWord(clean);
+
+    if (lexiconMatch) {
+      const derivedIpa = getWordIpa(clean);
+      const popupData: VocabWord = {
+        word: lexiconMatch.word,
+        ipa: lexiconMatch.ipaUS || lexiconMatch.ipaUK || (derivedIpa ? `/${derivedIpa}/` : ""),
+        meaning: formatConciseMeaning(lexiconMatch.meaningVi),
+        partOfSpeech: formatPartOfSpeech(lexiconMatch.partOfSpeech),
+        contextSentence: currentSegment.text,
+        cefrLevel: lexiconMatch.cefrLevel,
+        isLoading: false,
+        playToken: clickToken,
+      };
+      setPopupWord(popupData);
+      return;
+    }
+
+    // 2. Not in Oxford 5000: derive IPA instantly and display popup with micro-shimmer
+    const initialIpa = getWordIpa(clean);
+    const initialPopupData: VocabWord = {
+      word: clean,
+      ipa: initialIpa ? `/${initialIpa}/` : `/${clean}/`,
+      meaning: "",
+      partOfSpeech: "Từ vựng",
+      contextSentence: currentSegment.text,
+      cefrLevel: undefined,
+      isLoading: true,
+      playToken: clickToken,
+    };
+    setPopupWord(initialPopupData);
+
+    // 3. Asynchronously fetch from the 103k offline dictionary (~2-5ms)
+    const dictResult = await fetchDictionaryDefinition(clean);
+
+    setPopupWord((prev) => {
+      if (!prev || prev.word !== clean) return prev;
+      if (dictResult && dictResult.found) {
+        return {
+          ...prev,
+          ipa: dictResult.ipa || prev.ipa,
+          meaning: dictResult.meaningVi,
+          partOfSpeech: dictResult.partOfSpeech || "Từ vựng",
+          isLoading: false,
+        };
+      }
+      return {
+        ...prev,
+        meaning: `Từ tiếng Anh: ${clean}`,
+        partOfSpeech: "Từ vựng",
+        isLoading: false,
+      };
+    });
   };
 
   const handleSaveWordToDeck = (word: any) => {
@@ -1156,16 +1388,18 @@ export default function CorodomoShadowingStudioPage() {
         playlistId: `custom_pl_${videoId}`,
         thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
         duration: "10:00",
-        segments: data.segments.map((s: any, idx: number) => ({
-          segment_id: s.segment_id || `seg_${String(idx + 1).padStart(3, "0")}`,
-          text: s.text,
-          start_time: s.start_time,
-          end_time: s.end_time,
-          translationVi: s.translationVi || "",
-          thoughtGroups: s.text,
-          ipa: s.ipa || "",
-          wordsWithIpa: s.wordsWithIpa,
-        })),
+        segments: mergeFragmentedSegments(
+          data.segments.map((s: any, idx: number) => ({
+            segment_id: s.segment_id || `seg_${String(idx + 1).padStart(3, "0")}`,
+            text: s.text,
+            start_time: s.start_time,
+            end_time: s.end_time,
+            translationVi: s.translationVi || "",
+            thoughtGroups: s.thoughtGroups || s.text,
+            ipa: s.ipa || "",
+            wordsWithIpa: s.wordsWithIpa,
+          }))
+        ),
       };
 
       setActiveLesson(loadedLesson);
@@ -1198,7 +1432,8 @@ export default function CorodomoShadowingStudioPage() {
   };
 
   const handleSelectLesson = (lesson: CorodomoVideoLesson, startIdx = 0) => {
-    setActiveLesson(lesson);
+    const healedSegments = mergeFragmentedSegments(lesson.segments || []);
+    setActiveLesson({ ...lesson, segments: healedSegments });
     setActiveSegmentIndex(startIdx);
     setScore(null);
     setUserAudioUrl(null);
@@ -1314,7 +1549,15 @@ export default function CorodomoShadowingStudioPage() {
           {playMode === "pause_after_sentence" && (justPausedSegRef.current === activeSegmentIndex || isAutoPaused) && !isPlayingVideo && (
             <div className="mt-1 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-semibold animate-in fade-in-0 zoom-in-95 shadow-xs">
               <PauseCircle className="size-3.5 animate-pulse shrink-0" />
-              <span>Đã dừng cuối câu • Bấm Nói (phím M) để luyện theo, hoặc bấm Play / Space để sang câu sau</span>
+              <span>Đã dừng cuối câu • Bấm phím [→] hoặc [Enter] để sang câu sau • Bấm [Space] để nghe lại</span>
+            </div>
+          )}
+
+          {/* Loop 1 Sentence Paused Status Banner */}
+          {playMode === "loop_sentence" && !isPlayingVideo && (
+            <div className="mt-1 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-indigo-600 dark:text-indigo-400 text-xs font-semibold animate-in fade-in-0 zoom-in-95 shadow-xs">
+              <Repeat1 className="size-3.5 animate-pulse shrink-0" />
+              <span>Đang tạm dừng • Bấm phím [→] hoặc [Enter] để sang câu sau • Bấm [Space] để tiếp tục lặp</span>
             </div>
           )}
         </div>
@@ -1585,7 +1828,7 @@ export default function CorodomoShadowingStudioPage() {
                   ? "bg-amber-500 text-white shadow-xs font-extrabold ring-1 ring-amber-400/40"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
               )}
-              title="Chế độ: Dừng sau mỗi câu để bạn nói theo (Bấm Space hoặc Play để sang câu tiếp)"
+              title="Chế độ: Dừng sau mỗi câu để bạn nói theo (Bấm Space để nghe lại, Enter hoặc phím → để sang câu tiếp)"
             >
               <PauseCircle className="size-3.5 shrink-0" />
               <span className="text-[11px] whitespace-nowrap">Dừng sau câu</span>
@@ -1599,7 +1842,7 @@ export default function CorodomoShadowingStudioPage() {
                   ? "bg-indigo-600 text-white shadow-xs font-extrabold ring-1 ring-indigo-400/40"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
               )}
-              title="Chế độ: Lặp lại liên tục 1 câu hiện tại để luyện ngữ điệu sâu"
+              title="Chế độ: Lặp lại liên tục 1 câu hiện tại (Bấm [→] hoặc Enter để sang câu tiếp theo, Space để tạm dừng)"
             >
               <Repeat1 className="size-3.5 shrink-0" />
               <span className="text-[11px] whitespace-nowrap">Lặp 1 câu</span>
@@ -2372,232 +2615,251 @@ export default function CorodomoShadowingStudioPage() {
           VIEW 1: SHADOWING HUB (MÀN CHÍNH - LỊCH SỬ & DÁN LINK YOUTUBE)
       ══════════════════════════════════════════════════════════════════════ */}
       {currentView === "hub" && (
-        <div className="w-full max-w-6xl mx-auto p-4 sm:p-6 lg:p-8 space-y-8 pb-28">
-          {/* Header Bar */}
-          <div className="flex items-center justify-between gap-3 border-b border-border/60 pb-4 shrink-0">
-            <div className="flex items-center gap-2.5">
+        <div className="w-full px-2 sm:px-4 lg:px-6 py-3 sm:py-4 space-y-4 pb-24 animate-in fade-in-0 duration-200">
+          {/* ── SINGLE SLEEK TOOLBAR (Gộp tất cả trên 1 hàng) ── */}
+          <div className="flex flex-wrap items-center justify-between gap-2.5 bg-card/70 backdrop-blur-md border border-border/70 rounded-2xl p-2 sm:p-2.5 shadow-xs">
+            {/* Left: Back + Hub Title + Count Badge + Category Filter Tabs */}
+            <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap min-w-0">
               <Link href="/">
-                <Button variant="ghost" size="sm" className="size-8 p-0 rounded-xl" title="Quay lại Trang chủ">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 rounded-xl shrink-0 text-muted-foreground hover:text-foreground"
+                  title="Quay lại Trang chủ"
+                >
                   <ArrowLeft className="size-4" />
                 </Button>
               </Link>
-              <div>
-                <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground flex items-center gap-2">
-                  <Film className="size-6 text-primary" />
-                  <span>Shadowing Hub</span>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Film className="size-4.5 text-primary" />
+                <h1 className="text-sm sm:text-base font-extrabold tracking-tight text-foreground">
+                  Shadowing Hub
                 </h1>
-              </div>
-            </div>
-
-            {/* Quick Resume Button if active video available */}
-            {activeLesson && (
-              <Button
-                onClick={() => setCurrentView("studio")}
-                className="h-9 px-4 rounded-xl text-xs sm:text-sm font-bold bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5 shadow-sm shrink-0"
-              >
-                <Play className="size-3.5 fill-current" />
-                <span>Tiếp tục bài đang học</span>
-              </Button>
-            )}
-          </div>
-
-          {/* ── YOUTUBE LINK EXTRACTOR (MINIMALIST SEARCH BAR) ── */}
-          <div className="shrink-0 w-full p-3 sm:p-3.5 rounded-2xl bg-card border border-border/70 shadow-xs">
-            <div className="flex flex-col sm:flex-row gap-2.5 items-stretch">
-              <div className="relative flex-1 min-h-[44px]">
-                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-red-500 flex items-center pointer-events-none">
-                  <YouTubeIcon className="size-5" />
-                </div>
-
-                <Input
-                  ref={youtubeInputRef}
-                  value={customUrlInput}
-                  onChange={(e) => setCustomUrlInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleLoadCustomYouTubeUrl()}
-                  placeholder="Dán link YouTube (https://www.youtube.com/watch?v=... hoặc youtu.be/...) để học ngay"
-                  className="h-11 pl-10 pr-20 text-xs sm:text-sm font-medium bg-background rounded-xl border border-border/80 focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20 text-foreground placeholder:text-muted-foreground/60"
-                />
-
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                  {customUrlInput ? (
-                    <button
-                      onClick={() => setCustomUrlInput("")}
-                      className="size-7 rounded-lg hover:bg-muted text-muted-foreground flex items-center justify-center transition-colors"
-                      title="Xóa nội dung"
-                    >
-                      <X className="size-3.5" />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handlePasteClipboard(false)}
-                      className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 transition-all flex items-center gap-1"
-                      title="Dán nhanh từ bộ nhớ tạm"
-                    >
-                      <Copy className="size-3" />
-                      <span>Dán</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <Button
-                onClick={() => handleLoadCustomYouTubeUrl()}
-                disabled={isLoadingCustomUrl || !customUrlInput.trim()}
-                className="h-11 px-5 rounded-xl font-bold text-xs sm:text-sm bg-primary hover:bg-primary/90 text-primary-foreground shrink-0 gap-1.5 shadow-sm transition-all"
-              >
-                {isLoadingCustomUrl ? (
-                  <>
-                    <Loader2 className="size-3.5 animate-spin" />
-                    <span>Đang tải phụ đề...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="size-3.5" />
-                    <span>Trích xuất & Học ngay</span>
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-
-
-          {/* ── KHO BÀI HỌC VIDEO (CRUD LIBRARY) ── */}
-          <div className="shrink-0 space-y-4 pt-2">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Library className="size-4 text-primary" />
-                <h3 className="text-base font-extrabold text-foreground">Kho Video Bài Học</h3>
-                <Badge variant="secondary" className="text-xs font-mono h-5">
+                <Badge variant="secondary" className="text-[11px] font-mono h-5 px-1.5 font-bold">
                   {filteredLibrary.length}
                 </Badge>
               </div>
 
-              <div className="flex items-center gap-2 flex-wrap">
-                {/* Add Video Button */}
-                <Button
-                  size="sm"
-                  onClick={() => setShowAddVideoModal(true)}
-                  className="h-8 px-3 text-xs font-bold gap-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm shrink-0"
-                >
-                  <PlusCircle className="size-3.5" />
-                  <span>Thêm video YouTube</span>
-                </Button>
-
-                {/* Search bar */}
-                <div className="relative w-full sm:w-56">
-                  <Search className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={librarySearch}
-                    onChange={(e) => setLibrarySearch(e.target.value)}
-                    placeholder="Tìm bài học, kênh..."
-                    className="h-8 pl-8 pr-7 text-xs rounded-xl bg-card border-border/80"
-                  />
-                  {librarySearch && (
-                    <button
-                      onClick={() => setLibrarySearch("")}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      <X className="size-3" />
-                    </button>
-                  )}
-                </div>
-
+              {/* Category Filter Tabs */}
+              <div className="hidden sm:flex items-center gap-1 bg-muted/60 p-0.5 rounded-xl border border-border/50 shrink-0">
+                {[
+                  { id: "all", label: "Tất cả" },
+                  { id: "A1-A2", label: "Sơ cấp (A1-A2)" },
+                  { id: "B1-B2", label: "Trung cấp (B1-B2)" },
+                  { id: "custom", label: "Video của tôi" },
+                ].map((cat) => (
+                  <button
+                    key={cat.id}
+                    onClick={() => setSelectedCategory(cat.id)}
+                    className={cn(
+                      "px-2.5 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer",
+                      selectedCategory === cat.id
+                        ? "bg-background text-foreground shadow-xs font-bold"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Grid or Empty state */}
-            {filteredLibrary.length === 0 ? (
-              <div className="p-8 rounded-3xl border border-dashed border-border/80 text-center flex flex-col items-center justify-center space-y-2 bg-card/40">
-                <Library className="size-10 text-muted-foreground/40" />
-                <p className="font-bold text-sm text-foreground">Không tìm thấy bài học nào phù hợp</p>
-                <p className="text-xs text-muted-foreground max-w-sm leading-relaxed">
-                  {librarySearch
-                    ? "Hãy thử tìm kiếm với từ khóa khác."
-                    : "Kho video đang trống. Hãy dán liên kết YouTube ở trên để thêm bài học mới."}
-                </p>
+            {/* Right: Search Bar + "+ Thêm video" + "Học tiếp" */}
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              {/* Search Bar */}
+              <div className="relative w-36 sm:w-52">
+                <Search className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                <Input
+                  value={librarySearch}
+                  onChange={(e) => setLibrarySearch(e.target.value)}
+                  placeholder="Tìm bài học, kênh..."
+                  className="h-8 pl-8 pr-7 text-xs rounded-xl bg-background border-border/70 focus-visible:ring-1 focus-visible:ring-primary"
+                />
                 {librarySearch && (
-                  <Button
-                    variant="outline"
-                    size="sm"
+                  <button
                     onClick={() => setLibrarySearch("")}
-                    className="h-8 text-xs rounded-xl mt-2"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   >
-                    Xóa tìm kiếm
-                  </Button>
+                    <X className="size-3" />
+                  </button>
                 )}
               </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredLibrary.map((item) => (
-                  <div
-                    key={item.id}
-                    onClick={() => handleSelectLesson(item)}
-                    className="p-3.5 rounded-2xl border border-border/80 bg-card hover:border-primary/50 hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between space-y-3"
-                  >
-                    {/* Thumbnail */}
-                    <div className="aspect-video rounded-xl overflow-hidden bg-black relative shrink-0">
-                      <img
-                        src={item.thumbnail}
-                        alt={item.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                      <Badge className="absolute bottom-1.5 right-1.5 text-[9px] font-mono px-1.5 py-0 bg-black/80 text-white">
-                        {item.duration}
-                      </Badge>
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <div className="size-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg">
-                          <Play className="size-4 fill-current ml-0.5" />
-                        </div>
+
+              {/* Add Video Button (Opens Modal) */}
+              <Button
+                size="sm"
+                onClick={() => setShowAddVideoModal(true)}
+                className="h-8 px-3 text-xs font-bold gap-1.5 rounded-xl bg-primary/15 text-primary hover:bg-primary/25 border border-primary/20 shadow-xs shrink-0"
+              >
+                <PlusCircle className="size-3.5" />
+                <span>Thêm video</span>
+              </Button>
+
+              {/* Continue Last Active Lesson Button */}
+              {activeLesson && (
+                <Button
+                  size="sm"
+                  onClick={() => setCurrentView("studio")}
+                  className="h-8 px-3 text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5 rounded-xl shadow-xs shrink-0"
+                  title={`Tiếp tục: ${activeLesson.title}`}
+                >
+                  <Play className="size-3 fill-current" />
+                  <span>Học tiếp</span>
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Category Filter on Mobile */}
+          <div className="flex sm:hidden items-center gap-1 overflow-x-auto pb-1 -mx-1 px-1">
+            {[
+              { id: "all", label: "Tất cả" },
+              { id: "A1-A2", label: "Sơ cấp" },
+              { id: "B1-B2", label: "Trung cấp" },
+              { id: "custom", label: "Của tôi" },
+            ].map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedCategory(cat.id)}
+                className={cn(
+                  "px-2.5 py-1 text-xs font-semibold rounded-lg shrink-0 transition-all border",
+                  selectedCategory === cat.id
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-muted/40 text-muted-foreground border-border/50"
+                )}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+
+          {/* ── ADAPTIVE VIDEO GRID (4-5-6 CỘT HIỆN ĐẠI & CLEAN) ── */}
+          {filteredLibrary.length === 0 ? (
+            <div className="p-10 rounded-3xl border border-dashed border-border/80 text-center flex flex-col items-center justify-center space-y-2 bg-card/30">
+              <Library className="size-10 text-muted-foreground/40" />
+              <p className="font-bold text-sm text-foreground">Không tìm thấy bài học nào phù hợp</p>
+              <p className="text-xs text-muted-foreground max-w-sm leading-relaxed">
+                {librarySearch || selectedCategory !== "all"
+                  ? "Hãy thử thay đổi từ khóa hoặc bộ lọc danh mục."
+                  : "Kho video đang trống. Hãy bấm 'Thêm video' để nạp bài học mới từ YouTube."}
+              </p>
+              {(librarySearch || selectedCategory !== "all") && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setLibrarySearch("");
+                    setSelectedCategory("all");
+                  }}
+                  className="h-8 text-xs rounded-xl mt-2"
+                >
+                  Xóa bộ lọc
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3.5 sm:gap-4">
+              {filteredLibrary.map((item) => (
+                <div
+                  key={item.id}
+                  onClick={() => handleSelectLesson(item)}
+                  className="group relative flex flex-col rounded-2xl border border-border/70 bg-card hover:border-primary/50 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 overflow-hidden cursor-pointer hover:-translate-y-0.5 select-none"
+                >
+                  {/* Thumbnail 16:9 */}
+                  <div className="relative aspect-video w-full overflow-hidden bg-black/50 shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={item.thumbnail}
+                      alt={item.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
+                      loading="lazy"
+                    />
+
+                    {/* Top Left: CEFR Level Badge */}
+                    {item.cefrLevel && (
+                      <div className="absolute top-2 left-2 z-10">
+                        <span
+                          className={cn(
+                            "px-1.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider shadow-sm backdrop-blur-md",
+                            item.cefrLevel === "A1"
+                              ? "bg-emerald-600/90 text-white"
+                              : item.cefrLevel === "A2"
+                              ? "bg-teal-600/90 text-white"
+                              : item.cefrLevel === "B1"
+                              ? "bg-amber-600/90 text-white"
+                              : item.cefrLevel === "B2"
+                              ? "bg-orange-600/90 text-white"
+                              : "bg-primary/90 text-white"
+                          )}
+                        >
+                          {item.cefrLevel}
+                        </span>
                       </div>
-                    </div>
+                    )}
 
-                    {/* Info */}
-                    <div className="space-y-1 flex-1 min-w-0">
-                      <h4 className="font-extrabold text-xs sm:text-sm text-foreground line-clamp-2 leading-snug group-hover:text-primary transition-colors">
-                        {item.title}
-                      </h4>
-                      <p className="text-[11px] text-muted-foreground truncate">{item.channel}</p>
-                      <p className="text-[11px] text-primary font-medium">
-                        {item.segments.length} câu luyện tập
-                      </p>
-                    </div>
-
-                    {/* Action buttons footer (Edit & Delete & Play) */}
-                    <div className="flex items-center justify-between border-t border-border/40 pt-2 shrink-0">
-                      <Button
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSelectLesson(item);
-                        }}
-                        className="h-7 px-2.5 rounded-lg text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground gap-1"
+                    {/* Top Right: Hover Glassmorphism Actions (Edit & Delete) */}
+                    <div
+                      className="absolute top-2 right-2 z-20 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/70 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-lg"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        onClick={(e) => handleOpenEditModal(item, e)}
+                        className="size-6 rounded-lg text-white/80 hover:text-white hover:bg-white/20 flex items-center justify-center transition-colors"
+                        title="Chỉnh sửa thông tin"
                       >
-                        <Play className="size-3 fill-current" />
-                        <span>Học</span>
-                      </Button>
+                        <Pencil className="size-3" />
+                      </button>
+                      <button
+                        onClick={(e) => handleDeleteFromLibrary(item.id, e)}
+                        className="size-6 rounded-lg text-white/80 hover:text-rose-400 hover:bg-rose-500/20 flex items-center justify-center transition-colors"
+                        title="Xóa khỏi thư viện"
+                      >
+                        <Trash2 className="size-3" />
+                      </button>
+                    </div>
 
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={(e) => handleOpenEditModal(item, e)}
-                          className="size-7 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 flex items-center justify-center transition-colors"
-                          title="Sửa thông tin video"
-                        >
-                          <Pencil className="size-3.5" />
-                        </button>
-                        <button
-                          onClick={(e) => handleDeleteFromLibrary(item.id, e)}
-                          className="size-7 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 flex items-center justify-center transition-colors"
-                          title="Xóa khỏi thư viện"
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
+                    {/* Bottom Right: Duration Badge */}
+                    <div className="absolute bottom-2 right-2 z-10 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold bg-black/80 backdrop-blur-sm text-white/95 shadow-sm">
+                      {item.duration || "00:00"}
+                    </div>
+
+                    {/* Bottom Left: Sentence Count */}
+                    <div className="absolute bottom-2 left-2 z-10 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-black/60 backdrop-blur-sm text-white/90">
+                      {item.segments?.length || 0} câu
+                    </div>
+
+                    {/* Center Play Overlay on Hover */}
+                    <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                      <div className="size-11 rounded-full bg-primary/95 text-primary-foreground flex items-center justify-center shadow-xl shadow-primary/30 scale-90 group-hover:scale-100 transition-transform duration-200">
+                        <Play className="size-4.5 fill-current ml-0.5" />
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+
+                  {/* Card Content */}
+                  <div className="p-3 flex flex-col justify-between flex-1 gap-1.5">
+                    <h4
+                      className="font-bold text-xs sm:text-[13px] text-foreground line-clamp-2 leading-snug group-hover:text-primary transition-colors"
+                      title={item.title}
+                    >
+                      {item.title}
+                    </h4>
+
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 mt-auto">
+                      <span className="truncate max-w-[150px] font-medium" title={item.channel}>
+                        {item.channel}
+                      </span>
+                      <span className="text-[10px] text-primary font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 shrink-0">
+                        <span>Luyện ngay</span>
+                        <ChevronRight className="size-3" />
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* ── EDIT LESSON MODAL (UPDATE) ── */}
           {editingLesson && (

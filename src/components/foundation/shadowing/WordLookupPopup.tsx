@@ -8,13 +8,15 @@ import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 import { sanitizeTextForTTS } from "@/lib/tts/browser";
 import { cn } from "@/lib/utils";
 
-interface VocabWord {
+export interface VocabWord {
   word: string;
   ipa?: string;
   meaning?: string;
   partOfSpeech?: string;
   contextSentence?: string;
   cefrLevel?: string;
+  isLoading?: boolean;
+  playToken?: number;
 }
 
 interface WordLookupPopupProps {
@@ -23,6 +25,8 @@ interface WordLookupPopupProps {
   onClose: () => void;
   onSaveToDeck: (word: VocabWord) => void;
 }
+
+const SPEED_STEPS = [1.0, 1.25, 0.6, 0.8] as const;
 
 export function WordLookupPopup({
   word,
@@ -36,6 +40,18 @@ export function WordLookupPopup({
   const [placement, setPlacement] = useState<"top" | "bottom" | "center">("bottom");
   const [arrowLeft, setArrowLeft] = useState<number>(150);
   const [saved, setSaved] = useState(false);
+
+  // Speed rate state (0.6x -> 1.25x) with localStorage persistence
+  const [speechRate, setSpeechRate] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      const savedRate = localStorage.getItem("corodomo_popup_tts_speed");
+      if (savedRate) {
+        const parsed = parseFloat(savedRate);
+        if (!isNaN(parsed) && [0.6, 0.8, 1.0, 1.25].includes(parsed)) return parsed;
+      }
+    }
+    return 1.0;
+  });
 
   // Calculate and update position based on anchor element and viewport
   const updatePosition = useCallback(() => {
@@ -116,13 +132,30 @@ export function WordLookupPopup({
     };
   }, [word, anchorEl, updatePosition]);
 
-  // Instant pronunciation when popup opens or word changes
+  // Instant pronunciation when popup opens, word changes, or playToken triggers (click-to-re-read)
   useEffect(() => {
     if (word?.word) {
       setSaved(false);
-      tts.speak(sanitizeTextForTTS(word.word));
+      tts.stop();
+      tts.speak(sanitizeTextForTTS(word.word), { rate: speechRate });
     }
-  }, [word]);
+  }, [word?.word, word?.playToken, speechRate]);
+
+  // Cycle speed button handler: 1.0x -> 1.25x -> 0.6x -> 0.8x -> 1.0x
+  const handleCycleSpeed = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const currentIndex = SPEED_STEPS.indexOf(speechRate as any);
+    const nextIndex = (currentIndex + 1) % SPEED_STEPS.length;
+    const nextRate = SPEED_STEPS[nextIndex];
+    setSpeechRate(nextRate);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("corodomo_popup_tts_speed", String(nextRate));
+    }
+    if (word?.word) {
+      tts.stop();
+      tts.speak(sanitizeTextForTTS(word.word), { rate: nextRate });
+    }
+  };
 
   // Close on outside click or Escape key
   useEffect(() => {
@@ -159,7 +192,8 @@ export function WordLookupPopup({
 
   const handlePlay = (e?: React.MouseEvent) => {
     e?.stopPropagation();
-    tts.speak(sanitizeTextForTTS(word.word));
+    tts.stop();
+    tts.speak(sanitizeTextForTTS(word.word), { rate: speechRate });
   };
 
   // Helper for highlighting the target word in the example sentence
@@ -219,7 +253,7 @@ export function WordLookupPopup({
       <div className="relative rounded-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-border/50 bg-muted/40 dark:bg-muted/20">
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0">
             {/* Quick Replay Audio Button with Speaking Pulse */}
             <button
               onClick={handlePlay}
@@ -234,7 +268,20 @@ export function WordLookupPopup({
               <Volume2 className="size-3.5" />
             </button>
 
-            <span className="font-extrabold text-base text-foreground font-mono tracking-tight truncate">
+            {/* Cycle Speed Button */}
+            <button
+              onClick={handleCycleSpeed}
+              className="h-7 px-1.5 rounded-lg text-[11px] font-mono font-bold bg-muted/70 hover:bg-primary/15 hover:text-primary transition-all border border-border/70 shrink-0 cursor-pointer active:scale-95"
+              title="Đổi tốc độ đọc: 1.0x → 1.25x → 0.6x → 0.8x"
+            >
+              {speechRate}x
+            </button>
+
+            <span
+              onClick={handlePlay}
+              className="font-extrabold text-base text-foreground font-mono tracking-tight truncate cursor-pointer hover:text-primary transition-colors select-none ml-0.5"
+              title="Bấm để nghe lại phát âm"
+            >
               {word.word}
             </span>
 
@@ -267,17 +314,24 @@ export function WordLookupPopup({
               </span>
             )}
             {word.partOfSpeech && (
-              <span className="text-[11px] text-primary bg-primary/10 px-2 py-0.5 rounded-md font-semibold capitalize">
+              <span className="text-[11px] text-primary bg-primary/10 px-2 py-0.5 rounded-md font-semibold">
                 {word.partOfSpeech}
               </span>
             )}
           </div>
 
           {/* Meaning in Vietnamese */}
-          {word.meaning && (
-            <p className="text-sm font-semibold text-foreground leading-snug">
-              {word.meaning}
-            </p>
+          {word.isLoading ? (
+            <div className="space-y-1.5 py-1">
+              <div className="h-4 w-3/4 bg-muted/80 animate-pulse rounded-md" />
+              <div className="h-3 w-1/2 bg-muted/60 animate-pulse rounded-md" />
+            </div>
+          ) : (
+            word.meaning && (
+              <p className="text-sm font-semibold text-foreground leading-snug">
+                {word.meaning}
+              </p>
+            )
           )}
 
           {/* Context Sentence */}

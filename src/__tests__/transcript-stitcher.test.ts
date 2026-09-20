@@ -86,6 +86,68 @@ describe("Smart Transcript Stitcher Engine", () => {
       expect(stitched[0].text).not.toContain("[Applause]");
     });
 
+    it("heals 1-word orphan fragments like 'middle.' into the preceding sentence", () => {
+      const fragments = [
+        {
+          text: "Yeah. Not just vocabulary list, but feelings you can actually say when life is good, messy, or somewhere in the",
+          start_time: 1.0,
+          end_time: 6.5,
+        },
+        { text: "middle.", start_time: 6.6, end_time: 7.2 },
+      ];
+
+      const stitched = stitchTranscriptSegments(fragments);
+      expect(stitched.length).toBe(1);
+      expect(stitched[0].text).toBe(
+        "Yeah. Not just vocabulary list, but feelings you can actually say when life is good, messy, or somewhere in the middle."
+      );
+      expect(stitched[0].end_time).toBe(7.2);
+    });
+
+    it("heals 2-word continuation fragments like 'and use.' into preceding sentences", () => {
+      const fragments = [
+        {
+          text: "down and put real emotions into real sentences in easy English you can copy",
+          start_time: 10.0,
+          end_time: 14.5,
+        },
+        { text: "and use.", start_time: 14.6, end_time: 15.5 },
+      ];
+
+      const stitched = stitchTranscriptSegments(fragments);
+      expect(stitched.length).toBe(1);
+      expect(stitched[0].text).toBe(
+        "down and put real emotions into real sentences in easy English you can copy and use."
+      );
+    });
+
+    it("heals lowercase continuations when preceding fragment lacks terminal punctuation", () => {
+      const fragments = [
+        {
+          text: "And try to answer in a full",
+          start_time: 2.0,
+          end_time: 3.5,
+        },
+        { text: "mini sentence, not just one word.", start_time: 3.6, end_time: 6.0 },
+      ];
+
+      const stitched = stitchTranscriptSegments(fragments);
+      expect(stitched.length).toBe(1);
+      expect(stitched[0].text).toBe("And try to answer in a full mini sentence, not just one word.");
+    });
+
+    it("preserves genuine short standalone interjections like 'Yes.' and 'No.'", () => {
+      const fragments = [
+        { text: "Do you like travelling?", start_time: 1.0, end_time: 2.5 },
+        { text: "Yes.", start_time: 3.0, end_time: 3.8 },
+        { text: "I really enjoy visiting new places.", start_time: 4.0, end_time: 6.5 },
+      ];
+
+      const stitched = stitchTranscriptSegments(fragments);
+      expect(stitched.length).toBe(3);
+      expect(stitched[1].text).toBe("Yes.");
+    });
+
     it("handles empty or invalid inputs gracefully", () => {
       expect(stitchTranscriptSegments([])).toEqual([]);
       expect(stitchTranscriptSegments(null as any)).toEqual([]);
