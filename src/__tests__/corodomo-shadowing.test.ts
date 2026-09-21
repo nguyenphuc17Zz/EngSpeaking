@@ -8,31 +8,9 @@ import { getSentenceWordsWithIpa, getWordIpa } from "@/lib/foundation/shadowing/
 
 describe("Corodomo Video Shadowing Studio", () => {
   describe("CORODOMO_VIDEO_PRESETS", () => {
-    it("has BBC Office English Episode 1 (k188_aGDklQ) as the primary flagship preset", () => {
-      const defaultPreset = CORODOMO_VIDEO_PRESETS[0];
-      expect(defaultPreset.youtubeId).toBe("k188_aGDklQ");
-      expect(defaultPreset.title).toContain("Work emails: Office English");
-      expect(defaultPreset.segments.length).toBeGreaterThanOrEqual(200);
-    });
-
-    it("has Travel and Holidays Level A1 (gFkNhGDd8Ws) in the presets", () => {
-      const travelPreset = CORODOMO_VIDEO_PRESETS.find((p) => p.youtubeId === "gFkNhGDd8Ws");
-      expect(travelPreset).toBeDefined();
-      expect(travelPreset!.cefrLevel).toBe("A1");
-      expect(travelPreset!.playlistName).toBe("Travel and Holidays");
-    });
-
-    it("has valid timestamps and bilingual content for each segment", () => {
-      for (const preset of CORODOMO_VIDEO_PRESETS) {
-        expect(preset.segments.length).toBeGreaterThan(0);
-        for (const seg of preset.segments) {
-          expect(seg.text.trim().length).toBeGreaterThan(0);
-          expect(seg.start_time).toBeGreaterThanOrEqual(0);
-          expect(seg.end_time).toBeGreaterThan(seg.start_time);
-          expect(seg.translationVi).toBeDefined();
-          expect(seg.thoughtGroups).toBeDefined();
-        }
-      }
+    it("is initialized empty by default with zero mock or fake seed data", () => {
+      expect(CORODOMO_VIDEO_PRESETS).toEqual([]);
+      expect(CORODOMO_VIDEO_PRESETS.length).toBe(0);
     });
   });
 
@@ -154,7 +132,18 @@ describe("Corodomo Video Shadowing Studio", () => {
       clearShadowingHistory();
       expect(getShadowingHistory()).toEqual([]);
 
-      const sampleLesson = CORODOMO_VIDEO_PRESETS[0];
+      const sampleLesson = {
+        id: "lesson_test_123",
+        youtubeId: "dQw4w9WgXcQ",
+        title: "Work emails: Office English",
+        channel: "BBC Learning English",
+        cefrLevel: "B1",
+        playlistName: "Office English",
+        playlistId: "pl_test",
+        thumbnail: "https://example.com/thumb.jpg",
+        duration: "05:00",
+        segments: [],
+      };
       const saved = saveToShadowingHistory(sampleLesson, 5, 88.5, 4);
 
       expect(saved.length).toBe(1);
@@ -173,7 +162,7 @@ describe("Corodomo Video Shadowing Studio", () => {
   });
 
   describe("Shadowing Video Library CRUD Service", () => {
-    it("initializes with presets and allows adding, editing, deleting, and resetting", async () => {
+    it("initializes empty with zero seed data and allows adding, editing, deleting, and resetting", async () => {
       const {
         getVideoLibrary,
         addVideoToLibrary,
@@ -182,22 +171,26 @@ describe("Corodomo Video Shadowing Studio", () => {
         resetVideoLibraryToDefaults,
       } = await import("@/lib/foundation/shadowing/shadowing-library.service");
 
-      // Reset to defaults
+      // Reset to defaults (must be 0 videos)
       const defaults = resetVideoLibraryToDefaults();
-      expect(defaults.length).toBe(CORODOMO_VIDEO_PRESETS.length);
-      expect(defaults[0].youtubeId).toBe(CORODOMO_VIDEO_PRESETS[0].youtubeId);
+      expect(defaults).toEqual([]);
+      expect(defaults.length).toBe(0);
 
       // Create: Add new custom video
       const customLesson = {
-        ...CORODOMO_VIDEO_PRESETS[0],
         id: "custom_video_xyz99",
         youtubeId: "xyz99Custom",
         title: "My Custom English Vlog",
         channel: "English Mastery",
         cefrLevel: "B2",
+        playlistName: "My Videos",
+        playlistId: "pl_custom",
+        thumbnail: "https://example.com/thumb.jpg",
+        duration: "03:00",
+        segments: [],
       };
       const afterAdd = addVideoToLibrary(customLesson);
-      expect(afterAdd.length).toBe(defaults.length + 1);
+      expect(afterAdd.length).toBe(1);
       expect(afterAdd[0].youtubeId).toBe("xyz99Custom");
       expect(afterAdd[0].isCustom).toBe(true);
 
@@ -218,11 +211,11 @@ describe("Corodomo Video Shadowing Studio", () => {
       // Delete: Remove custom video
       const afterDelete = deleteVideoFromLibrary("custom_video_xyz99");
       expect(afterDelete.find((v) => v.youtubeId === "xyz99Custom")).toBeUndefined();
-      expect(afterDelete.length).toBe(defaults.length);
+      expect(afterDelete.length).toBe(0);
 
       // Reset to defaults
       const resetAgain = resetVideoLibraryToDefaults();
-      expect(resetAgain.length).toBe(CORODOMO_VIDEO_PRESETS.length);
+      expect(resetAgain.length).toBe(0);
     });
   });
 });

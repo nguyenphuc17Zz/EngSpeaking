@@ -3,6 +3,8 @@
 
 import type { CorodomoVideoLesson } from "./corodomo-presets";
 
+import { isMockVideoItem } from "./shadowing-library.service";
+
 export interface ShadowingHistoryItem {
   id: string;
   youtubeId: string;
@@ -22,7 +24,7 @@ export interface ShadowingHistoryItem {
 const STORAGE_KEY = "engspeak_shadowing_history_v1";
 
 /**
- * Retrieve user's shadowing history from localStorage
+ * Retrieve user's shadowing history from localStorage with auto-purge of mock items
  */
 export function getShadowingHistory(): ShadowingHistoryItem[] {
   if (typeof window === "undefined") return [];
@@ -31,7 +33,22 @@ export function getShadowingHistory(): ShadowingHistoryItem[] {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+
+    let hasPurged = false;
+    const cleaned = parsed.filter((item) => {
+      if (isMockVideoItem(item)) {
+        hasPurged = true;
+        return false;
+      }
+      return true;
+    });
+
+    if (hasPurged || cleaned.length !== parsed.length) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
+    }
+
+    return cleaned;
   } catch {
     return [];
   }

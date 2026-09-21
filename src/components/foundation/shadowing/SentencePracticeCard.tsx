@@ -13,19 +13,15 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
-  Layers,
   EyeOff,
   Headphones,
   Repeat,
   Square,
-  Sparkles,
 } from "lucide-react";
 import type { LinguisticAnalysisResult } from "@/types/shadowing";
 import type { ShadowingScoreResult } from "@/lib/foundation/shadowing/pronunciation-scorer";
 import type { CorodomoSegment } from "@/lib/foundation/shadowing/corodomo-presets";
 import { WordLookupPopup, type VocabWord } from "./WordLookupPopup";
-import { useBrowserTTS } from "@/hooks/useBrowserTTS";
-import { sanitizeTextForTTS } from "@/lib/tts/browser";
 import {
   lookupLexiconWord,
   formatConciseMeaning,
@@ -89,7 +85,6 @@ export function SentencePracticeCard({
   onPrev,
   onSaveWordToDeck,
 }: SentencePracticeCardProps) {
-  const tts = useBrowserTTS();
   const [popupWord, setPopupWord] = useState<VocabWord | null>(null);
   const [popupAnchor, setPopupAnchor] = useState<HTMLElement | null>(null);
   const [isPlayingUserAudio, setIsPlayingUserAudio] = useState(false);
@@ -226,12 +221,6 @@ export function SentencePracticeCard({
   const hasScore = !!score;
 
   const overallScore = score?.overall ?? 0;
-  const scoreColor =
-    overallScore >= 85
-      ? "text-emerald-500"
-      : overallScore >= 65
-      ? "text-amber-500"
-      : "text-red-500";
   const scoreBg =
     overallScore >= 85 ? "bg-emerald-500" : overallScore >= 65 ? "bg-amber-500" : "bg-red-500";
 
@@ -254,7 +243,6 @@ export function SentencePracticeCard({
 
       // When scored, render word pronunciation status
       let wordStatusClass = "hover:bg-primary/20 hover:text-primary";
-      let statusBadge = null;
 
       if (hasScore && clean) {
         const isCorrect = score.correctWords.some((w) => w.toLowerCase() === clean);

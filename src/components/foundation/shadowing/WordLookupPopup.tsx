@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Volume2, BookmarkPlus, X, Sparkles } from "lucide-react";
+import { Volume2, BookmarkPlus, X } from "lucide-react";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 import { sanitizeTextForTTS } from "@/lib/tts/browser";
 import { cn } from "@/lib/utils";
@@ -132,14 +132,17 @@ export function WordLookupPopup({
     };
   }, [word, anchorEl, updatePosition]);
 
+  const speechRateRef = useRef(speechRate);
+  speechRateRef.current = speechRate;
+
   // Instant pronunciation when popup opens, word changes, or playToken triggers (click-to-re-read)
   useEffect(() => {
     if (word?.word) {
       setSaved(false);
       tts.stop();
-      tts.speak(sanitizeTextForTTS(word.word), { rate: speechRate });
+      tts.speak(sanitizeTextForTTS(word.word), { rate: speechRateRef.current });
     }
-  }, [word?.word, word?.playToken, speechRate]);
+  }, [word?.word, word?.playToken]);
 
   // Cycle speed button handler: 1.0x -> 1.25x -> 0.6x -> 0.8x -> 1.0x
   const handleCycleSpeed = (e: React.MouseEvent) => {
@@ -151,10 +154,7 @@ export function WordLookupPopup({
     if (typeof window !== "undefined") {
       localStorage.setItem("corodomo_popup_tts_speed", String(nextRate));
     }
-    if (word?.word) {
-      tts.stop();
-      tts.speak(sanitizeTextForTTS(word.word), { rate: nextRate });
-    }
+    // Only toggles speed, does NOT trigger audio playback
   };
 
   // Close on outside click or Escape key

@@ -52,9 +52,10 @@ function decodeHtmlEntities(text: string): string {
 
 /**
  * Parses XML transcript supporting both srv3 format (<p t="ms" d="ms">)
+ * with word-level millisecond precision (<s t="offsetMs">)
  * and classic format (<text start="s" dur="s">)
  */
-function parseTranscriptXml(xml: string): YouTubeTranscriptSegment[] {
+export function parseTranscriptXml(xml: string): YouTubeTranscriptSegment[] {
   const segments: YouTubeTranscriptSegment[] = [];
 
   // 1. Try srv3 format (<p t="ms" d="ms">...)
@@ -67,30 +68,54 @@ function parseTranscriptXml(xml: string): YouTubeTranscriptSegment[] {
     const durMs = pMatch[2] ? parseInt(pMatch[2], 10) : 3500;
     const rawContent = pMatch[3];
 
-    // Extract inside <s> tags if present, or strip tags
-    let cleanText = "";
-    const sRegex = /<s[^>]*>([^<]*)<\/s>/gi;
+    // Check if word/phrase level timestamps <s t="..."> exist
+    const sRegex = /<s(?:\s+t="(\d+)")?[^>]*>([^<]*)<\/s>/gi;
     let sMatch: RegExpExecArray | null;
+    const sSpans: Array<{ offsetMs: number; text: string }> = [];
+
     while ((sMatch = sRegex.exec(rawContent)) !== null) {
-      cleanText += sMatch[1];
-    }
-    if (!cleanText) {
-      cleanText = rawContent.replace(/<[^>]+>/g, "");
+      const offsetMs = sMatch[1] ? parseInt(sMatch[1], 10) : 0;
+      const text = decodeHtmlEntities(sMatch[2]);
+      if (text.trim() && !/^\[.*?\]$/.test(text.trim())) {
+        sSpans.push({ offsetMs, text });
+      }
     }
 
-    cleanText = decodeHtmlEntities(cleanText);
+    if (sSpans.length > 0) {
+      for (let i = 0; i < sSpans.length; i++) {
+        const curr = sSpans[i];
+        const next = sSpans[i + 1];
+        const segStartMs = startMs + curr.offsetMs;
+        // For the last word in <p>, avoid stretching across seconds of trailing silence or next speech
+        const maxTrailingWordDurMs = Math.min(
+          Math.max(100, durMs - curr.offsetMs),
+          Math.max(450, curr.text.length * 90)
+        );
+        const segEndMs = next
+          ? startMs + next.offsetMs
+          : startMs + curr.offsetMs + maxTrailingWordDurMs;
+        const startTime = Math.round((segStartMs / 1000) * 100) / 100;
+        const endTime = Math.round((segEndMs / 1000) * 100) / 100;
 
-    // Skip empty or sound effects like [Applause], [Music]
-    if (cleanText && cleanText.length > 1 && !/^\[.*?\]$/.test(cleanText)) {
-      const startTime = Math.round((startMs / 1000) * 10) / 10;
-      const endTime = Math.round(((startMs + durMs) / 1000) * 10) / 10;
-      segments.push({
-        segment_id: `seg_${String(index).padStart(3, "0")}`,
-        text: cleanText,
-        start_time: startTime,
-        end_time: endTime,
-      });
-      index++;
+        segments.push({
+          segment_id: `seg_${String(index++).padStart(3, "0")}`,
+          text: curr.text,
+          start_time: startTime,
+          end_time: Math.max(startTime + 0.05, endTime),
+        });
+      }
+    } else {
+      let cleanText = decodeHtmlEntities(rawContent.replace(/<[^>]+>/g, ""));
+      if (cleanText && cleanText.length > 1 && !/^\[.*?\]$/.test(cleanText)) {
+        const startTime = Math.round((startMs / 1000) * 10) / 10;
+        const endTime = Math.round(((startMs + durMs) / 1000) * 10) / 10;
+        segments.push({
+          segment_id: `seg_${String(index++).padStart(3, "0")}`,
+          text: cleanText,
+          start_time: startTime,
+          end_time: endTime,
+        });
+      }
     }
   }
 
@@ -108,12 +133,11 @@ function parseTranscriptXml(xml: string): YouTubeTranscriptSegment[] {
 
     if (cleanText && cleanText.length > 1 && !/^\[.*?\]$/.test(cleanText)) {
       segments.push({
-        segment_id: `seg_${String(index).padStart(3, "0")}`,
+        segment_id: `seg_${String(index++).padStart(3, "0")}`,
         text: cleanText,
         start_time: Math.round(start * 10) / 10,
         end_time: Math.round((start + duration) * 10) / 10,
       });
-      index++;
     }
   }
 
@@ -123,35 +147,48 @@ function parseTranscriptXml(xml: string): YouTubeTranscriptSegment[] {
 interface InnertubeResult {
   title?: string;
   channel?: string;
+  publishedAt?: string;
+  duration?: string;
   segments: YouTubeTranscriptSegment[];
 }
 
 /**
  * Robust Innertube Player API fetch
+ * Also scrapes watch page in parallel to get publishDate (not available via Android Innertube)
  */
 async function fetchCaptionsViaInnertube(videoId: string): Promise<InnertubeResult | null> {
   try {
-    const res = await fetch(INNERTUBE_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent": INNERTUBE_USER_AGENT,
-      },
-      body: JSON.stringify({
-        context: {
-          client: {
-            clientName: "ANDROID",
-            clientVersion: INNERTUBE_CLIENT_VERSION,
-          },
+    const [innertubeRes, pageRes] = await Promise.allSettled([
+      fetch(INNERTUBE_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": INNERTUBE_USER_AGENT,
         },
-        videoId,
+        body: JSON.stringify({
+          context: {
+            client: {
+              clientName: "ANDROID",
+              clientVersion: INNERTUBE_CLIENT_VERSION,
+            },
+          },
+          videoId,
+        }),
       }),
-    });
+      // Fetch watch page in parallel for publishDate (microformat)
+      fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+        headers: {
+          "User-Agent": BROWSER_USER_AGENT,
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+      }),
+    ]);
 
-    if (!res.ok) return null;
-    const data = await res.json();
+    if (innertubeRes.status !== "fulfilled" || !innertubeRes.value.ok) return null;
+    const data = await innertubeRes.value.json();
     const videoTitle = data?.videoDetails?.title;
     const channelName = data?.videoDetails?.author;
+    const lengthSeconds = parseInt(data?.videoDetails?.lengthSeconds || "0", 10);
     const captionTracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
     if (!Array.isArray(captionTracks) || captionTracks.length === 0) return null;
 
@@ -181,15 +218,35 @@ async function fetchCaptionsViaInnertube(videoId: string): Promise<InnertubeResu
     const segments = parseTranscriptXml(xml);
     if (segments.length === 0) return null;
 
+    // Extract publishDate from watch page HTML (Innertube Android doesn't return microformat)
+    let publishDate: string | undefined;
+    if (pageRes.status === "fulfilled" && pageRes.value.ok) {
+      const html = await pageRes.value.text();
+      const playerMatch = html.match(/ytInitialPlayerResponse\s*=\s*({.+?});/);
+      if (playerMatch?.[1]) {
+        try {
+          const playerData = JSON.parse(playerMatch[1]);
+          publishDate =
+            playerData?.microformat?.playerMicroformatRenderer?.publishDate ||
+            playerData?.microformat?.playerMicroformatRenderer?.uploadDate;
+        } catch {
+          // ignore
+        }
+      }
+    }
+
     return {
       title: videoTitle,
       channel: channelName,
+      publishedAt: publishDate,
+      duration: formatDurationSeconds(lengthSeconds),
       segments,
     };
   } catch {
     return null;
   }
 }
+
 
 /**
  * Web Page Scraping fallback for captionTracks
@@ -240,9 +297,17 @@ async function fetchCaptionsViaWebPage(videoId: string): Promise<InnertubeResult
     const segments = parseTranscriptXml(xml);
     if (segments.length === 0) return null;
 
+    const publishDate =
+      data?.microformat?.playerMicroformatRenderer?.publishDate ||
+      data?.microformat?.playerMicroformatRenderer?.uploadDate;
+
+    const lengthSeconds = parseInt(data?.videoDetails?.lengthSeconds || "0", 10);
+
     return {
       title: videoTitle,
       channel: channelName,
+      publishedAt: publishDate,
+      duration: formatDurationSeconds(lengthSeconds),
       segments,
     };
   } catch {
@@ -328,6 +393,8 @@ export async function POST(req: NextRequest) {
         title: result.title || `YouTube Video (${videoId})`,
         channel: result.channel || "YouTube",
         thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+        publishedAt: result.publishedAt,
+        duration: result.duration,
         segments: stitchedSegments,
         totalSegments: stitchedSegments.length,
       });
@@ -352,9 +419,143 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function GET() {
-  return NextResponse.json({
-    success: true,
-    engine: "youtube-innertube-v20.10.38",
-  });
+/**
+ * Format seconds into mm:ss or hh:mm:ss string
+ */
+function formatDurationSeconds(totalSec: number): string {
+  if (!totalSec || totalSec <= 0) return "";
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const mm = String(m).padStart(2, "0");
+  const ss = String(s).padStart(2, "0");
+  if (h > 0) return `${h}:${mm}:${ss}`;
+  return `${mm}:${ss}`;
 }
+
+/**
+ * GET /api/shadowing/youtube-transcript?videoId=xxx
+ * Returns lightweight metadata (publishedAt, duration, title, channel) without downloading the full transcript.
+ * Used for background sync to backfill missing metadata on existing library items.
+ *
+ * Strategy:
+ * - publishDate: scraped from watch page HTML (ytInitialPlayerResponse.microformat) - Innertube Android doesn't return this
+ * - lengthSeconds/title/channel: from Innertube Android (fast & reliable)
+ */
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const videoId = searchParams.get("videoId");
+
+  if (!videoId || videoId.length !== 11) {
+    return NextResponse.json({
+      success: true,
+      engine: "youtube-innertube-v20.10.38",
+    });
+  }
+
+  try {
+    // Run both fetches in parallel
+    const [innertubeRes, pageRes] = await Promise.allSettled([
+      // 1. Innertube Android for duration, title, channel
+      fetch(INNERTUBE_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": INNERTUBE_USER_AGENT,
+        },
+        body: JSON.stringify({
+          context: {
+            client: {
+              clientName: "ANDROID",
+              clientVersion: INNERTUBE_CLIENT_VERSION,
+            },
+          },
+          videoId,
+        }),
+      }),
+      // 2. Web page scrape for publishDate (microformat only available via HTML)
+      fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+        headers: {
+          "User-Agent": BROWSER_USER_AGENT,
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+      }),
+    ]);
+
+    let lengthSeconds = 0;
+    let title: string | null = null;
+    let channel: string | null = null;
+    let publishDate: string | null = null;
+
+    // Extract from Innertube response
+    if (innertubeRes.status === "fulfilled" && innertubeRes.value.ok) {
+      const data = await innertubeRes.value.json();
+      lengthSeconds = parseInt(data?.videoDetails?.lengthSeconds || "0", 10);
+      title = data?.videoDetails?.title || null;
+      channel = data?.videoDetails?.author || null;
+    }
+
+    // Extract publishDate from watch page HTML
+    if (pageRes.status === "fulfilled" && pageRes.value.ok) {
+      const html = await pageRes.value.text();
+
+      // Try ytInitialPlayerResponse first (most reliable)
+      const playerMatch = html.match(/ytInitialPlayerResponse\s*=\s*({.+?});/);
+      if (playerMatch?.[1]) {
+        try {
+          const playerData = JSON.parse(playerMatch[1]);
+          publishDate =
+            playerData?.microformat?.playerMicroformatRenderer?.publishDate ||
+            playerData?.microformat?.playerMicroformatRenderer?.uploadDate ||
+            null;
+
+          // Also fill in title/channel if Innertube missed them
+          if (!title) title = playerData?.videoDetails?.title || null;
+          if (!channel) channel = playerData?.videoDetails?.author || null;
+          if (!lengthSeconds) {
+            lengthSeconds = parseInt(playerData?.videoDetails?.lengthSeconds || "0", 10);
+          }
+        } catch {
+          // ignore JSON parse error
+        }
+      }
+
+      // Fallback: try ytInitialData for publishDate as dateText
+      if (!publishDate) {
+        const initialDataMatch = html.match(/ytInitialData\s*=\s*({.+?});\s*<\/script>/);
+        if (initialDataMatch?.[1]) {
+          try {
+            const initialData = JSON.parse(initialDataMatch[1]);
+            // dateText is in "Ngày 12 tháng 3 năm 2022" or "Mar 12, 2022" format
+            const dateText =
+              initialData?.contents?.twoColumnWatchNextResults?.results?.results
+                ?.contents?.[0]?.videoPrimaryInfoRenderer?.dateText?.simpleText;
+            if (dateText) {
+              const parsed = new Date(dateText);
+              if (!isNaN(parsed.getTime())) {
+                publishDate = parsed.toISOString();
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      videoId,
+      publishedAt: publishDate,
+      duration: formatDurationSeconds(lengthSeconds),
+      title,
+      channel,
+    });
+  } catch (error: unknown) {
+    return NextResponse.json(
+      { success: false, error: "Metadata fetch error: " + (error instanceof Error ? error.message : String(error)) },
+      { status: 500 }
+    );
+  }
+}
+

@@ -26,9 +26,9 @@ export interface StitcherOptions {
 
 const DEFAULT_OPTIONS: Required<StitcherOptions> = {
   minSegmentDuration: 2.0,
-  maxSegmentDuration: 8.0,
+  maxSegmentDuration: 10.0,
   minWordCount: 4,
-  maxWordCount: 20,
+  maxWordCount: 26,
   silencePauseThreshold: 0.55,
 };
 
@@ -175,6 +175,22 @@ const DANGLING_END_WORDS = new Set([
   "very",
   "too",
   "slow",
+  // Adverbs & particles that cannot end a sentence
+  "already",
+  "just",
+  "still",
+  "also",
+  "even",
+  "always",
+  "never",
+  "really",
+  "quite",
+  "almost",
+  "nearly",
+  "as",
+  "not",
+  "only",
+  "then",
 ]);
 
 // Coordinating and subordinating conjunctions suitable for thought-group breaks
@@ -194,6 +210,16 @@ const CLAUSE_SPLIT_CONJUNCTIONS = new Set([
   "unless",
   "since",
   "whereas",
+]);
+
+// Coordinating conjunctions that connect dependent phrases
+const COORDINATING_CONJUNCTIONS = new Set([
+  "and",
+  "or",
+  "but",
+  "so",
+  "yet",
+  "nor",
 ]);
 
 /**
@@ -217,6 +243,12 @@ export function hasTerminalPunctuation(text: string): boolean {
   const words = trimmed.split(/\s+/);
   const lastWord = words[words.length - 1]?.toLowerCase().replace(/[^\w.]/g, "") || "";
   if (ABBREVIATIONS.has(lastWord)) return false;
+
+  // Single letter with dot, e.g. "a." or "j." (initials)
+  if (/^[a-z]\.$/i.test(lastWord)) return false;
+
+  // Decimal numbers like "3.14"
+  if (/^\d+\.\d+$/.test(lastWord)) return false;
 
   return true;
 }
@@ -309,9 +341,10 @@ export function mergeFragmentedSegments<
     wordsWithIpa?: WordIpaToken[];
     rawChunkCount?: number;
   }
->(segments: T[]): T[] {
+>(segments: T[], options: StitcherOptions = {}): T[] {
   if (!Array.isArray(segments) || segments.length <= 1) return segments || [];
 
+  const maxAllowedWords = options.maxWordCount || 26;
   const merged: T[] = [];
 
   for (let i = 0; i < segments.length; i++) {
@@ -326,11 +359,16 @@ export function mergeFragmentedSegments<
     const currTrimmed = curr.text.trim();
 
     const currWords = currTrimmed.split(/\s+/).filter(Boolean);
+    const prevWords = prevTrimmed.split(/\s+/).filter(Boolean);
     const prevHasTerminal = hasTerminalPunctuation(prevTrimmed);
     const currStartsNewSpeaker = isSpeakerTurn(currTrimmed);
     const currStartsCapital = startsWithCapital(currTrimmed);
     const currIsInterjection = isLegitInterjection(currTrimmed);
     const prevIsDangling = endsInDanglingSyntax(prevTrimmed);
+
+    const silenceGap = Math.max(0, curr.start_time - prev.end_time);
+    const firstWordClean = currWords[0]?.toLowerCase().replace(/[^\w]/g, "") || "";
+    const isCoordinatingConj = COORDINATING_CONJUNCTIONS.has(firstWordClean);
 
     // Rule 1: Never merge across an explicit speaker turn (>>)
     if (currStartsNewSpeaker) {
@@ -346,14 +384,48 @@ export function mergeFragmentedSegments<
     // A sentence CANNOT end on an article, preposition, conjunction, or dangling modifier!
     const isDanglingSyntaxContinuation = prevIsDangling;
 
-    // Rule 4: Prev had NO terminal punctuation, curr is short (<= 3 words) and not capitalized
+    // Rule 4a: Prev had NO terminal punctuation, curr is short (<= 3 words) and not capitalized
     const isShortContinuation = !prevHasTerminal && currWords.length <= 3 && !currStartsCapital;
 
-    const shouldMerge = isOrphanFragment || isDanglingSyntaxContinuation || isShortContinuation;
+    // Rule 4b: Prev had NO terminal punctuation, curr starts with a coordinating conjunction ("and", "or", etc.)
+    // forming an unfinished compound thought (within max word count)
+    const isConjunctionContinuation =
+      !prevHasTerminal &&
+      isCoordinatingConj &&
+      prevWords.length + currWords.length <= maxAllowedWords;
+
+    // Rule 4c: Prev had NO terminal punctuation, curr is not capitalized and there is NO acoustic pause between chunks
+    const isSeamlessContinuation =
+      !prevHasTerminal &&
+      !currStartsCapital &&
+      silenceGap < 0.35 &&
+      prevWords.length + currWords.length <= maxAllowedWords;
+
+    const shouldMerge =
+      isOrphanFragment ||
+      isDanglingSyntaxContinuation ||
+      isShortContinuation ||
+      isConjunctionContinuation ||
+      isSeamlessContinuation;
 
     if (shouldMerge) {
       // Weld curr into prev seamlessly
-      prev.text = `${prevTrimmed} ${currTrimmed}`;
+      let weldedText = `${prevTrimmed} ${currTrimmed}`;
+
+      // If prev already ended in terminal punctuation (. ? !) and curr is an interrupted trailing word (<= 2 words)
+      // right before a new speaker turn (>>), append ellipsis (...) so the learner recognizes an interrupted thought trail.
+      const nextSeg = segments[i + 1];
+      const isNextSpeakerTurn = nextSeg && isSpeakerTurn(nextSeg.text);
+      if (
+        prevHasTerminal &&
+        currWords.length <= 2 &&
+        isNextSpeakerTurn &&
+        !currTrimmed.endsWith("...")
+      ) {
+        weldedText = `${prevTrimmed} ${currTrimmed}...`;
+      }
+
+      prev.text = weldedText;
       prev.end_time = Math.max(prev.end_time, curr.end_time);
 
       if (curr.translationVi && prev.translationVi) {
@@ -388,13 +460,84 @@ export function mergeFragmentedSegments<
     }
   }
 
+  // Clamping Pass: Prevent segments from overlapping into subsequent speaker turns or sentences
+  // and preserve a natural acoustic breathing margin (0.08s) between contiguous sentences
+  for (let i = 0; i < merged.length - 1; i++) {
+    if (merged[i].end_time > merged[i + 1].start_time) {
+      const naturalEnd = Math.round((merged[i + 1].start_time - 0.08) * 100) / 100;
+      merged[i].end_time = Math.max(
+        Math.round((merged[i].start_time + 0.3) * 10) / 10,
+        naturalEnd
+      );
+    }
+  }
+
   return merged;
+}
+
+interface WordToken {
+  text: string;
+  start_time: number;
+  end_time: number;
+  silenceGapBefore: number;
+  isSpeakerTurnStart: boolean;
+  rawChunkIndex: number;
+}
+
+function extractWordTokens(
+  rawSegments: Array<{ text: string; start_time: number; end_time: number }>
+): WordToken[] {
+  const tokens: WordToken[] = [];
+
+  for (let cIdx = 0; cIdx < rawSegments.length; cIdx++) {
+    const chunk = rawSegments[cIdx];
+    const cleanedText = cleanSegmentText(chunk.text);
+    if (!cleanedText) continue;
+
+    const words = cleanedText.split(/\s+/).filter(Boolean);
+    if (words.length === 0) continue;
+
+    const chunkDuration = Math.max(0.1, chunk.end_time - chunk.start_time);
+    const prevChunk = cIdx > 0 ? rawSegments[cIdx - 1] : null;
+    const silenceGapBefore = prevChunk
+      ? Math.max(0, chunk.start_time - prevChunk.end_time)
+      : 0;
+
+    // Weight word duration by character count for higher alignment precision
+    const weights = words.map((w) => Math.max(1, w.replace(/[^\w]/g, "").length));
+    const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+
+    let accumulatedWeight = 0;
+    for (let wIdx = 0; wIdx < words.length; wIdx++) {
+      const word = words[wIdx];
+      const weight = weights[wIdx];
+
+      const wordStart =
+        chunk.start_time + (accumulatedWeight / totalWeight) * chunkDuration;
+      const wordEnd =
+        chunk.start_time + ((accumulatedWeight + weight) / totalWeight) * chunkDuration;
+
+      tokens.push({
+        text: word,
+        start_time: Math.round(wordStart * 100) / 100,
+        end_time: Math.round(wordEnd * 100) / 100,
+        silenceGapBefore: wIdx === 0 ? silenceGapBefore : 0,
+        isSpeakerTurnStart: wIdx === 0 && isSpeakerTurn(word),
+        rawChunkIndex: cIdx,
+      });
+
+      accumulatedWeight += weight;
+    }
+  }
+
+  return tokens;
 }
 
 /**
  * High-End Transcript Stitching Algorithm
- * Takes raw, fragmented YouTube subtitle chunks and merges them into grammatically
- * and acoustically complete sentences with non-overlapping, contiguous timestamps.
+ * Uses Token-Level Stream Re-alignment and Sentence Boundary Disambiguation (SBD)
+ * to re-align fragmented YouTube captions into grammatically and acoustically complete
+ * sentences with contiguous timestamps.
  */
 export function stitchTranscriptSegments(
   rawSegments: Array<{ text: string; start_time: number; end_time: number }>,
@@ -413,8 +556,11 @@ export function stitchTranscriptSegments(
 
   if (validRaw.length === 0) return [];
 
+  const tokens = extractWordTokens(validRaw);
+  if (tokens.length === 0) return [];
+
   const stitched: StitchedSentenceSegment[] = [];
-  let currentGroup: typeof validRaw = [];
+  let currentGroup: WordToken[] = [];
 
   const commitGroup = () => {
     if (currentGroup.length === 0) return;
@@ -425,11 +571,15 @@ export function stitchTranscriptSegments(
       return;
     }
 
-    const startTime = Math.round(currentGroup[0].start_time * 10) / 10;
-    const endTime = Math.round(currentGroup[currentGroup.length - 1].end_time * 10) / 10;
+    const rawStartTime = currentGroup[0].start_time;
+    const rawEndTime = currentGroup[currentGroup.length - 1].end_time;
+    const startTime = Math.round(rawStartTime * 10) / 10;
+    const endTime = Math.round(rawEndTime * 10) / 10;
+
     const wordsWithIpa = getSentenceWordsWithIpa(combinedText);
     const sentenceIpa = wordsWithIpa.map((w) => w.ipa).filter(Boolean).join(" ");
     const thoughtGroups = generateThoughtGroups(combinedText);
+    const uniqueRawChunks = new Set(currentGroup.map((t) => t.rawChunkIndex));
 
     stitched.push({
       segment_id: `seg_${String(stitched.length + 1).padStart(3, "0")}`,
@@ -439,70 +589,73 @@ export function stitchTranscriptSegments(
       wordsWithIpa,
       ipa: sentenceIpa,
       thoughtGroups,
-      rawChunkCount: currentGroup.length,
+      rawChunkCount: uniqueRawChunks.size,
     });
 
     currentGroup = [];
   };
 
-  for (let i = 0; i < validRaw.length; i++) {
-    const chunk = validRaw[i];
-    const prevChunk = currentGroup[currentGroup.length - 1];
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    const prevToken = currentGroup[currentGroup.length - 1];
 
-    if (!prevChunk) {
-      currentGroup.push(chunk);
-      continue;
+    if (prevToken) {
+      const currentDuration = prevToken.end_time - currentGroup[0].start_time;
+      const currentWords = currentGroup.length;
+
+      const tokenWordClean = token.text.toLowerCase().replace(/[^\w]/g, "");
+      const isCoordinatingConj = COORDINATING_CONJUNCTIONS.has(tokenWordClean);
+      const prevHasTerminal = hasTerminalPunctuation(prevToken.text);
+
+      // ── Boundary Decision Matrix (Before pushing token) ──
+      // Factor 1: Explicit Speaker Turn boundary (>> or --)
+      const isNewSpeaker = token.isSpeakerTurnStart;
+
+      // Factor 2: Acoustic silence pause between chunks (> silencePauseThreshold)
+      // Guard: Do NOT split on acoustic pause before coordinating conjunctions ("and", "or", etc.)
+      // when previous token has NO terminal punctuation
+      const hasAcousticPause =
+        token.silenceGapBefore >= opts.silencePauseThreshold &&
+        currentWords >= opts.minWordCount &&
+        !endsInDanglingSyntax(prevToken.text) &&
+        (prevHasTerminal || !isCoordinatingConj || currentWords >= opts.maxWordCount);
+
+      // Factor 3: Clause boundary split when buffer is excessively long
+      const isClauseBoundary =
+        (currentWords >= opts.maxWordCount || currentDuration >= opts.maxSegmentDuration) &&
+        currentWords >= 12 &&
+        CLAUSE_SPLIT_CONJUNCTIONS.has(tokenWordClean) &&
+        !endsInDanglingSyntax(prevToken.text);
+
+      if (isNewSpeaker || hasAcousticPause || isClauseBoundary) {
+        commitGroup();
+      }
     }
 
-    // Measure acoustic silence gap between chunks
-    const silenceGap = Math.max(0, chunk.start_time - prevChunk.end_time);
-    const currentText = currentGroup.map((c) => c.text).join(" ");
-    const currentWords = currentText.split(/\s+/).length;
-    const currentDuration = prevChunk.end_time - currentGroup[0].start_time;
+    currentGroup.push(token);
 
-    // ── Boundary Decision Matrix ─────────────────────────────────────────
-    // Factor 1: Speaker Turn boundary (>> or --)
-    const isNewSpeaker = isSpeakerTurn(chunk.text);
+    // ── Boundary Decision Matrix (After pushing token) ──
+    // Factor 4: Terminal punctuation (. ? !)
+    if (hasTerminalPunctuation(token.text)) {
+      const nextToken = tokens[i + 1];
 
-    // Factor 2: Strong terminal punctuation in the current buffer (. ? !)
-    const hasTerminal = hasTerminalPunctuation(prevChunk.text);
+      // If currentGroup has only 1 word and is followed by more words within the same raw chunk,
+      // let it stay with the subsequent words (e.g. "Yeah. Not just ...") to prevent micro-orphans
+      const isIntroductoryWordInSameChunk =
+        currentGroup.length === 1 &&
+        nextToken &&
+        nextToken.rawChunkIndex === token.rawChunkIndex &&
+        !nextToken.isSpeakerTurnStart;
 
-    // Factor 3: Acoustic silence pause (speaker paused for > 550ms)
-    const hasAcousticPause = silenceGap >= opts.silencePauseThreshold && currentWords >= opts.minWordCount;
-
-    // Factor 4: Next chunk starts with a capital letter AND current has adequate words/duration
-    const nextIsNewSentence =
-      startsWithCapital(chunk.text) &&
-      (currentWords >= opts.minWordCount || currentDuration >= opts.minSegmentDuration);
-
-    // Factor 5: Buffer exceeded maximum comfortable shadowing duration (> 8s or > 20 words)
-    // CRITICAL: NEVER break on buffer length if the current text ends in dangling syntax (e.g. "in the", "a", "and")
-    const isBufferTooLong =
-      (currentDuration >= opts.maxSegmentDuration || currentWords >= opts.maxWordCount) &&
-      !endsInDanglingSyntax(prevChunk.text);
-
-    // Factor 6: Forced break on clause boundary when buffer is moderately long
-    const isClauseBoundary =
-      currentWords >= 10 &&
-      CLAUSE_SPLIT_CONJUNCTIONS.has(chunk.text.split(/\s+/)[0]?.toLowerCase().replace(/[^\w]/g, ""));
-
-    if (
-      isNewSpeaker ||
-      hasTerminal ||
-      hasAcousticPause ||
-      (nextIsNewSentence && (hasTerminal || silenceGap > 0.3)) ||
-      isBufferTooLong ||
-      isClauseBoundary
-    ) {
-      commitGroup();
+      if (!isIntroductoryWordInSameChunk) {
+        commitGroup();
+      }
     }
-
-    currentGroup.push(chunk);
   }
 
   // Commit remaining buffer
   commitGroup();
 
   // Pass 4 & 5: Run the Multi-Pass Fragment & Orphan Healing Engine
-  return mergeFragmentedSegments(stitched);
+  return mergeFragmentedSegments(stitched, opts);
 }
