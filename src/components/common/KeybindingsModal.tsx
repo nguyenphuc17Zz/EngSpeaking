@@ -62,18 +62,18 @@ function formatKeyCode(code?: string): string {
 }
 
 function resolveCategoryFromPath(pathname: string): KeybindingCategory {
-  if (pathname.includes("/foundation/vocabulary")) return "vocabulary";
-  if (pathname.includes("/foundation/sentence-builder")) return "sentence_builder";
+  if (pathname.includes("/vocabulary")) return "vocabulary";
+  if (pathname.includes("/sentence-builder")) return "sentence_builder";
   if (
-    pathname.includes("/foundation/vn-to-en") ||
-    pathname.includes("/foundation/chunks") ||
-    pathname.includes("/foundation/survival") ||
-    pathname.includes("/foundation/latency") ||
-    pathname.includes("/foundation/retry-lab")
+    pathname.includes("/vn-to-en") ||
+    pathname.includes("/chunks") ||
+    pathname.includes("/survival") ||
+    pathname.includes("/latency") ||
+    pathname.includes("/retry-lab")
   ) {
     return "foundation_practice";
   }
-  if (pathname.includes("/foundation/shadowing")) return "shadowing";
+  if (pathname.includes("/shadowing")) return "shadowing";
   if (
     pathname.includes("/conversation") ||
     pathname.includes("/advanced") ||

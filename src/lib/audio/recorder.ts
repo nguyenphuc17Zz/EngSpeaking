@@ -73,20 +73,37 @@ export function createAudioRecorder(stream: MediaStream): AudioRecorder {
       const durationMs = getDurationMs();
       state = "inactive";
       const blob = await new Promise<Blob>((resolve, reject) => {
-        r.onstop = () => {
+        let settled = false;
+        const finish = (b: Blob) => {
+          if (settled) return;
+          settled = true;
           stopStream(stream);
-          const b = new Blob(chunks, { type: mimeType });
           resolve(b);
         };
-        r.onerror = (ev: unknown) => {
+        const fail = (err: unknown) => {
+          if (settled) return;
+          settled = true;
           stopStream(stream);
-          reject(ev);
+          reject(err);
+        };
+
+        const timeout = setTimeout(() => {
+          finish(new Blob(chunks, { type: mimeType }));
+        }, 1500);
+
+        r.onstop = () => {
+          clearTimeout(timeout);
+          finish(new Blob(chunks, { type: mimeType }));
+        };
+        r.onerror = (ev: unknown) => {
+          clearTimeout(timeout);
+          fail(ev);
         };
         try {
           r.stop();
         } catch (e) {
-          stopStream(stream);
-          reject(e);
+          clearTimeout(timeout);
+          fail(e);
         }
       });
       recorder = null;
@@ -162,6 +179,7 @@ export function stopStream(stream: MediaStream | null) {
       try {
         t.enabled = false;
         t.stop();
+        stream.removeTrack(t);
       } catch {}
     }
   } catch {}

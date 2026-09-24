@@ -318,7 +318,7 @@ export default function AdvancedModesPage() {
                 <span className="truncate">{prereq.missing.join(" · ")}</span>
               </div>
               <Link
-                href="/foundation/sentence-builder"
+                href="/sentence-builder"
                 className="text-[11px] font-semibold text-primary underline shrink-0 hover:text-foreground"
               >
                 Luyện tập ngay →

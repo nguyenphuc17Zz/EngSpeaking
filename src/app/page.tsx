@@ -25,7 +25,7 @@ export default function Home() {
     {
       title: "Sentence Builder",
       desc: "Ráp câu phản xạ 3 tầng: Khung ngữ pháp, từ vựng theo chủ đề & âm thanh chuẩn",
-      href: "/foundation/sentence-builder",
+      href: "/sentence-builder",
       icon: Layers,
       badge: "SB Core",
       color: "text-primary bg-primary/10 border-primary/20",
@@ -33,7 +33,7 @@ export default function Home() {
     {
       title: "VN → EN Speaking",
       desc: "Truy xuất trực tiếp từ ý niệm tiếng Việt sang phản xạ tiếng Anh, loại bỏ dịch nhẩm",
-      href: "/foundation/vn-to-en",
+      href: "/vn-to-en",
       icon: Target,
       badge: "Tư duy trực tiếp",
       color: "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
@@ -41,7 +41,7 @@ export default function Home() {
     {
       title: "Corodomo Shadowing",
       desc: "Nhại âm song song đa tốc độ, rèn nhịp điệu và ngữ điệu tự nhiên như người bản xứ",
-      href: "/foundation/shadowing",
+      href: "/shadowing",
       icon: Radio,
       badge: "Nhại âm nhịp điệu",
       color: "text-sky-600 dark:text-sky-400 bg-sky-500/10 border-sky-500/20",
@@ -49,7 +49,7 @@ export default function Home() {
     {
       title: "Survival Speaking",
       desc: "Phản xạ tức thì khi bí từ, câu cứu sinh thoát kẹt và giữ nhịp trò chuyện liên tục",
-      href: "/foundation/survival",
+      href: "/survival",
       icon: LifeBuoy,
       badge: "Thoát kẹt bí từ",
       color: "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20",
@@ -57,7 +57,7 @@ export default function Home() {
     {
       title: "Repair Lab & Latency",
       desc: "Sửa lỗi tức thì qua vòng lặp Retry và ép tốc độ phản xạ bật từ dưới 2 giây",
-      href: "/foundation/retry-lab",
+      href: "/retry-lab",
       icon: RotateCcw,
       badge: "Sửa lỗi & Tốc độ",
       color: "text-orange-600 dark:text-orange-400 bg-orange-500/10 border-orange-500/20",
@@ -95,7 +95,7 @@ export default function Home() {
     {
       title: "Ngân Hàng Lỗi Cá Nhân",
       desc: "Trí nhớ khẩu ngữ FSRS, đo lường xác suất nắm vững BKT và cảnh báo nguy cơ hóa đá L1",
-      href: "/foundation/error-bank",
+      href: "/error-bank",
       icon: Brain,
       badge: "FSRS • BKT",
       color: "text-violet-600 dark:text-violet-400 bg-violet-500/10 border-violet-500/20",
@@ -134,7 +134,7 @@ export default function Home() {
               <ArrowRight className="size-3.5" />
             </Button>
           </Link>
-          <Link href="/foundation/sentence-builder">
+          <Link href="/sentence-builder">
             <Button variant="outline" size="sm" className="h-9 px-3 rounded-xl font-semibold text-xs gap-1.5 border-border/80 hover:bg-secondary cursor-pointer">
               <Layers className="size-3.5 text-primary" />
               <span>Sentence Builder</span>

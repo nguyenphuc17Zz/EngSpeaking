@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Volume2, BookmarkPlus, X } from "lucide-react";
+import { Volume2, BookmarkPlus, X, Sparkles } from "lucide-react";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 import { sanitizeTextForTTS } from "@/lib/tts/browser";
 import { cn } from "@/lib/utils";
@@ -172,7 +173,24 @@ export function WordLookupPopup({
     };
 
     const escHandler = (e: KeyboardEvent) => {
-      if (e.code === "Escape") onClose();
+      if (e.code === "Escape") {
+        onClose();
+        return;
+      }
+      const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      const isInput = targetTag === "input" || targetTag === "textarea" || (e.target as HTMLElement)?.isContentEditable;
+      if (!isInput && (
+        e.code === "ArrowRight" ||
+        e.key === "ArrowRight" ||
+        e.code === "ArrowLeft" ||
+        e.key === "ArrowLeft" ||
+        e.code === "BracketRight" ||
+        e.code === "BracketLeft" ||
+        e.code === "Enter" ||
+        e.key === "Enter"
+      )) {
+        onClose();
+      }
     };
 
     document.addEventListener("mousedown", handler);
@@ -357,8 +375,23 @@ export function WordLookupPopup({
             )}
           >
             <BookmarkPlus className="size-3.5" />
-            <span>{saved ? "✓ Đã lưu vào Deck" : "Lưu vào Deck"}</span>
+            <span>{saved ? "✓ Đã lưu" : "Lưu Deck"}</span>
           </Button>
+
+          <Link
+            href={`/vocabulary/${encodeURIComponent(word.word.toLowerCase())}`}
+            className="flex-1"
+          >
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full h-8 rounded-xl text-xs font-bold gap-1 text-primary border-primary/30 hover:bg-primary/10"
+              title="Mở phòng luyện ngữ cảnh 3 bước cho từ này"
+            >
+              <Sparkles className="size-3 text-amber-500" />
+              <span>Luyện Gym ↗</span>
+            </Button>
+          </Link>
         </div>
       </div>
     </div>

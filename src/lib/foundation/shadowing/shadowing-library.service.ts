@@ -89,18 +89,30 @@ export function getVideoLibrary(): SavedVideoLesson[] {
 
     // Auto-purge any lingering mock presets or "30 minute everyday" items from v3 storage
     let hasPurged = false;
-    const cleaned = parsed.filter((item: any) => {
-      if (isMockVideoItem(item)) {
-        hasPurged = true;
-        if (item.youtubeId) {
-          deleteTranscript(item.youtubeId).catch(() => {});
+    let hasCleanedChannel = false;
+    const cleaned = parsed
+      .filter((item: any) => {
+        if (isMockVideoItem(item)) {
+          hasPurged = true;
+          if (item.youtubeId) {
+            deleteTranscript(item.youtubeId).catch(() => {});
+          }
+          return false;
         }
-        return false;
-      }
-      return true;
-    });
+        return true;
+      })
+      .map((item: any) => {
+        if (typeof item.channel === "string") {
+          const trimmed = item.channel.trim();
+          if (trimmed !== item.channel) {
+            hasCleanedChannel = true;
+            return { ...item, channel: trimmed };
+          }
+        }
+        return item;
+      });
 
-    if (hasPurged || cleaned.length !== parsed.length) {
+    if (hasPurged || hasCleanedChannel || cleaned.length !== parsed.length) {
       localStorage.setItem(LIBRARY_STORAGE_KEY, JSON.stringify(cleaned));
     }
 
@@ -128,6 +140,7 @@ export function addVideoToLibrary(lesson: CorodomoVideoLesson): SavedVideoLesson
     const segCount = lesson.segments ? lesson.segments.length : 0;
     const newLesson: SavedVideoLesson = {
       ...lesson,
+      channel: (lesson.channel || "YouTube").trim(),
       segments: [], // Kept in IndexedDB to prevent localStorage quota exhaustion
       segmentCount: segCount,
       hasTranscript: segCount > 0,
@@ -178,6 +191,7 @@ export function addVideosToLibrary(lessons: CorodomoVideoLesson[]): SavedVideoLe
 
       const newLesson: SavedVideoLesson = {
         ...lesson,
+        channel: (lesson.channel || "YouTube").trim(),
         segments: [], // Kept in IndexedDB to prevent localStorage quota exhaustion
         segmentCount: segCount,
         hasTranscript: segCount > 0,

@@ -28,13 +28,13 @@ export function DiagnosticReportCard({ report }: Props) {
   const getModuleHref = (mod: string) => {
     switch (mod) {
       case "retry_lab":
-        return "/foundation/retry-lab";
+        return "/retry-lab";
       case "latency":
-        return "/foundation/latency";
+        return "/latency";
       case "sentence_builder":
-        return "/foundation/sentence-builder";
+        return "/sentence-builder";
       case "vn_to_en":
-        return "/foundation/vn-to-en";
+        return "/vn-to-en";
       default:
         return "/";
     }

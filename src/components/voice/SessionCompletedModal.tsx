@@ -235,7 +235,7 @@ export function SessionCompletedModal({
                 Đã đồng bộ <strong className="text-foreground">{errorsDetected} điểm ngữ pháp cần nắn</strong> vào Error Bank
               </span>
             </div>
-            <Link href="/foundation/error-bank">
+            <Link href="/error-bank">
               <Button variant="ghost" size="sm" className="h-7 text-xs font-bold text-amber-600 dark:text-amber-400 p-1">
                 Luyện sửa lỗi →
               </Button>

@@ -55,3 +55,5 @@ data/*.db
 data/*.db-wal
 data/*.db-shm
 
+# IDE & agent artifacts
+.commandcode/

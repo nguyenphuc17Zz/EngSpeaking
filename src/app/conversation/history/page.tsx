@@ -1,11 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 export default function ConversationHistoryPage() {
+  const router = useRouter();
   const [worlds, setWorlds] = useState<Array<{ id: string; mode: string; scenario_blueprint: { topic: string; setting: string; character: { role: string } }; created_at: string }>>([]);
 
   useEffect(() => {
@@ -13,20 +15,17 @@ export default function ConversationHistoryPage() {
   }, []);
 
   const handleResume = async (id: string) => {
-    const res = await fetch(`/api/conversation/worlds?id=${id}`);
-    const data = await res.json();
-    if (data.world) {
-      if (typeof window !== "undefined") localStorage.setItem("conversation_world_id", id);
-      // Restore world to store
-      try {
+    if (typeof window !== "undefined") localStorage.setItem("conversation_world_id", id);
+    try {
+      const res = await fetch(`/api/conversation/worlds?id=${id}`);
+      const data = await res.json();
+      if (data.world) {
         const { useConversationStore } = await import("@/stores/conversation-store");
-        // Reconstruct worldState from blueprint? For now set via turn history
-        // Fetch via API already gives world; we set minimal
         const worldState = {
           scenario: data.world.scenario_blueprint,
-          currentObjective: data.world.scenario_blueprint.userGoal,
-          currentTopic: data.world.scenario_blueprint.topic,
-          activeCharacter: { mood: "neutral", trust: 60, patience: 70, engagement: 65, role: data.world.scenario_blueprint.character.role },
+          currentObjective: data.world.scenario_blueprint?.userGoal,
+          currentTopic: data.world.scenario_blueprint?.topic,
+          activeCharacter: { mood: "neutral", trust: 60, patience: 70, engagement: 65, role: data.world.scenario_blueprint?.character?.role },
           conversationFacts: (data.facts || []).map((f: { id: string; fact: string }) => ({ id: f.id, fact: f.fact, createdAt: new Date().toISOString() })),
           unresolvedThreads: [],
           activeEvents: [],
@@ -36,9 +35,9 @@ export default function ConversationHistoryPage() {
         };
         useConversationStore.getState().setWorld(worldState as unknown as import("@/types/conversation-world").ConversationWorldState);
         useConversationStore.getState().setTurns((data.turns || []).map((t: { id: string; role: string; text: string; timestamp: string }) => ({ id: t.id, role: t.role, text: t.text, timestamp: t.timestamp })));
-      } catch {}
-      location.href = "/conversation/session";
-    }
+      }
+    } catch {}
+    router.push(`/conversation/session/${id}`);
   };
 
   return (

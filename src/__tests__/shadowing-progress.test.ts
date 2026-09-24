@@ -6,6 +6,7 @@ import {
   getAllVideoProgress,
   clearAllVideoProgress,
   getVideoHistoryList,
+  getMostRecentVideoProgress,
   formatPlaybackTime,
 } from "@/lib/foundation/shadowing/shadowing-progress.service";
 
@@ -84,6 +85,22 @@ describe("Shadowing Playback Progress Service", () => {
 
     clearAllVideoProgress();
     expect(getVideoHistoryList()).toEqual([]);
+  });
+
+  it("retrieves the single most recent video progress item", () => {
+    saveVideoProgress("vid_older", { currentTime: 10, segmentIndex: 1 });
+    // Manually set an older timestamp
+    const map = getAllVideoProgress();
+    map["vid_older"].updatedAt = new Date(Date.now() - 10000).toISOString();
+    localStorage.setItem("engspeak_shadowing_progress_v1", JSON.stringify(map));
+
+    saveVideoProgress("vid_newer", { currentTime: 30, segmentIndex: 4 });
+
+    const mostRecent = getMostRecentVideoProgress();
+    expect(mostRecent).not.toBeNull();
+    expect(mostRecent?.youtubeId).toBe("vid_newer");
+    expect(mostRecent?.segmentIndex).toBe(4);
+    expect(mostRecent?.currentTime).toBe(30);
   });
 });
 

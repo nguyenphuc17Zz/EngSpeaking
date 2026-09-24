@@ -123,6 +123,14 @@ export function getVideoHistoryList(): VideoPlaybackProgress[] {
 }
 
 /**
+ * Get the single most recently learned video progress item
+ */
+export function getMostRecentVideoProgress(): VideoPlaybackProgress | null {
+  const list = getVideoHistoryList();
+  return list.length > 0 ? list[0] : null;
+}
+
+/**
  * Format playback time into mm:ss or hh:mm:ss format
  */
 export function formatPlaybackTime(seconds: number): string {

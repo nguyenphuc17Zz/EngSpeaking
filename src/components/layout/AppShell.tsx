@@ -90,6 +90,19 @@ export function AppShell({ children }: AppShellProps) {
     pathname === "/session" ||
     pathname.startsWith("/conversation") ||
     pathname.startsWith("/advanced") ||
+    pathname.startsWith("/sentence-builder") ||
+    pathname.startsWith("/vn-to-en") ||
+    pathname.startsWith("/retry-lab") ||
+    pathname.startsWith("/latency") ||
+    pathname.startsWith("/error-bank") ||
+    pathname.startsWith("/chunks") ||
+    pathname.startsWith("/survival") ||
+    pathname.startsWith("/vocabulary") ||
+    pathname.startsWith("/shadowing") ||
+    pathname.startsWith("/baseline") ||
+    pathname.startsWith("/history") ||
+    pathname.startsWith("/practice") ||
+    pathname.startsWith("/skills") ||
     pathname.startsWith("/foundation/");
 
   return (

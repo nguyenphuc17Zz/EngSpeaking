@@ -223,9 +223,9 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
 
   const stop = useCallback(async (): Promise<AudioRecording> => {
     clearTimer();
+    cleanupAnalyser();
     const r = recorderRef.current;
     if (!r) {
-      cleanupAnalyser();
       if (!options?.keepWarm) {
         stopStream(streamRef.current);
         streamRef.current = null;

@@ -321,7 +321,7 @@ export default function ConversationModesPage() {
         if (typeof window !== "undefined")
           localStorage.setItem("conversation_world_id", data.worldId);
         toast.success("Kịch bản sẵn sàng!", `Vào vai đối thoại: ${data.scenario.character.role}`);
-        router.push("/conversation/session");
+        router.push(data.worldId ? `/conversation/session/${data.worldId}` : "/conversation/session");
       }
     } catch {
       toast.error("Lỗi khởi tạo", "Không thể tạo kịch bản lúc này. Vui lòng thử lại.");

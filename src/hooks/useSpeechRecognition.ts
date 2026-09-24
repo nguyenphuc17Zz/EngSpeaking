@@ -31,22 +31,23 @@ export function useSpeechRecognition(lang = "en-US") {
       onstart?: unknown;
       onresult?: unknown;
       onerror?: unknown;
-      onend?: unknown;
+      onend?: (() => void) | null;
       abort?: () => void;
       stop?: () => void;
     } | null;
     if (rec) {
-      try {
-        rec.abort?.();
-      } catch {
-        try {
-          rec.stop?.();
-        } catch {}
-      }
       rec.onstart = null;
       rec.onresult = null;
       rec.onerror = null;
-      rec.onend = null;
+      rec.onend = () => {
+        setIsListening(false);
+      };
+      try {
+        rec.stop?.();
+      } catch {}
+      try {
+        rec.abort?.();
+      } catch {}
       recognitionRef.current = null;
     }
   }, []);

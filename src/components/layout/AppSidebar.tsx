@@ -12,7 +12,6 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Flame,
   Sparkles,
   Volume2,
   Video,
@@ -24,7 +23,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { EngSpeakLogo } from "@/components/ui/engspeak-logo";
 
 export interface NavItem {
@@ -60,55 +58,55 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "LUYỆN NÓI NỀN TẢNG (FOUNDATION)",
     items: [
       {
-        href: "/foundation/sentence-builder",
+        href: "/sentence-builder",
         label: "Sentence Builder",
         icon: Sparkles,
         description: "Khôi phục phản xạ tạo câu Level A → B → C",
       },
       {
-        href: "/foundation/vn-to-en",
+        href: "/vn-to-en",
         label: "VN → EN Speaking",
         icon: Target,
         description: "Truy xuất trực tiếp từ ý niệm tiếng Việt sang tiếng Anh",
       },
       {
-        href: "/foundation/retry-lab",
+        href: "/retry-lab",
         label: "Spoken Repair Lab",
         icon: RotateCcw,
         description: "Chu trình Correct → Say Again sửa lỗi từ Error Bank",
       },
       {
-        href: "/foundation/latency",
+        href: "/latency",
         label: "Response Latency",
         icon: Zap,
         description: "Rèn luyện tốc độ phản xạ & truy xuất khẩu ngữ",
       },
       {
-        href: "/foundation/error-bank",
+        href: "/error-bank",
         label: "Personal Error Bank",
         icon: Brain,
         description: "Bộ nhớ học tập dài hạn & phân tích mẫu lỗi",
       },
       {
-        href: "/foundation/chunks",
+        href: "/chunks",
         label: "Chunk Automaticity",
         icon: Layers,
         description: "Lắp ráp câu khẩu ngữ từ các khối có sẵn",
       },
       {
-        href: "/foundation/survival",
+        href: "/survival",
         label: "Survival Speaking",
         icon: ShieldAlert,
         description: "Phản xạ sinh tồn & diễn giải khi quên từ",
       },
       {
-        href: "/foundation/vocabulary",
+        href: "/vocabulary",
         label: "Spoken Vocabulary",
         icon: BookOpen,
         description: "Quy trình 2 bước: Phát âm từ & Nói câu ngữ cảnh",
       },
       {
-        href: "/foundation/shadowing",
+        href: "/shadowing",
         label: "Shadowing Studio",
         icon: Video,
         description: "Phân tích CEFR, nối âm & nhịp thở qua video",
@@ -275,29 +273,6 @@ export function AppSidebar({ collapsed, onToggleCollapse, onNavigateMobile }: Ap
           </div>
         ))}
       </nav>
-
-      {/* Learner Daily Streak Card */}
-      {!collapsed && (
-        <div className="p-3.5 mx-2 mb-3 rounded-2xl bg-card border border-border/80 paper-shadow-sm space-y-2.5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
-              <Flame className="size-4 fill-primary/20 text-primary" />
-              <span>3 ngày liên tiếp</span>
-            </div>
-            <Badge variant="outline" className="text-[10px] border-border/80 text-muted-foreground font-mono">
-              10' / ngày
-            </Badge>
-          </div>
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            10 phút khẩu ngữ mỗi ngày để đánh thức phản xạ nói tự nhiên, không cần nhẩm dịch.
-          </p>
-          <Link href="/session" onClick={onNavigateMobile} className="block">
-            <Button size="sm" variant="default" className="w-full text-xs font-semibold gap-1.5 h-8 rounded-xl btn-spring shadow-xs">
-              Luyện nói ngay
-            </Button>
-          </Link>
-        </div>
-      )}
     </aside>
   );
 }

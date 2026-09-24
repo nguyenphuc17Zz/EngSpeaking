@@ -1,9 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
   matchesUploadDateFilter,
+  matchesChannelFilter,
   sortVideosByDate,
   parseRelativeTimeToTimestamp,
-} from "@/app/foundation/shadowing/page";
+} from "@/app/(foundation)/shadowing/page";
 import type { SavedVideoLesson } from "@/lib/foundation/shadowing/shadowing-library.service";
 
 describe("Shadowing Hub Filters", () => {
@@ -252,6 +253,45 @@ describe("Shadowing Hub Filters", () => {
       // 2. Sort Oldest: 1 year ago > 3 weeks ago > 2 days ago
       const oldestFirst = sortVideosByDate([vidWeeks, vidYear, vidDays], "oldest");
       expect(oldestFirst.map((v) => v.id)).toEqual(["v_year", "v_weeks", "v_days"]);
+    });
+  });
+
+  describe("Channel Filter (matchesChannelFilter)", () => {
+    it("should match when filter is 'all' or empty", () => {
+      const lesson = createMockLesson({ channel: "Daily English Podcast" });
+      expect(matchesChannelFilter(lesson, "all")).toBe(true);
+      expect(matchesChannelFilter(lesson, "")).toBe(true);
+    });
+
+    it("should match exact channel names", () => {
+      const lesson = createMockLesson({ channel: "Daily English Podcast" });
+      expect(matchesChannelFilter(lesson, "Daily English Podcast")).toBe(true);
+    });
+
+    it("should match when item channel has trailing or leading whitespace", () => {
+      const lessonWithTrailing = createMockLesson({ channel: "Daily English Podcast  " });
+      const lessonWithLeading = createMockLesson({ channel: "  Daily English Podcast" });
+      const lessonWithNewlines = createMockLesson({ channel: "\nDaily English Podcast\r\n" });
+
+      expect(matchesChannelFilter(lessonWithTrailing, "Daily English Podcast")).toBe(true);
+      expect(matchesChannelFilter(lessonWithLeading, "Daily English Podcast")).toBe(true);
+      expect(matchesChannelFilter(lessonWithNewlines, "Daily English Podcast")).toBe(true);
+    });
+
+    it("should match case-insensitively", () => {
+      const lesson = createMockLesson({ channel: "Daily English Podcast" });
+      expect(matchesChannelFilter(lesson, "daily english podcast")).toBe(true);
+      expect(matchesChannelFilter(lesson, "DAILY ENGLISH PODCAST")).toBe(true);
+    });
+
+    it("should match when filter argument itself has whitespace", () => {
+      const lesson = createMockLesson({ channel: "Daily English Podcast" });
+      expect(matchesChannelFilter(lesson, "  Daily English Podcast  ")).toBe(true);
+    });
+
+    it("should return false for different channels", () => {
+      const lesson = createMockLesson({ channel: "BBC Learning English" });
+      expect(matchesChannelFilter(lesson, "Daily English Podcast")).toBe(false);
     });
   });
 });
