@@ -1,5 +1,4 @@
 // Extended capability helpers §7 — wraps catalog
-import { CATALOG } from "@/lib/ai/models/catalog";
 import type { AIModel } from "@/types/ai";
 
 export type ExtendedCapability = "textGeneration" | "reasoning" | "structuredOutput" | "speechToText" | "textToSpeech" | "audioInput" | "audioOutput" | "streaming" | "toolCalling" | "longContext";

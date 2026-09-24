@@ -34,7 +34,7 @@ const CONTRACTION_MAP: Record<string, string> = {
 
 export function normalizeSpokenText(text: string): string {
   if (!text) return "";
-  let cleaned = text
+  const cleaned = text
     .toLowerCase()
     .replace(/[’‘`]/g, "'")
     .replace(/[.,/#!$%^&*;:{}=\-_~()?"\\]/g, " ")

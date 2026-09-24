@@ -1,6 +1,6 @@
 // Deterministic + AI-assisted difficulty engine — isolated for Phase 5 replacement
 import type { FoundationExercise, FoundationEvaluation } from "@/types/foundation";
-import { scalarToDims, dimsToScalar, adjustScalar } from "./model";
+import { scalarToDims, adjustScalar } from "./model";
 import { generateTextWithRouting } from "@/lib/ai";
 import { DIFFICULTY_SYSTEM, buildDifficultyPrompt } from "@/lib/foundation/prompts/difficulty-controller";
 import type { DifficultyDecision } from "@/lib/foundation/engines/difficulty-engine";

@@ -78,6 +78,7 @@ export const repairChallengeSchema = z.object({
       })
     )
     .default([]),
+  source: z.enum(["ai", "bank"]).optional(),
 });
 
 export const repairEvaluationResultSchema = z.object({

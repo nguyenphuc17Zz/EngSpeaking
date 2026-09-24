@@ -319,7 +319,6 @@ export function computeFastPassLatencyMatch(
   // Hesitation Profile
   const fillerRegex = /\b(uh|um|er|ah|like|you know)\b/gi;
   const fillers = (userTranscript.match(fillerRegex) || []).map((f) => f.toLowerCase());
-  const wordsPerMinute = opts.speechDurationMs > 0 ? (normUser.split(" ").length / (opts.speechDurationMs / 60000)) : 100;
   const hesitation: HesitationProfile = {
     fillerCount: fillers.length,
     fillersDetected: Array.from(new Set(fillers)),

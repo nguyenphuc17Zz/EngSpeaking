@@ -50,7 +50,6 @@ import { RepairFeedbackCard } from "@/components/foundation/retry-loop/RepairFee
 import { RepairSummaryModal } from "@/components/foundation/retry-loop/RepairSummaryModal";
 import { SpeakingController } from "@/components/foundation/sentence-builder/SpeakingController";
 import { GlobalAiSelector } from "@/components/common/GlobalAiSelector";
-import { getErrorBankRecords } from "@/lib/foundation/sentence-builder/error-bank.service";
 import { PRESET_TOPICS, getTopicDisplay } from "@/lib/foundation/sentence-builder/topics";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 import { useUnifiedSTT } from "@/hooks/useUnifiedSTT";
@@ -113,38 +112,15 @@ export default function SpokenRepairLabPage() {
 
   const autoLaunchedRef = useRef(false);
 
-  // Zero-Lobby: Auto-launch first challenge or load from Error Bank on mount
+  // Zero-Lobby: Auto-launch first challenge on mount
   useEffect(() => {
     if (autoLaunchedRef.current) return;
-
-    if (typeof window !== "undefined") {
-      const urlParams = new URLSearchParams(window.location.search);
-      const recordId = urlParams.get("recordId") || urlParams.get("errorId");
-      if (recordId) {
-        try {
-          const records = getErrorBankRecords();
-          const target = records.find((r) => r.id === recordId);
-          if (target) {
-            autoLaunchedRef.current = true;
-            const latestExample = target.examples[target.examples.length - 1];
-            startRepairSession({
-              originalTaskId: target.id,
-              sourceContext: "retry_lab",
-              originalPrompt: latestExample?.correction || target.patternKey,
-              originalTranscript: latestExample?.userText || "",
-              expectedSentence: latestExample?.correction || "",
-            });
-            return;
-          }
-        } catch {}
-      }
-    }
 
     if (!activeSession && !isGeneratingChallenge) {
       autoLaunchedRef.current = true;
       generateAiRepairChallenge();
     }
-  }, [activeSession, isGeneratingChallenge, generateAiRepairChallenge, startRepairSession]);
+  }, [activeSession, isGeneratingChallenge, generateAiRepairChallenge]);
 
   // Track prompt display time for latency calculation
   useEffect(() => {
@@ -263,6 +239,20 @@ export default function SpokenRepairLabPage() {
     setCurrentHintTier(0);
     useRetryLoopStore.setState({ lastRepairResult: null });
     generateAiRepairChallenge();
+  }, [isGeneratingChallenge, isEvaluatingRepair, generateAiRepairChallenge]);
+
+  // Regenerate on-demand with AI
+  const handleRegenerateWithAI = useCallback(async () => {
+    if (isGeneratingChallenge || isEvaluatingRepair) return;
+    setPendingSpokenText(null);
+    setCurrentHintTier(0);
+    useRetryLoopStore.setState({ lastRepairResult: null });
+    try {
+      await generateAiRepairChallenge(undefined, undefined, "ai");
+      toast.success("Đã tạo câu sửa lỗi mới bằng AI", "Được tạo riêng theo chủ đề hiện tại.");
+    } catch (err) {
+      toast.error("Lỗi gọi AI", err instanceof Error ? err.message : "Không thể tạo bài tập từ AI");
+    }
   }, [isGeneratingChallenge, isEvaluatingRepair, generateAiRepairChallenge]);
 
   // Select Topic from Dialog
@@ -503,6 +493,8 @@ export default function SpokenRepairLabPage() {
             session={activeSession}
             currentHintTier={currentHintTier}
             onSelectHintTier={setCurrentHintTier}
+            onRegenerateWithAI={handleRegenerateWithAI}
+            isRegeneratingAI={isGeneratingChallenge}
           />
         </div>
 

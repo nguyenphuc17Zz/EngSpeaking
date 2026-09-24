@@ -12,10 +12,6 @@ import {
 } from "@/lib/foundation/sentence-builder/adaptive-engine";
 import { calculateHesitationMetrics } from "@/lib/foundation/sentence-builder/fast-pass.service";
 import {
-  recordErrorsFromEvaluation,
-  getStoredErrors,
-} from "@/lib/foundation/sentence-builder/error-bank.service";
-import {
   PRESET_TOPICS,
   resolveTopicForPrompt,
   getTopicDisplay,

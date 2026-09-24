@@ -24,7 +24,7 @@ export interface RoutingDecision {
 export function selectModel(
   task: AITask,
   userConfig: RouterConstraints,
-  constraints?: { maxCost?: string }
+  _constraints?: { maxCost?: string }
 ): RoutingDecision {
   const req = getTaskRequirements(task);
   const policy = getTaskPolicy(task);

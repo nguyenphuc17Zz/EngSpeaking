@@ -529,8 +529,6 @@ export const healthRepo = {
 
   resetUserData(): void {
     const db = getAppDb();
-    db.prepare("DELETE FROM error_bank_records").run();
-    db.prepare("DELETE FROM error_bank_analytics").run();
     db.prepare("DELETE FROM user_content_exposure").run();
     db.prepare("DELETE FROM ai_telemetry").run();
   },

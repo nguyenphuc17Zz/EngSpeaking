@@ -267,17 +267,6 @@ export default function ConversationModesPage() {
     toast.info("Đang tạo kịch bản thế giới AI...", "Thiết kế nhân vật và mục tiêu phản xạ.");
     try {
       const s = buildSettings(modeOverride);
-      // Inject Spoken Memory (aligned SB/VN-EN/Survival/Drill)
-      let recentErrors: string[] = [];
-      let pedagogicalConstraint: string | undefined;
-      try {
-        const { getCompactErrorContextPack, buildErrorBankPedagogicalPrompt } = await import(
-          "@/lib/foundation/error-bank/error-bank.service"
-        );
-        const pack = getCompactErrorContextPack();
-        recentErrors = pack.topWeaknesses.map((w) => w.patternKey || w.labelVi).filter(Boolean);
-        pedagogicalConstraint = buildErrorBankPedagogicalPrompt() || undefined;
-      } catch {}
       const provider =
         settings.conversation.provider === "browser" ? "gemini" : settings.conversation.provider;
       const model = settings.conversation.model;
@@ -286,7 +275,7 @@ export default function ConversationModesPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          settings: { ...s, recentErrors, pedagogicalConstraint },
+          settings: s,
           provider,
           model,
         }),

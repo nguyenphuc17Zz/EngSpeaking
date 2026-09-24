@@ -207,7 +207,7 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: "english-speaking-settings",
       version: 6,
-      migrate: (persisted, version) => {
+      migrate: (persisted, _version) => {
         const p = persisted as Partial<SettingsState>;
         return {
           ...DEFAULTS,

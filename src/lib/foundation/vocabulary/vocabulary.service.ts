@@ -8,7 +8,6 @@ import { sampleBankTask, saveBankTask } from "@/lib/foundation/services/content-
 import {
   lookupLexiconWord,
   getRandomLexiconWord,
-  synthesizeSpokenWordItem,
 } from "./lexicon-db.service";
 import type { SpokenWordItem } from "@/types/vocabulary-context";
 

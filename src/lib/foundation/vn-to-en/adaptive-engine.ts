@@ -1,7 +1,7 @@
 // Adaptive Retrieval Engine for VN -> EN Speaking (Function 2)
 // Manages Difficulty ladder, Preparation latency scaling, and Gap tracking
 
-import type { VNToENTask, VNToENEvaluation, VNToENRetrievalMode } from "@/types/vn-to-en";
+import type { VNToENTask, VNToENEvaluation } from "@/types/vn-to-en";
 
 export interface VNAdaptiveState {
   currentDifficulty: number; // 1-10

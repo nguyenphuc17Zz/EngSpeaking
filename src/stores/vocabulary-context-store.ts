@@ -10,7 +10,6 @@ import type {
 import { INITIAL_DEFAULT_WORD } from "@/lib/foundation/vocabulary/default-word";
 import {
   getRandomLexiconWord,
-  lookupLexiconWord,
   resolveWordFast,
 } from "@/lib/foundation/vocabulary/lexicon-db.service";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -110,7 +109,7 @@ export const useVocabularyStore = create<VocabularyStoreState>()(
       },
 
       goToPreviousWord: () => {
-        const { historyStack, currentWord } = get();
+        const { historyStack } = get();
         if (!historyStack || historyStack.length === 0) {
           toast.info("Không có từ trước đó trong lịch sử");
           return;

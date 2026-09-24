@@ -294,16 +294,6 @@ export const useSurvivalStore = create<SurvivalStoreState>()(
         const { adaptiveState, selectedTopicId, customTopicText } = get();
         const { provider, model } = await readProviderModel();
         const effectiveTopic = resolveTopicForPrompt(selectedTopicId, customTopicText);
-        let recentErrors: string[] = [];
-        let pedagogicalConstraint: string | undefined;
-        try {
-          const { getCompactErrorContextPack, buildErrorBankPedagogicalPrompt } = await import(
-            "@/lib/foundation/error-bank/error-bank.service"
-          );
-          const pack = getCompactErrorContextPack();
-          recentErrors = pack.topWeaknesses.map((w) => w.patternKey || w.labelVi).filter(Boolean);
-          pedagogicalConstraint = buildErrorBankPedagogicalPrompt() || undefined;
-        } catch {}
 
         try {
           const res = await fetch("/api/foundation/survival/generate", {
@@ -316,8 +306,6 @@ export const useSurvivalStore = create<SurvivalStoreState>()(
               topic: effectiveTopic,
               prepTimeSec: adaptiveState.prepTimeSec,
               recentPrompts: adaptiveState.recentPrompts,
-              recentErrors,
-              pedagogicalConstraint,
               provider,
               model,
               forceSource,
@@ -353,16 +341,6 @@ export const useSurvivalStore = create<SurvivalStoreState>()(
         const { adaptiveState, selectedTopicId, customTopicText } = get();
         const { provider, model } = await readProviderModel();
         const effectiveTopic = resolveTopicForPrompt(selectedTopicId, customTopicText);
-        let recentErrors: string[] = [];
-        let pedagogicalConstraint: string | undefined;
-        try {
-          const { getCompactErrorContextPack, buildErrorBankPedagogicalPrompt } = await import(
-            "@/lib/foundation/error-bank/error-bank.service"
-          );
-          const pack = getCompactErrorContextPack();
-          recentErrors = pack.topWeaknesses.map((w) => w.patternKey || w.labelVi).filter(Boolean);
-          pedagogicalConstraint = buildErrorBankPedagogicalPrompt() || undefined;
-        } catch {}
 
         try {
           const res = await fetch("/api/foundation/survival/generate", {
@@ -375,8 +353,6 @@ export const useSurvivalStore = create<SurvivalStoreState>()(
               topic: effectiveTopic,
               prepTimeSec: adaptiveState.prepTimeSec,
               recentPrompts: adaptiveState.recentPrompts,
-              recentErrors,
-              pedagogicalConstraint,
               provider,
               model,
               forceSource,
@@ -451,71 +427,7 @@ export const useSurvivalStore = create<SurvivalStoreState>()(
           return;
         }
 
-        // 1. Error-bank chia sẻ (map survival error → SB format)
-        try {
-          const { recordErrorsFromEvaluation } = require("@/lib/foundation/sentence-builder/error-bank.service") as typeof import("@/lib/foundation/sentence-builder/error-bank.service");
-          recordErrorsFromEvaluation({
-            overallScore: evalResult.overallScore,
-            meaningScore: evalResult.conceptClarityScore,
-            grammarScore: evalResult.naturalnessScore,
-            naturalnessScore: evalResult.naturalnessScore,
-            fluencyScore: evalResult.fluencyScore ?? 75,
-            retrievalScore: evalResult.retrievalScore ?? 75,
-            independenceScore: evalResult.independenceScore ?? 100,
-            isCommunicativelyValid: evalResult.communicationRecovered,
-            isSuccessful: evalResult.isSuccessful,
-            needsRetry: !evalResult.isSuccessful,
-            userTranscript: evalResult.userTranscript,
-            cleanTranscript: evalResult.cleanTranscript || evalResult.userTranscript,
-            latencyMs: evalResult.repairInitiationLatencyMs,
-            speechDurationMs: evalResult.speechDurationMs ?? 2500,
-            errors: (evalResult.errors || []).map((e) => ({
-              type:
-                e.type === "taboo"
-                  ? ("vocabulary" as const)
-                  : e.type === "strategy"
-                    ? ("naturalness" as const)
-                    : (e.type as "grammar" | "vocabulary" | "naturalness" | "omission"),
-              severity: e.severity,
-              userText: e.userText,
-              correction: e.correction,
-              explanation: e.explanation,
-              patternKey: e.patternKey,
-            })),
-            betterVersion: evalResult.idealRepairVersion,
-            praisePoints: evalResult.praisePoints || [],
-            actionableFeedback: evalResult.actionableFeedback || evalResult.coachFeedbackVi,
-            hintTierUsed: evalResult.hintTierUsed ?? get().hintTier,
-            attemptNumber: evalResult.attemptNumber ?? attemptCount,
-          });
-        } catch {}
-
-        // 2. Master error-bank via unified batch normalizer
-        try {
-          const { normalizeEvaluatedErrors } = require("@/lib/foundation/error-bank/normalize-batch.service") as typeof import("@/lib/foundation/error-bank/normalize-batch.service");
-          const { ingestEvaluatedErrors } = require("@/lib/foundation/error-bank/error-bank.service") as typeof import("@/lib/foundation/error-bank/error-bank.service");
-          const occurrences = normalizeEvaluatedErrors(evalResult.errors, {
-            fallbackUserTranscript: evalResult.userTranscript,
-            fallbackCorrection: evalResult.idealRepairVersion,
-            contextSentence:
-              "targetWord" in currentTask
-                ? (currentTask as CircumlocutionTask).targetWord
-                : (currentTask as SurvivalScenarioTask).audioPromptText,
-            latencyMs: evalResult.repairInitiationLatencyMs,
-            communicativelyValid: evalResult.communicationRecovered,
-            wpm: evalResult.hesitationMetrics?.wpm,
-          });
-          if (occurrences.length > 0) {
-            ingestEvaluatedErrors(occurrences, {
-              sourceModule: "survival",
-              responseLatencyMs: evalResult.repairInitiationLatencyMs,
-              wasRetried: attemptCount > 1,
-              retrySucceeded: evalResult.isSuccessful,
-            });
-          }
-        } catch {}
-
-        // 3. Adaptive + mastery
+        // 1. Adaptive + mastery
         const updatedAdaptive = updateSurvivalAdaptiveProgression(adaptiveState, evalResult, currentTask);
         const updatedMastery = updateSurvivalMastery(skillMastery, evalResult);
 

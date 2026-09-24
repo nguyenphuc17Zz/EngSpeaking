@@ -86,6 +86,7 @@ export function getDeterministicChallenge(): RepairChallenge {
       { term: "went to work", meaningVi: "đã đi làm", partOfSpeech: "phrase" },
       { term: "because of a traffic jam", meaningVi: "vì bị kẹt xe", partOfSpeech: "phrase" },
     ],
+    source: "bank",
   };
 }
 
@@ -113,7 +114,7 @@ export async function generateRepairChallenge(
         bankRatio: params.bankRatio,
       });
       if (cached) {
-        return cached.task;
+        return { ...cached.task, source: "bank" as const };
       }
     } catch (bankErr) {
       if (process.env.NODE_ENV !== "production") {
@@ -150,6 +151,7 @@ export async function generateRepairChallenge(
     // Ensure ID exists
     if (!obj.id) obj.id = `repair_${Date.now()}`;
     if (!obj.topic) obj.topic = effectiveTopic;
+    obj.source = "ai";
 
     // Sanitize Hints
     if (!Array.isArray(obj.hints) || obj.hints.length === 0) {
@@ -212,6 +214,10 @@ export async function generateRepairChallenge(
 
     return challenge;
   } catch (genErr) {
+    if (params.forceSource === "ai") {
+      const msg = genErr instanceof Error ? genErr.message : String(genErr);
+      throw new Error(`Không thể tạo bài tập sửa lỗi từ AI: ${msg}. Vui lòng thử lại hoặc đổi AI Model / Provider.`);
+    }
     if (process.env.NODE_ENV !== "production") {
       console.warn("[RepairChallengeGenerator] AI generation failed, checking bank fallback:", genErr);
     }
@@ -221,7 +227,7 @@ export async function generateRepairChallenge(
         module: "retry_loop_repair",
         category: params.category || "grammar",
       });
-      if (fallback) return fallback;
+      if (fallback) return { ...fallback, source: "bank" as const };
     } catch {}
 
     return getDeterministicChallenge();

@@ -94,7 +94,6 @@ export function AppShell({ children }: AppShellProps) {
     pathname.startsWith("/vn-to-en") ||
     pathname.startsWith("/retry-lab") ||
     pathname.startsWith("/latency") ||
-    pathname.startsWith("/error-bank") ||
     pathname.startsWith("/chunks") ||
     pathname.startsWith("/survival") ||
     pathname.startsWith("/vocabulary") ||

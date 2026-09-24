@@ -104,6 +104,7 @@ export interface RetrySession {
   isSimplified: boolean;
   totalRepairLatencyMs: number;
   topic?: string;
+  source?: "ai" | "bank";
   createdAt: string;
   completedAt?: string;
 }

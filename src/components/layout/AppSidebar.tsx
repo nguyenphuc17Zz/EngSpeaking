@@ -17,7 +17,6 @@ import {
   Video,
   Target,
   RotateCcw,
-  Brain,
   ShieldAlert,
   BookOpen,
 } from "lucide-react";
@@ -73,19 +72,13 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/retry-lab",
         label: "Spoken Repair Lab",
         icon: RotateCcw,
-        description: "Chu trình Correct → Say Again sửa lỗi từ Error Bank",
+        description: "Chu trình Correct → Say Again sửa lỗi khẩu ngữ tức thì",
       },
       {
         href: "/latency",
         label: "Response Latency",
         icon: Zap,
         description: "Rèn luyện tốc độ phản xạ & truy xuất khẩu ngữ",
-      },
-      {
-        href: "/error-bank",
-        label: "Personal Error Bank",
-        icon: Brain,
-        description: "Bộ nhớ học tập dài hạn & phân tích mẫu lỗi",
       },
       {
         href: "/chunks",

@@ -39,7 +39,7 @@ interface RetryLoopStoreState {
   resetSession: () => void;
   closeSummaryModal: () => void;
   clearGenerationError: () => void;
-  generateAiRepairChallenge: (category?: string, topicOverride?: string) => Promise<void>;
+  generateAiRepairChallenge: (category?: string, topicOverride?: string, forceSource?: "ai" | "bank" | "auto") => Promise<void>;
 
   startRepairSession: (params: {
     originalTaskId: string;
@@ -123,7 +123,7 @@ export const useRetryLoopStore = create<RetryLoopStoreState>()(
         const { sessionHistory, sessionStartTime, activeSession } = get();
 
         // If current active session not in history yet, append it
-        let history = [...sessionHistory];
+        const history = [...sessionHistory];
         if (
           activeSession &&
           !history.some((h) => h.originalSentence === activeSession.originalTranscript)
@@ -167,7 +167,7 @@ export const useRetryLoopStore = create<RetryLoopStoreState>()(
       },
 
       // Generate a fresh AI Spoken Repair Challenge on the fly
-      generateAiRepairChallenge: async (category, topicOverride) => {
+      generateAiRepairChallenge: async (category, topicOverride, forceSource = "ai") => {
         set({ isGeneratingChallenge: true, generationError: null, lastRepairResult: null });
 
         let provider = "gemini";
@@ -199,6 +199,7 @@ export const useRetryLoopStore = create<RetryLoopStoreState>()(
               model,
               recentPatterns: get().metrics.recentRepairedPatterns,
               topic: effectiveTopic,
+              forceSource,
             }),
           });
 
@@ -231,6 +232,7 @@ export const useRetryLoopStore = create<RetryLoopStoreState>()(
             targetCorrection: targetedCorrection,
           });
           session.topic = ch.topic || effectiveTopic;
+          session.source = ch.source || (forceSource === "bank" ? "bank" : "ai");
 
           const currentMetrics = get().metrics;
           const prevIndex = get().currentChallengeIndex;
@@ -298,6 +300,7 @@ export const useRetryLoopStore = create<RetryLoopStoreState>()(
             originalTranscript,
             targetCorrection: data.targetedCorrection,
           });
+          session.source = "bank";
 
           const currentMetrics = get().metrics;
           set({

@@ -132,7 +132,6 @@ export async function generateSentenceBuilderTask(
   });
 
   let lastErrorMsg = "";
-  let isRateLimited = false;
 
   const attemptGenerate = async (): Promise<SentenceBuilderTask | null> => {
     try {
@@ -261,9 +260,6 @@ export async function generateSentenceBuilderTask(
     } catch (err) {
       const errStr = err instanceof Error ? err.message : String(err);
       lastErrorMsg = errStr;
-      if (errStr.includes("429") || errStr.includes("rate_limit") || errStr.includes("TPM")) {
-        isRateLimited = true;
-      }
       if (process.env.NODE_ENV !== "production") {
         console.warn("[SentenceBuilderTaskGenerator] API call failed:", err);
       }

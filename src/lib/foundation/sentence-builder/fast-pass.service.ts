@@ -90,7 +90,7 @@ const CONTRACTION_MAP: Record<string, string> = {
 export function normalizeSpokenText(text: string): string {
   if (!text) return "";
 
-  let cleaned = text
+  const cleaned = text
     .toLowerCase()
     .replace(/[’‘`]/g, "'")
     .replace(/[.,/#!$%^&*;:{}=\-_~()?"\\]/g, " ")
@@ -320,7 +320,6 @@ export function buildFastPassEvaluation(params: {
     fluencyScore = 90;
   }
 
-  const baseScore = Math.round(params.confidence * 98);
   const overallScore = Math.min(
     100,
     Math.max(

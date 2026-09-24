@@ -181,16 +181,6 @@ export const useAdvancedStore = create<AdvancedStoreState>()(
           provider = s.activeProvider || "gemini";
           model = (provider === "groq" ? s.preferredGroqModel : s.preferredGeminiModel) || "auto";
         } catch {}
-        let recentErrors: string[] = [];
-        let pedagogicalConstraint: string | undefined;
-        try {
-          const { getCompactErrorContextPack, buildErrorBankPedagogicalPrompt } = await import(
-            "@/lib/foundation/error-bank/error-bank.service"
-          );
-          const pack = getCompactErrorContextPack();
-          recentErrors = pack.topWeaknesses.map((w) => w.patternKey || w.labelVi).filter(Boolean);
-          pedagogicalConstraint = buildErrorBankPedagogicalPrompt() || undefined;
-        } catch {}
 
         try {
           const res = await fetch("/api/advanced/generate", {
@@ -204,8 +194,6 @@ export const useAdvancedStore = create<AdvancedStoreState>()(
               topic: effectiveTopic,
               prepTimeSec: adaptiveState.prepTimeSec,
               blitzLimitSec: adaptiveState.blitzLimitSec,
-              recentErrors,
-              pedagogicalConstraint,
               provider,
               model,
               forceSource: opts?.forceSource,
@@ -265,28 +253,6 @@ export const useAdvancedStore = create<AdvancedStoreState>()(
       processEvaluation: (evaluation) => {
         const { currentTask, adaptiveState, skillMastery, sessionHistory, attemptCount, sessionConfig } = get();
         if (!currentTask) return;
-        try {
-          const { normalizeEvaluatedErrors } = require("@/lib/foundation/error-bank/normalize-batch.service") as typeof import("@/lib/foundation/error-bank/normalize-batch.service");
-          const { ingestEvaluatedErrors } = require("@/lib/foundation/error-bank/error-bank.service") as typeof import("@/lib/foundation/error-bank/error-bank.service");
-          const occurrences = normalizeEvaluatedErrors(
-            evaluation.errors.map((e) => ({ ...e, type: e.type === "article" || e.type === "preposition" ? "grammar" : e.type })),
-            {
-              fallbackUserTranscript: evaluation.userTranscript,
-              fallbackCorrection: evaluation.betterVersion,
-              contextSentence: currentTask.promptVi,
-              latencyMs: evaluation.responseLatencyMs,
-              communicativelyValid: evaluation.isCommunicativelyValid,
-            }
-          );
-          if (occurrences.length > 0) {
-            ingestEvaluatedErrors(occurrences, {
-              sourceModule: "advanced" as never,
-              responseLatencyMs: evaluation.responseLatencyMs,
-              wasRetried: attemptCount > 1,
-              retrySucceeded: evaluation.isSuccessful,
-            });
-          }
-        } catch {}
         const updatedAdaptive = updateAdvancedAdaptiveState(adaptiveState, evaluation, currentTask);
         const updatedMastery = updateAdvancedMastery(skillMastery, evaluation, sessionConfig.track);
         try {

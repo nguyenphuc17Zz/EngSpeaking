@@ -14,6 +14,16 @@ export const CATALOG: AIModel[] = [
     active: true,
   },
   {
+    id: "gemini-2.5-flash",
+    providerId: "gemini",
+    displayName: "Gemini 2.5 Flash (Khuyên dùng)",
+    capabilities: { textGeneration: true, speechToText: false, textToSpeech: false, streaming: true, structuredOutput: true },
+    speedClass: "fast",
+    costClass: "free",
+    contextWindow: 1_048_576,
+    active: true,
+  },
+  {
     id: "gemini-3.5-flash-lite",
     providerId: "gemini",
     displayName: "Gemini 3.5 Flash Lite",

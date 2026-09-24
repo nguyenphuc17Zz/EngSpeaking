@@ -16,7 +16,6 @@ import {
   Radio,
   LifeBuoy,
   RotateCcw,
-  Brain,
   Layers,
 } from "lucide-react";
 
@@ -90,15 +89,6 @@ export default function Home() {
       icon: Zap,
       badge: "3 Tracks × 3 Lv",
       color: "text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/20",
-      highlight: false,
-    },
-    {
-      title: "Ngân Hàng Lỗi Cá Nhân",
-      desc: "Trí nhớ khẩu ngữ FSRS, đo lường xác suất nắm vững BKT và cảnh báo nguy cơ hóa đá L1",
-      href: "/error-bank",
-      icon: Brain,
-      badge: "FSRS • BKT",
-      color: "text-violet-600 dark:text-violet-400 bg-violet-500/10 border-violet-500/20",
       highlight: false,
     },
   ];

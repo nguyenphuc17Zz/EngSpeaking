@@ -8,7 +8,8 @@ import { getModelsForProvider } from "@/lib/ai/models/catalog";
 const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 
 function cleanModel(model?: string): string {
-  return (model?.trim() || "gemini-3.5-flash-lite").replace(/^models\//, "");
+  const m = (model?.trim() || "gemini-2.5-flash").replace(/^models\//, "");
+  return !m || m === "auto" ? "gemini-2.5-flash" : m;
 }
 
 function buildPayload(input: TextGenerationInput) {
@@ -121,9 +122,12 @@ export class GeminiProvider implements AIProvider {
       });
 
     const initialModel = cleanModel(input.model);
-    const candidateModels = [initialModel, "gemini-3.6-flash", "gemini-3.5-flash-lite"].filter(
-      (v, i, a) => a.indexOf(v) === i
-    );
+    const candidateModels = [
+      initialModel,
+      "gemini-2.5-flash",
+      "gemini-3.6-flash",
+      "gemini-3.5-flash-lite",
+    ].filter((v, i, a) => a.indexOf(v) === i);
 
     const payload = buildPayload(input);
     const start = Date.now();
@@ -147,28 +151,14 @@ export class GeminiProvider implements AIProvider {
 
         if (!res.ok) {
           const body = await res.text().catch(() => "");
-          if (res.status === 429 || res.status === 404) {
-            lastError = new VoiceEngineError({
-              code: mapProviderErrorToCode(res.status, body),
-              message: `Gemini error ${res.status}: ${body.slice(0, 300)}`,
-              provider: "gemini",
-              model,
-              statusCode: res.status,
-            });
-            continue;
-          }
-          let errJson: unknown = body;
-          try {
-            errJson = JSON.parse(body);
-          } catch {}
-          throw new VoiceEngineError({
+          lastError = new VoiceEngineError({
             code: mapProviderErrorToCode(res.status, body),
-            message: `Gemini error ${res.status}: ${body.slice(0, 500)}`,
+            message: `Gemini error ${res.status} (${model}): ${body.slice(0, 300)}`,
             provider: "gemini",
             model,
             statusCode: res.status,
-            raw: errJson,
           });
+          continue;
         }
 
         const latencyMs = Date.now() - start;
@@ -198,17 +188,17 @@ export class GeminiProvider implements AIProvider {
           latencyMs,
         };
       } catch (e: unknown) {
-        if (e instanceof VoiceEngineError && e.code !== VoiceErrorCode.QUOTA_ERROR) {
+        lastError = e;
+        if (e instanceof VoiceEngineError && e.code === VoiceErrorCode.PROVIDER_NOT_CONFIGURED) {
           throw e;
         }
-        lastError = e;
       }
     }
 
     if (lastError) throw lastError;
     throw new VoiceEngineError({
       code: VoiceErrorCode.AI_GENERATION_FAILED,
-      message: "Tất cả các model Gemini đều đang bận hoặc quá tải quota (429).",
+      message: "Tất cả các model Gemini đều đang bận hoặc quá tải quota (429/503).",
       provider: "gemini",
     });
   }

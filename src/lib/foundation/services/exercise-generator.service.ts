@@ -1,11 +1,9 @@
 // Exercise generation service — AI + Zod + regenerate once §57, token-optimized §59
 import { generateTextWithRouting } from "@/lib/ai";
-import { VoiceEngineError, VoiceErrorCode } from "@/lib/errors/codes";
 import { foundationExerciseSchema } from "@/lib/validation/foundation-schemas";
 import { EXERCISE_GENERATOR_SYSTEM, buildExerciseUserPrompt } from "@/lib/foundation/prompts/exercise-generator";
 import type { FoundationExercise } from "@/types/foundation";
 import { getLevelForSkill } from "@/lib/foundation/skills/taxonomy";
-import { scalarToDims, dimsToScalar } from "@/lib/foundation/difficulty/model";
 import type { GenerateExerciseParams } from "@/lib/foundation/engines/exercise-engine";
 
 function mockExercise(params: GenerateExerciseParams): FoundationExercise {

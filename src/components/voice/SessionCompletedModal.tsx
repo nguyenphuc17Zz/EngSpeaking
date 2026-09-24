@@ -23,7 +23,6 @@ import {
   ArrowRight,
   RotateCcw,
   CheckCircle2,
-  AlertTriangle,
   BookOpen,
 } from "lucide-react";
 import Link from "next/link";
@@ -225,23 +224,6 @@ export function SessionCompletedModal({
           </div>
           <span className="font-mono text-[10px] text-primary font-bold">{turnsCount} lượt đối thoại</span>
         </div>
-
-        {/* Error Bank Notice */}
-        {errorsDetected > 0 && (
-          <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between text-xs text-left">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="size-4 text-amber-500 shrink-0" />
-              <span className="text-muted-foreground">
-                Đã đồng bộ <strong className="text-foreground">{errorsDetected} điểm ngữ pháp cần nắn</strong> vào Error Bank
-              </span>
-            </div>
-            <Link href="/error-bank">
-              <Button variant="ghost" size="sm" className="h-7 text-xs font-bold text-amber-600 dark:text-amber-400 p-1">
-                Luyện sửa lỗi →
-              </Button>
-            </Link>
-          </div>
-        )}
 
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-2 pt-1">

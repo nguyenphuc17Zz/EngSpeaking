@@ -1,6 +1,5 @@
 // Evaluator service — compact context §55, anti-hallucination §58
 import { generateTextWithRouting } from "@/lib/ai";
-import { VoiceEngineError, VoiceErrorCode } from "@/lib/errors/codes";
 import { foundationEvaluationSchema } from "@/lib/validation/foundation-schemas";
 import { EVALUATOR_SYSTEM, buildEvaluatorUserPrompt } from "@/lib/foundation/prompts/evaluator";
 import type { FoundationExercise, FoundationEvaluation } from "@/types/foundation";

@@ -101,7 +101,7 @@ export function cleanJson(text: string): unknown {
 
   // 6. Truncated JSON recovery: if output was cut off, attempt auto-closing with a LIFO stack
   if (firstBrace !== -1) {
-    let text = cleaned.slice(firstBrace).trim();
+    const text = cleaned.slice(firstBrace).trim();
     const stack: string[] = [];
     let inString = false;
     let isEscaped = false;
@@ -191,7 +191,7 @@ export async function generateVNToENTask(
 
     if (bankSample) {
       recordUserExposure(bankSample.contentId, "vn_to_en").catch(() => {});
-      const task = bankSample.task;
+      const task = { ...bankSample.task, source: "bank" as const };
       if (!task.sayItBetter) {
         const expList = task.expectedResponses || [];
         task.sayItBetter = {
@@ -218,15 +218,18 @@ export async function generateVNToENTask(
 
   let lastErrorMsg = "";
 
-  const attemptGenerate = async (): Promise<VNToENTask | null> => {
+  const attemptGenerate = async (
+    targetProvider = provider,
+    targetModel = model
+  ): Promise<VNToENTask | null> => {
     try {
       // Gemini can easily handle 1000 output tokens without issue.
       // Groq uses 750 tokens to guarantee the full schema is never truncated while safely within TPM.
-      const maxOutputTokens = provider === "groq" ? 750 : 1000;
+      const maxOutputTokens = targetProvider === "groq" ? 750 : 1000;
 
       const res = await generateTextWithRouting({
-        provider,
-        model,
+        provider: targetProvider,
+        model: targetModel,
         input: {
           messages: [{ role: "user", content: userPrompt }],
           systemInstruction: VN_TO_EN_GENERATOR_SYSTEM,
@@ -247,6 +250,8 @@ export async function generateVNToENTask(
       if (!parsed.id) {
         parsed.id = `vn_task_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
       }
+
+      parsed.source = "ai";
 
       const intent = String(parsed.targetIntent || "");
 
@@ -320,7 +325,7 @@ export async function generateVNToENTask(
       const errStr = err instanceof Error ? err.message : String(err);
       lastErrorMsg = errStr;
       if (errStr.includes("429") || errStr.includes("rate_limit") || errStr.includes("TPM")) {
-        console.warn("[VNToENTaskGenerator] Groq rate limit hit (429 TPM):", errStr);
+        console.warn("[VNToENTaskGenerator] Rate limit hit (429 TPM):", errStr);
       } else if (process.env.NODE_ENV !== "production") {
         console.warn("[VNToENTaskGenerator] API call failed:", err);
       }
@@ -339,8 +344,34 @@ export async function generateVNToENTask(
     task = await attemptGenerate();
   }
 
+  // Cross-provider failover: if primary provider failed, attempt secondary provider before giving up
+  if (!task && provider !== "groq") {
+    try {
+      const { isProviderConfigured } = await import("@/lib/config/server");
+      if (isProviderConfigured("groq")) {
+        task = await attemptGenerate("groq", "openai/gpt-oss-120b");
+      }
+    } catch {}
+  } else if (!task && provider === "groq") {
+    try {
+      const { isProviderConfigured } = await import("@/lib/config/server");
+      if (isProviderConfigured("gemini")) {
+        task = await attemptGenerate("gemini", "gemini-2.5-flash");
+      }
+    } catch {}
+  }
+
   // Emergency Fallback to Content Bank on AI rate limits/outages
   if (!task) {
+    // If the user explicitly requested AI generation ("Tạo mới bằng AI"),
+    // do NOT silently mask the failure by returning from Content Bank.
+    // Report the real error directly to the user as requested ("nó bị lỗi gì thì cứ báo ra")
+    if (options.forceSource === "ai") {
+      throw new Error(
+        `Không thể tạo bài tập VN-to-EN từ AI: ${lastErrorMsg || "AI không phản hồi hoặc phản hồi không hợp lệ"}. Vui lòng thử lại hoặc đổi AI Model / Provider.`
+      );
+    }
+
     const fallbackBank = await sampleBankTask<VNToENTask>({
       module: "vn_to_en",
       level: retrievalMode,
@@ -349,7 +380,7 @@ export async function generateVNToENTask(
     });
     if (fallbackBank) {
       recordUserExposure(fallbackBank.contentId, "vn_to_en").catch(() => {});
-      const fallbackTask = fallbackBank.task;
+      const fallbackTask = { ...fallbackBank.task, source: "bank" as const };
       if (!fallbackTask.sayItBetter) {
         const expList = fallbackTask.expectedResponses || [];
         fallbackTask.sayItBetter = {

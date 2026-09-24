@@ -43,18 +43,6 @@ export async function POST(req: Request) {
       pedagogicalConstraint,
     });
 
-    // Ingest turn errors into Personal Error Bank (non-fatal, aligned SB/VN/Survival/Drill)
-    try {
-      const { ingestTurnErrorsToBank } = await import("@/lib/conversation/normalize-turn-errors");
-      ingestTurnErrorsToBank({
-        pedagogy: aiResponse.pedagogy as import("@/types/conversation").TurnPedagogy | null,
-        userTranscript: transcript,
-        contextSentence: worldState.currentTopic || worldState.scenario.topic,
-        latencyMs: timeToFirstWordMs,
-        retrySucceeded: (aiResponse.pedagogy?.turnScore ?? 75) >= 70,
-      });
-    } catch {}
-
     // Apply state update deterministically
     let nextState: ConversationWorldState = applyStateUpdate(worldState, aiResponse);
     // If event triggered but not in aiResponse, attach

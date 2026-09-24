@@ -41,7 +41,7 @@ export const useFoundationStore = create<FoundationState>()(
       pushHistory: (h) => {
         try {
           set((st) => ({ history: [...st.history.slice(-49), h] }));
-        } catch (e) {
+        } catch {
           // QuotaExceededError: keep only last 20
           try { set((st) => ({ history: [...st.history.slice(-19), h] })); } catch {}
         }

@@ -346,14 +346,6 @@ export function ConversationSessionView({ sessionId }: ConversationSessionViewPr
           text: t.text,
         }));
 
-        let pedagogicalConstraint: string | undefined;
-        try {
-          const { buildErrorBankPedagogicalPrompt } = await import(
-            "@/lib/foundation/error-bank/error-bank.service"
-          );
-          pedagogicalConstraint = buildErrorBankPedagogicalPrompt() || undefined;
-        } catch {}
-
         const provider =
           settings.conversation.provider === "browser" ? "gemini" : settings.conversation.provider;
         const model = settings.conversation.model;
@@ -373,7 +365,6 @@ export function ConversationSessionView({ sessionId }: ConversationSessionViewPr
             speechDurationMs: durationMs,
             hintTierUsed: hintTier,
             attemptNumber: attemptCount,
-            pedagogicalConstraint,
           }),
         });
 

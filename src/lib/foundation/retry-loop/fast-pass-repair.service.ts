@@ -89,7 +89,7 @@ export interface FastPassRepairOptions {
 export function computeFastPassRepair(
   session: RetrySession,
   spokenTranscript: string,
-  opts: FastPassRepairOptions = {}
+  _opts: FastPassRepairOptions = {}
 ): { canFastPass: boolean; result?: RepairEvaluationResult } {
   if (!spokenTranscript || spokenTranscript.trim().length < 2) {
     return { canFastPass: false };

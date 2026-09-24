@@ -7,9 +7,7 @@ import type {
   TargetedCorrection,
   RepairEvaluationResult,
   RetryFSMState,
-  SpokenRepairMetric,
 } from "@/types/retry-loop";
-import { recordErrorsFromEvaluation } from "@/lib/foundation/sentence-builder/error-bank.service";
 
 export interface CreateRetrySessionOptions {
   originalTaskId: string;
@@ -71,34 +69,6 @@ export function recordRetryAttemptInSession(
   let nextState: RetryFSMState = isResolved ? "repair_success" : "repair_failed";
   if (!isResolved && session.currentAttemptNumber >= 2) {
     nextState = "simplified_mode";
-  }
-
-  // Update Error Bank with repair recovery
-  if (isResolved) {
-    try {
-      recordErrorsFromEvaluation({
-        overallScore: 95,
-        meaningScore: 100,
-        grammarScore: 90,
-        naturalnessScore: 90,
-        fluencyScore: 85,
-        retrievalScore: 90,
-        independenceScore: attempt.supportLevel === 1 ? 90 : 70,
-        isCommunicativelyValid: true,
-        isSuccessful: true,
-        needsRetry: false,
-        userTranscript: attempt.spokenTranscript,
-        cleanTranscript: attempt.spokenTranscript.toLowerCase(),
-        latencyMs: attempt.responseLatencyMs,
-        speechDurationMs: attempt.speechDurationMs,
-        errors: [],
-        betterVersion: session.targetCorrection.betterSentence,
-        praisePoints: ["Sửa thành công lỗi qua chu trình Retry Loop."],
-        actionableFeedback: "Xuất sắc! Lỗi đã được khắc phục.",
-        hintTierUsed: attempt.supportLevel,
-        attemptNumber: session.currentAttemptNumber,
-      });
-    } catch {}
   }
 
   return {

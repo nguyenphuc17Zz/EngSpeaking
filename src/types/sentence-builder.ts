@@ -64,7 +64,6 @@ export interface SentenceBuilderTask {
   topic: string; // e.g. "work", "daily_routine", "food", "travel", "technology"
   prepTimeSec: number; // 3.0s down to 1.5s
   modelAudioSample?: string;
-  targetErrorPatternKey?: string; // Links task to ErrorBank weakness
   source?: "ai" | "bank" | "seed";
 }
 
@@ -126,26 +125,6 @@ export interface SentenceBuilderSkillMastery {
   successfulFirstAttempts: number;
   streakCount: number;
   updatedAt: string;
-}
-
-export interface ErrorBankRecord {
-  id: string;
-  patternKey: string; // e.g. "past_simple_verb", "article_the", "preposition_in_on_at"
-  category: "grammar" | "vocabulary" | "sentence_structure" | "collocation";
-  labelVi: string;
-  description: string;
-  frequency: number;
-  errorCount: number;
-  successCount: number;
-  accuracy: number; // 0-100
-  trend: "improving" | "stable" | "needs_work";
-  examples: Array<{
-    userText: string;
-    correction: string;
-    timestamp: string;
-  }>;
-  firstSeenAt: string;
-  lastSeenAt: string;
 }
 
 export type SessionMode = "endless" | "quick" | "standard" | "deep" | "weakness_focus";

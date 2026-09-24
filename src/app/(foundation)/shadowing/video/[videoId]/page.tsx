@@ -6,6 +6,7 @@ import { ShadowingStudioEngine } from "@/components/foundation/shadowing/Shadowi
 import {
   getVideoLibrary,
   addVideoToLibrary,
+  updateVideoInLibrary,
   type SavedVideoLesson,
 } from "@/lib/foundation/shadowing/shadowing-library.service";
 import {
@@ -60,6 +61,43 @@ export default function ShadowingVideoStudioPage() {
             const fromDb = await getTranscript(matched.youtubeId);
             if (fromDb && fromDb.length > 0) {
               segments = fromDb;
+            }
+          }
+
+          // Auto-fetch fallback from YouTube API if transcript is still empty (e.g. batch imported channel videos)
+          if (
+            segments.length === 0 &&
+            matched.youtubeId &&
+            matched.youtubeId !== "custom" &&
+            (matched.youtubeId.length === 11 || matched.youtubeId.length >= 5)
+          ) {
+            try {
+              const res = await fetch("/api/shadowing/youtube-transcript", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url: `https://www.youtube.com/watch?v=${matched.youtubeId}` }),
+              });
+              const data = await res.json();
+              if (res.ok && data.segments && data.segments.length > 0) {
+                segments = data.segments.map((s: any, idx: number) => ({
+                  segment_id: s.segment_id || `seg_${String(idx + 1).padStart(3, "0")}`,
+                  text: s.text,
+                  start_time: s.start_time,
+                  end_time: s.end_time,
+                  translationVi: s.translationVi || "",
+                  thoughtGroups: s.thoughtGroups || s.text,
+                  ipa: s.ipa || "",
+                  wordsWithIpa: s.wordsWithIpa,
+                }));
+                await saveTranscript(matched.youtubeId, segments);
+                updateVideoInLibrary(matched.id, {
+                  title: data.title || matched.title,
+                  segmentCount: segments.length,
+                  hasTranscript: true,
+                });
+              }
+            } catch (fetchErr) {
+              console.warn("Auto-fetch captions warning:", fetchErr);
             }
           }
 
@@ -190,6 +228,7 @@ export default function ShadowingVideoStudioPage() {
     <ShadowingStudioEngine
       initialLesson={lesson}
       onBackToHub={() => router.push("/shadowing")}
+      onLessonUpdated={(updated) => setLesson(updated)}
       onNavigateToVideo={(newId) => router.push(`/shadowing/video/${newId}`)}
     />
   );

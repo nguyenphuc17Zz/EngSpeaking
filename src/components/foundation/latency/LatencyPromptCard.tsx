@@ -27,8 +27,8 @@ interface LatencyPromptCardProps {
   task: LatencyTask;
   currentTaskIndex: number;
   totalTasks: number;
-  isRecording: boolean;
-  elapsedMs: number;
+  isRecording?: boolean;
+  elapsedMs?: number;
   rapidStreak?: number;
   staircaseTargetMs?: number;
   onNextTask?: () => void;
@@ -41,8 +41,6 @@ export function LatencyPromptCard({
   task,
   currentTaskIndex,
   totalTasks,
-  isRecording,
-  elapsedMs,
   rapidStreak = 0,
   staircaseTargetMs,
   onNextTask,
@@ -54,24 +52,6 @@ export function LatencyPromptCard({
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const targetMs = staircaseTargetMs ?? task.staircaseTargetMs ?? task.targetLatencyMs ?? 3000;
-  const progressPercent = Math.min(100, Math.round((elapsedMs / targetMs) * 100));
-
-  // Dynamic Stopwatch Color Thresholds
-  const isSafeGreen = elapsedMs <= targetMs * 0.75;
-  const isWarningAmber = elapsedMs > targetMs * 0.75 && elapsedMs <= targetMs;
-  const isOverRed = elapsedMs > targetMs;
-
-  const stopwatchColor = isOverRed
-    ? "text-red-500"
-    : isWarningAmber
-    ? "text-amber-500"
-    : "text-emerald-500";
-
-  const progressColorClass = isOverRed
-    ? "[&>div]:bg-red-500"
-    : isWarningAmber
-    ? "[&>div]:bg-amber-500"
-    : "[&>div]:bg-emerald-500";
 
   const handleCopy = useCallback(async (text: string, id: string) => {
     try {
@@ -145,51 +125,10 @@ export function LatencyPromptCard({
                 <span>{rapidStreak}</span>
               </Badge>
             )}
-            {onNextTask && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onNextTask}
-                disabled={isGeneratingNext}
-                className="h-6 px-2 rounded-lg text-[10px] font-bold text-primary border-primary/30 hover:bg-primary/10 hover:border-primary gap-1 shrink-0 cursor-pointer shadow-2xs btn-spring"
-                title="Đổi sang câu hỏi tiếp theo [R]"
-              >
-                <span>Câu tiếp theo</span>
-                <ArrowRight className="size-2.5" />
-              </Button>
-            )}
             <span className="text-[10px] font-mono text-muted-foreground">
               {totalTasks > 0 ? `#${currentTaskIndex + 1}/${totalTasks}` : `Câu #${currentTaskIndex + 1}`}
             </span>
           </div>
-        </div>
-
-        {/* Live Millisecond Stopwatch Gauge */}
-        <div className="p-2.5 rounded-2xl bg-card border border-border/80 space-y-1.5 shadow-2xs shrink-0">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <Clock
-                className={`size-3.5 ${
-                  isRecording ? "text-amber-500 animate-spin" : "text-muted-foreground"
-                }`}
-              />
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                Độ trễ phản xạ thời gian thực:
-              </span>
-            </div>
-
-            <div className="font-mono text-sm sm:text-base font-bold flex items-baseline gap-1">
-              <span className={stopwatchColor}>{(elapsedMs / 1000).toFixed(2)}s</span>
-              <span className="text-[10px] text-muted-foreground font-normal">
-                / {(targetMs / 1000).toFixed(1)}s
-              </span>
-            </div>
-          </div>
-
-          <Progress
-            value={progressPercent}
-            className={`h-1.5 rounded-full transition-all ${progressColorClass}`}
-          />
         </div>
 
         {/* Scrollable Container with Zero-scroll ergonomics */}
@@ -277,10 +216,28 @@ export function LatencyPromptCard({
           )}
         </div>
 
-        {/* Bottom Pacing Guide */}
-        <div className="pt-1.5 border-t border-border/40 flex items-center justify-between text-[10px] text-muted-foreground shrink-0 font-mono">
-          <span>Target: &lt;{(targetMs / 1000).toFixed(1)}s</span>
-          <span>Phản xạ tự nhiên • Không đóng băng</span>
+        {/* Card Footer: Always-visible Next Task action & Pacing Info */}
+        <div className="pt-2 border-t border-border/40 flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono">
+            <Zap className="size-3 text-amber-500 fill-amber-500" />
+            <span>Mục tiêu: &lt;{(targetMs / 1000).toFixed(1)}s</span>
+          </div>
+
+          {onNextTask && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onNextTask}
+              disabled={isGeneratingNext}
+              className="h-8 px-3 rounded-xl font-bold text-xs gap-1.5 border-amber-500/40 bg-amber-500/10 hover:bg-amber-500 hover:text-white text-amber-600 dark:text-amber-400 transition-all shadow-2xs btn-spring cursor-pointer"
+              title="Đổi sang câu hỏi tiếp theo (Phím R)"
+            >
+              <span>Câu tiếp theo</span>
+              <ArrowRight className="size-3.5" />
+              <span className="text-[9px] font-mono opacity-60 hidden sm:inline">[R]</span>
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>

@@ -5277,6 +5277,7 @@ export default function CorodomoShadowingStudioPage() {
         <ShadowingStudioEngine
           initialLesson={activeLesson}
           onBackToHub={() => setCurrentView("hub")}
+          onLessonUpdated={(updated) => setActiveLesson(updated)}
           onNavigateToVideo={(newId) => router.push(`/shadowing/video/${newId}`)}
         />
       )}

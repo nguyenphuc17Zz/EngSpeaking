@@ -13,6 +13,7 @@ import {
   Copy,
   Check,
   Target,
+  Layers,
 } from "lucide-react";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 import { sanitizeTextForTTS } from "@/lib/tts/browser";
@@ -25,9 +26,15 @@ interface Props {
   onSelectHintTier?: (tier: number) => void;
   attemptIndex?: number;
   totalAttempts?: number;
+  onRegenerateWithAI?: () => void;
+  isRegeneratingAI?: boolean;
 }
 
-export function RepairPromptCard({ session }: Props) {
+export function RepairPromptCard({
+  session,
+  onRegenerateWithAI,
+  isRegeneratingAI = false,
+}: Props) {
   const tts = useBrowserTTS();
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const correction = session.targetCorrection;
@@ -54,7 +61,7 @@ export function RepairPromptCard({ session }: Props) {
       <CardContent className="p-3 sm:p-4 flex flex-col h-full space-y-2.5 overflow-hidden">
         {/* Top Meta Header */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-2 shrink-0">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 font-mono font-bold text-[11px] border border-amber-500/30 flex items-center gap-1">
               <RotateCcw className="size-3" />
               <span>Lần sửa #{session.currentAttemptNumber}</span>
@@ -67,13 +74,47 @@ export function RepairPromptCard({ session }: Props) {
             </Badge>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <Badge variant="secondary" className="text-[10px] font-mono capitalize">
               {correction.errorType}
             </Badge>
-            <Badge variant="outline" className="text-[10px] font-mono text-muted-foreground hidden sm:inline-flex">
-              {session.sourceContext === "retry_lab" ? "AI Challenge" : "Error Bank"}
-            </Badge>
+
+            {/* Source Badge with vivid colors and icons */}
+            {session.source === "bank" ? (
+              <Badge
+                variant="outline"
+                className="text-[9px] px-1.5 py-0 h-4 border-blue-500/40 text-blue-600 dark:text-blue-400 bg-blue-500/10 gap-1 font-normal"
+                title="Bài tập mẫu được lấy từ Content Bank"
+              >
+                <Layers className="size-2.5 text-blue-500" />
+                Từ ngân hàng mẫu
+              </Badge>
+            ) : (
+              <Badge
+                variant="outline"
+                className="text-[9px] px-1.5 py-0 h-4 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 gap-1 font-normal"
+                title="Bài tập được AI tạo mới theo thời gian thực"
+              >
+                <Sparkles className="size-2.5 text-emerald-500" />
+                AI Generated
+              </Badge>
+            )}
+
+            {/* On-demand AI regeneration button */}
+            {onRegenerateWithAI && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                onClick={onRegenerateWithAI}
+                disabled={isRegeneratingAI}
+                className="h-5 px-1.5 text-[10px] gap-1 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted/80 cursor-pointer"
+                title="Yêu cầu AI tạo câu sửa lỗi hoàn toàn mới"
+              >
+                <Sparkles className={`size-2.5 text-emerald-500 ${isRegeneratingAI ? "animate-spin" : ""}`} />
+                <span className="text-[10px]">Tạo mới bằng AI</span>
+              </Button>
+            )}
           </div>
         </div>
 

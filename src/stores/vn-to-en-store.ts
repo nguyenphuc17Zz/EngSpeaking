@@ -15,11 +15,6 @@ import {
   updateVNAdaptiveState,
 } from "@/lib/foundation/vn-to-en/adaptive-engine";
 import { updateFoundationProfileFromScore } from "@/lib/foundation/services/progress.service";
-import { recordErrorsFromEvaluation } from "@/lib/foundation/sentence-builder/error-bank.service";
-import {
-  getCompactErrorContextPack,
-  ingestErrorOccurrence,
-} from "@/lib/foundation/error-bank/error-bank.service";
 import { resolveTopicForPrompt } from "@/lib/foundation/sentence-builder/topics";
 
 interface VNToENStoreState {
@@ -169,17 +164,6 @@ export const useVNToENStore = create<VNToENStoreState>()(
             "auto";
         } catch {}
 
-        let recentErrors: string[] = [];
-        let pedagogicalConstraint: string | undefined;
-        try {
-          const { getCompactErrorContextPack, buildErrorBankPedagogicalPrompt } = await import(
-            "@/lib/foundation/error-bank/error-bank.service"
-          );
-          const pack = getCompactErrorContextPack();
-          recentErrors = pack.topWeaknesses.map((w) => w.patternKey || w.labelVi).filter(Boolean);
-          pedagogicalConstraint = buildErrorBankPedagogicalPrompt() || undefined;
-        } catch {}
-
         try {
           const res = await fetch("/api/foundation/vn-to-en/generate", {
             method: "POST",
@@ -187,8 +171,6 @@ export const useVNToENStore = create<VNToENStoreState>()(
             body: JSON.stringify({
               retrievalMode: sessionConfig.mode,
               targetDifficulty: adaptiveState.currentDifficulty,
-              recentErrors,
-              pedagogicalConstraint,
               topic: effectiveTopic,
               provider,
               model,
@@ -227,8 +209,11 @@ export const useVNToENStore = create<VNToENStoreState>()(
         const { adaptiveState, sessionConfig, selectedTopicId, customTopicText } = get();
         const effectiveTopic = resolveTopicForPrompt(selectedTopicId, customTopicText);
         const settings = typeof window !== "undefined" ? (await import("@/stores/settings-store")).useSettingsStore.getState() : null;
-        const provider = settings?.activeProvider || "gemini";
-        const model = (provider === "groq" ? settings?.preferredGroqModel : settings?.preferredGeminiModel) || "auto";
+        const provider = settings?.generation?.provider || settings?.activeProvider || "gemini";
+        const model =
+          settings?.generation?.model ||
+          (provider === "groq" ? settings?.preferredGroqModel : settings?.preferredGeminiModel) ||
+          "auto";
 
         try {
           const res = await fetch("/api/foundation/vn-to-en/generate", {
@@ -284,59 +269,7 @@ export const useVNToENStore = create<VNToENStoreState>()(
         const { currentTask, adaptiveState, sessionHistory, attemptCount } = get();
         if (!currentTask) return;
 
-        // 1. Record error bank via unified normalize-batch (shared + master)
-        try {
-          recordErrorsFromEvaluation({
-            overallScore: evaluation.overallScore,
-            meaningScore: evaluation.meaningScore,
-            grammarScore: evaluation.grammarScore,
-            naturalnessScore: evaluation.naturalnessScore,
-            fluencyScore: evaluation.fluencyScore,
-            retrievalScore: evaluation.retrievalScore,
-            independenceScore: evaluation.independenceScore,
-            isCommunicativelyValid: evaluation.isCommunicativelyValid,
-            isSuccessful: evaluation.isSuccessful,
-            needsRetry: evaluation.needsRetry,
-            userTranscript: evaluation.userTranscript,
-            cleanTranscript: evaluation.cleanTranscript,
-            latencyMs: evaluation.responseLatencyMs,
-            speechDurationMs: evaluation.speechDurationMs,
-            errors: evaluation.errors.map((e) => ({
-              type: e.type === "article" || e.type === "preposition" ? "grammar" : e.type,
-              severity: e.severity,
-              userText: e.userText,
-              correction: e.correction,
-              explanation: e.explanation,
-              patternKey: e.patternKey,
-            })),
-            betterVersion: evaluation.betterVersion,
-            praisePoints: evaluation.praisePoints,
-            actionableFeedback: evaluation.actionableFeedback,
-            hintTierUsed: evaluation.hintTierUsed,
-            attemptNumber: evaluation.attemptNumber,
-          });
-
-          // Ingest into Function 5 Master Error Bank via unified batch normalizer
-          const { normalizeEvaluatedErrors } = require("@/lib/foundation/error-bank/normalize-batch.service") as typeof import("@/lib/foundation/error-bank/normalize-batch.service");
-          const { ingestEvaluatedErrors } = require("@/lib/foundation/error-bank/error-bank.service") as typeof import("@/lib/foundation/error-bank/error-bank.service");
-          const occurrences = normalizeEvaluatedErrors(evaluation.errors, {
-            fallbackUserTranscript: evaluation.userTranscript,
-            fallbackCorrection: evaluation.betterVersion,
-            contextSentence: currentTask.promptVi,
-            latencyMs: evaluation.responseLatencyMs,
-            communicativelyValid: evaluation.isCommunicativelyValid,
-          });
-          if (occurrences.length > 0) {
-            ingestEvaluatedErrors(occurrences, {
-              sourceModule: "vn_to_en",
-              responseLatencyMs: evaluation.responseLatencyMs,
-              wasRetried: attemptCount > 1,
-              retrySucceeded: evaluation.isSuccessful,
-            });
-          }
-        } catch {}
-
-        // 2. Update Adaptive Retrieval state
+        // 1. Update Adaptive Retrieval state
         const updatedAdaptive = updateVNAdaptiveState(adaptiveState, evaluation, currentTask);
 
         // 3. Update Foundation Profile metrics

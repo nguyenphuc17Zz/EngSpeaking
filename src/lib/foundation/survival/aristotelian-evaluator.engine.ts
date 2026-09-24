@@ -2,7 +2,7 @@
 // Evaluates Circumlocution descriptions using classical Definition Paradigm:
 // Genus Proximum (Hypernym / Category) + Differentia Specifica (Distinguishing Functions)
 
-import type { CircumlocutionTask, SurvivalEvaluationResult } from "@/types/survival-speaking";
+import type { CircumlocutionTask } from "@/types/survival-speaking";
 
 export interface AristotelianAnalysis {
   tabooViolated: boolean;

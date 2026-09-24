@@ -1,5 +1,5 @@
 // FoundationSessionEngine + SessionBuilder §38, §44
-import type { FoundationSession, FoundationAttempt, FoundationExercise, FoundationExerciseType, FoundationSkill } from "@/types/foundation";
+import type { FoundationSession, FoundationAttempt, FoundationExercise, FoundationSkill } from "@/types/foundation";
 
 export interface SessionBuilderConfig {
   mode: "learn" | "practice" | "challenge" | "daily";

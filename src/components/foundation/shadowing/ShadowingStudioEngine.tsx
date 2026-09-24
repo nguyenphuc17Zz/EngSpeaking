@@ -151,8 +151,16 @@ export function ShadowingStudioEngine({
   const activeLessonRef = useRef(activeLesson);
   activeLessonRef.current = activeLesson;
 
-  // Sync if initialLesson changes externally
+  // Sync if initialLesson changes externally (protecting against stale empty overwrite)
   useEffect(() => {
+    if (
+      activeLessonRef.current?.youtubeId === initialLesson.youtubeId &&
+      (activeLessonRef.current?.segments?.length || 0) > 0 &&
+      (!initialLesson.segments || initialLesson.segments.length === 0)
+    ) {
+      return;
+    }
+
     const rawSegments = initialLesson.segments || [];
     const healed = mergeFragmentedSegments(rawSegments).map((s, idx) => ({
       ...s,
@@ -185,27 +193,6 @@ export function ShadowingStudioEngine({
       }));
     }
   }, [activeLesson?.id]);
-
-  // Load transcript from IndexedDB if activeLesson has no segments
-  useEffect(() => {
-    if (
-      activeLesson?.youtubeId &&
-      (!activeLesson.segments || activeLesson.segments.length === 0)
-    ) {
-      getTranscript(activeLesson.youtubeId).then((dbSegments) => {
-        if (dbSegments && dbSegments.length > 0) {
-          const healed = mergeFragmentedSegments(dbSegments).map((s, idx) => ({
-            ...s,
-            segment_id: s.segment_id || `seg_${String(idx + 1).padStart(3, "0")}`,
-          })) as CorodomoSegment[];
-          setActiveLesson((prev) => ({
-            ...prev,
-            segments: healed,
-          }));
-        }
-      });
-    }
-  }, [activeLesson?.id, activeLesson?.youtubeId]);
 
   // ─── Playback & Sync State ───────────────────────────────────────────
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
@@ -782,11 +769,11 @@ export function ShadowingStudioEngine({
     setCornerResumePrompt(null);
   }, []);
 
-  // ─── Resync Captions from YouTube ────────────────────────────────────
+  // ─── Resync Captions from YouTube & Auto-Fetch Engine ───────────────
   const [isResyncing, setIsResyncing] = useState(false);
   const handleResyncCaptions = useCallback(
     async (youtubeIdOverride?: string) => {
-      const targetYoutubeId = youtubeIdOverride || activeLesson.youtubeId;
+      const targetYoutubeId = youtubeIdOverride || activeLessonRef.current.youtubeId;
       if (!targetYoutubeId || targetYoutubeId === "custom" || targetYoutubeId.length !== 11) {
         toast.error("Không thể đồng bộ", "Chỉ hỗ trợ video YouTube hợp lệ.");
         return;
@@ -821,12 +808,12 @@ export function ShadowingStudioEngine({
 
         await saveTranscript(targetYoutubeId, healed);
         const updatedLesson: CorodomoVideoLesson = {
-          ...activeLesson,
-          title: data.title || activeLesson.title,
+          ...activeLessonRef.current,
+          title: data.title || activeLessonRef.current.title,
           segments: healed,
         };
         setActiveLesson(updatedLesson);
-        updateVideoInLibrary(activeLesson.id, {
+        updateVideoInLibrary(activeLessonRef.current.id, {
           title: updatedLesson.title,
           segments: healed,
         });
@@ -838,8 +825,43 @@ export function ShadowingStudioEngine({
         setIsResyncing(false);
       }
     },
-    [activeLesson, onLessonUpdated]
+    [onLessonUpdated]
   );
+
+  // Auto-fetch or restore transcript from IndexedDB if segments are empty
+  const isAutoFetchingRef = useRef(false);
+  useEffect(() => {
+    if (
+      activeLesson?.youtubeId &&
+      (!activeLesson.segments || activeLesson.segments.length === 0)
+    ) {
+      getTranscript(activeLesson.youtubeId).then(async (dbSegments) => {
+        if (dbSegments && dbSegments.length > 0) {
+          const healed = mergeFragmentedSegments(dbSegments).map((s, idx) => ({
+            ...s,
+            segment_id: s.segment_id || `seg_${String(idx + 1).padStart(3, "0")}`,
+          })) as CorodomoSegment[];
+          const resolvedLesson: CorodomoVideoLesson = {
+            ...activeLessonRef.current,
+            segments: healed,
+          };
+          setActiveLesson(resolvedLesson);
+          onLessonUpdated?.(resolvedLesson);
+        } else if (
+          !isAutoFetchingRef.current &&
+          activeLesson.youtubeId !== "custom" &&
+          (activeLesson.youtubeId.length === 11 || activeLesson.youtubeId.length >= 5)
+        ) {
+          isAutoFetchingRef.current = true;
+          try {
+            await handleResyncCaptions(activeLesson.youtubeId);
+          } finally {
+            isAutoFetchingRef.current = false;
+          }
+        }
+      });
+    }
+  }, [activeLesson?.id, activeLesson?.youtubeId, handleResyncCaptions, onLessonUpdated]);
 
   // ─── Playback Controls ───────────────────────────────────────────────
   const handleTogglePlayVideo = useCallback(() => {
@@ -1402,30 +1424,58 @@ export function ShadowingStudioEngine({
       <>
         {/* Subtitle Pill & Translation Area */}
         <div className="shrink-0 flex flex-col items-center justify-center px-2 py-1 text-center select-text min-h-[64px]">
-          {showSubtitle && (
-            <div className="inline-flex flex-wrap items-end justify-center gap-x-2 gap-y-0.5 bg-[#1e2329] dark:bg-[#181d24] text-white px-3.5 py-1.5 rounded-xl border border-white/10 shadow-md">
-              {currentSentenceTokens.map((token, i) => (
-                <div
-                  key={i}
-                  onClick={(e) => handleWordClick(token.cleanWord, e)}
-                  className="inline-flex flex-col items-center cursor-pointer group px-1 py-0.5 rounded transition-all hover:bg-white/10"
-                  title={`Click để tra từ: "${token.cleanWord}"`}
-                >
-                  <span className="text-[10px] font-mono text-amber-300 font-semibold leading-none mb-0.5 select-none tracking-tight">
-                    {token.ipa || "—"}
-                  </span>
-                  <span className="text-sm sm:text-[15px] font-bold text-white group-hover:text-amber-200 transition-colors leading-tight">
-                    {token.word}
-                  </span>
-                </div>
-              ))}
+          {activeLesson.segments.length === 0 ? (
+            <div className="inline-flex items-center gap-2 bg-muted/70 text-muted-foreground px-4 py-2 rounded-xl border border-border/60 text-xs">
+              {isResyncing ? (
+                <>
+                  <Loader2 className="size-4 animate-spin text-primary shrink-0" />
+                  <span className="font-semibold text-foreground">Đang tự động tải phụ đề tiếng Anh từ YouTube...</span>
+                </>
+              ) : (
+                <>
+                  <span className="font-semibold">Chưa có dữ liệu phụ đề cho video này</span>
+                  {activeLesson.youtubeId && activeLesson.youtubeId !== "custom" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleResyncCaptions()}
+                      className="h-6 px-2 text-[11px] font-bold rounded-lg border-primary/40 text-primary hover:bg-primary/10"
+                    >
+                      <RefreshCw className="size-3 mr-1" />
+                      Tải phụ đề
+                    </Button>
+                  )}
+                </>
+              )}
             </div>
-          )}
+          ) : (
+            <>
+              {showSubtitle && (
+                <div className="inline-flex flex-wrap items-end justify-center gap-x-2 gap-y-0.5 bg-[#1e2329] dark:bg-[#181d24] text-white px-3.5 py-1.5 rounded-xl border border-white/10 shadow-md">
+                  {currentSentenceTokens.map((token, i) => (
+                    <div
+                      key={i}
+                      onClick={(e) => handleWordClick(token.cleanWord, e)}
+                      className="inline-flex flex-col items-center cursor-pointer group px-1 py-0.5 rounded transition-all hover:bg-white/10"
+                      title={`Click để tra từ: "${token.cleanWord}"`}
+                    >
+                      <span className="text-[10px] font-mono text-amber-300 font-semibold leading-none mb-0.5 select-none tracking-tight">
+                        {token.ipa || "—"}
+                      </span>
+                      <span className="text-sm sm:text-[15px] font-bold text-white group-hover:text-amber-200 transition-colors leading-tight">
+                        {token.word}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
 
-          {showTranslation && currentSegment.translationVi && (
-            <p className="text-xs text-foreground/90 font-bold leading-tight mt-1 max-w-2xl line-clamp-2">
-              {currentSegment.translationVi}
-            </p>
+              {showTranslation && currentSegment.translationVi && (
+                <p className="text-xs text-foreground/90 font-bold leading-tight mt-1 max-w-2xl line-clamp-2">
+                  {currentSegment.translationVi}
+                </p>
+              )}
+            </>
           )}
 
           {/* Listen & Repeat Status Banner */}
@@ -1659,7 +1709,7 @@ export function ShadowingStudioEngine({
               variant="ghost"
               size="sm"
               onClick={handlePrevSegment}
-              disabled={activeSegmentIndex === 0}
+              disabled={activeLesson.segments.length === 0 || activeSegmentIndex === 0}
               className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
               title="Câu trước (←)"
             >
@@ -1667,14 +1717,16 @@ export function ShadowingStudioEngine({
             </Button>
 
             <span className="text-xs font-mono font-bold text-foreground px-1.5 select-none">
-              {activeSegmentIndex + 1} / {activeLesson.segments.length}
+              {activeLesson.segments.length > 0
+                ? `${activeSegmentIndex + 1} / ${activeLesson.segments.length}`
+                : "0 / 0"}
             </span>
 
             <Button
               variant="ghost"
               size="sm"
               onClick={handleNextSegment}
-              disabled={activeSegmentIndex === activeLesson.segments.length - 1}
+              disabled={activeLesson.segments.length === 0 || activeSegmentIndex >= activeLesson.segments.length - 1}
               className="size-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
               title="Câu sau (→)"
             >
@@ -1862,60 +1914,98 @@ export function ShadowingStudioEngine({
           onTouchMove={handleUserWheelOrTouch}
           onScroll={handleContainerScroll}
         >
-          {filteredSegments.map((seg) => {
-            const originalIndex = activeLesson.segments.findIndex(
-              (s) => s.segment_id === seg.segment_id
-            );
-            const isActive = originalIndex === activeSegmentIndex;
-
-            return (
-              <div
-                key={seg.segment_id}
-                ref={(el) => {
-                  timelineItemRefs.current[originalIndex] = el;
-                }}
-                onClick={() => seekToSegment(originalIndex, true)}
-                className={cn(
-                  "p-2 rounded-xl border transition-all cursor-pointer select-text flex items-start gap-2",
-                  isActive
-                    ? "bg-primary/10 border-primary/50 shadow-2xs ring-1 ring-primary/30"
-                    : "bg-card hover:bg-muted/30 border-border/50"
+          {activeLesson.segments.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full p-4 text-center space-y-3">
+              <div className="size-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
+                {isResyncing ? (
+                  <Loader2 className="size-5 animate-spin" />
+                ) : (
+                  <Languages className="size-5" />
                 )}
-              >
-                <button
+              </div>
+              <div className="space-y-1 max-w-[200px]">
+                <p className="text-xs font-bold text-foreground">
+                  {isResyncing ? "Đang tải phụ đề..." : "Chưa có danh sách phụ đề"}
+                </p>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  {isResyncing
+                    ? "Đang tự động tải phụ đề tiếng Anh từ YouTube."
+                    : "Video chưa có phụ đề hoặc đang tải."}
+                </p>
+              </div>
+              {!isResyncing && activeLesson.youtubeId && activeLesson.youtubeId !== "custom" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleResyncCaptions()}
+                  className="rounded-xl text-xs gap-1.5 h-8 border-primary/40 text-primary hover:bg-primary/10"
+                >
+                  <RefreshCw className="size-3" />
+                  <span>Tải phụ đề</span>
+                </Button>
+              )}
+            </div>
+          ) : filteredSegments.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full p-4 text-center space-y-2 text-muted-foreground">
+              <Search className="size-6 opacity-40" />
+              <p className="text-xs">Không tìm thấy câu phù hợp với &quot;{transcriptSearch}&quot;</p>
+            </div>
+          ) : (
+            filteredSegments.map((seg) => {
+              const originalIndex = activeLesson.segments.findIndex(
+                (s) => s.segment_id === seg.segment_id
+              );
+              const isActive = originalIndex === activeSegmentIndex;
+
+              return (
+                <div
+                  key={seg.segment_id}
+                  ref={(el) => {
+                    timelineItemRefs.current[originalIndex] = el;
+                  }}
+                  onClick={() => seekToSegment(originalIndex, true)}
                   className={cn(
-                    "size-5 rounded-md flex items-center justify-center shrink-0 mt-0.5 transition-colors",
+                    "p-2 rounded-xl border transition-all cursor-pointer select-text flex items-start gap-2",
                     isActive
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                      ? "bg-primary/10 border-primary/50 shadow-2xs ring-1 ring-primary/30"
+                      : "bg-card hover:bg-muted/30 border-border/50"
                   )}
                 >
-                  {isActive && isPlayingVideo ? (
-                    <Pause className="size-2.5 fill-current" />
-                  ) : (
-                    <Play className="size-2.5 fill-current ml-0.5" />
-                  )}
-                </button>
-
-                <div className="min-w-0 flex-1">
-                  <p
+                  <button
                     className={cn(
-                      "text-xs sm:text-[13px] leading-snug",
-                      isActive ? "font-bold text-foreground" : "text-foreground/90 font-medium"
+                      "size-5 rounded-md flex items-center justify-center shrink-0 mt-0.5 transition-colors",
+                      isActive
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
                     )}
                   >
-                    {seg.text}
-                  </p>
+                    {isActive && isPlayingVideo ? (
+                      <Pause className="size-2.5 fill-current" />
+                    ) : (
+                      <Play className="size-2.5 fill-current ml-0.5" />
+                    )}
+                  </button>
 
-                  {seg.translationVi && (
-                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">
-                      {seg.translationVi}
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className={cn(
+                        "text-xs sm:text-[13px] leading-snug",
+                        isActive ? "font-bold text-foreground" : "text-foreground/90 font-medium"
+                      )}
+                    >
+                      {seg.text}
                     </p>
-                  )}
+
+                    {seg.translationVi && (
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">
+                        {seg.translationVi}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
 
         {/* Floating Button: Resume Auto-Scroll */}

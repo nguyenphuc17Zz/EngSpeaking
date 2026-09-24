@@ -17,7 +17,6 @@ import {
   updateAdaptiveProgression,
   updateSkillMastery,
 } from "@/lib/foundation/sentence-builder/adaptive-engine";
-import { recordErrorsFromEvaluation, getTopWeakness } from "@/lib/foundation/sentence-builder/error-bank.service";
 import { updateFoundationProfileFromScore } from "@/lib/foundation/services/progress.service";
 import { resolveTopicForPrompt } from "@/lib/foundation/sentence-builder/topics";
 
@@ -124,11 +123,9 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
       generationError: null,
 
       initSession: async (mode: SessionMode = "endless") => {
-        const topWeakness = getTopWeakness();
         const selectedMode = mode || "endless";
         const config = {
           ...DEFAULT_SESSION_CONFIGS[selectedMode],
-          weaknessFocusSkill: topWeakness?.patternKey,
         };
 
         set({
@@ -165,16 +162,6 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
           settings?.sentenceBuilderGen?.model ||
           (provider === "groq" ? settings?.preferredGroqModel : settings?.preferredGeminiModel) ||
           "auto";
-        let recentErrors: string[] = [];
-        let pedagogicalConstraint: string | undefined;
-        try {
-          const { getCompactErrorContextPack, buildErrorBankPedagogicalPrompt } = await import(
-            "@/lib/foundation/error-bank/error-bank.service"
-          );
-          const pack = getCompactErrorContextPack();
-          recentErrors = pack.topWeaknesses.map((w) => w.patternKey || w.labelVi).filter(Boolean);
-          pedagogicalConstraint = buildErrorBankPedagogicalPrompt() || undefined;
-        } catch {}
 
         try {
           const res = await fetch("/api/foundation/sentence-builder/generate", {
@@ -185,8 +172,6 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
               targetDifficulty: adaptiveState.currentDifficulty,
               prepTimeSec: adaptiveState.prepTimeSec,
               topic: effectiveTopic,
-              recentErrors,
-              pedagogicalConstraint,
               provider,
               model,
               forceSource: opts?.forceSource,
@@ -229,13 +214,6 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
           settings?.sentenceBuilderGen?.model ||
           (provider === "groq" ? settings?.preferredGroqModel : settings?.preferredGeminiModel) ||
           "auto";
-        let pedagogicalConstraint: string | undefined;
-        try {
-          const { buildErrorBankPedagogicalPrompt } = await import(
-            "@/lib/foundation/error-bank/error-bank.service"
-          );
-          pedagogicalConstraint = buildErrorBankPedagogicalPrompt() || undefined;
-        } catch {}
 
         try {
           const res = await fetch("/api/foundation/sentence-builder/generate", {
@@ -246,7 +224,6 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
               targetDifficulty: adaptiveState.currentDifficulty,
               prepTimeSec: adaptiveState.prepTimeSec,
               topic: effectiveTopic,
-              pedagogicalConstraint,
               provider,
               model,
               forceSource: "ai",
@@ -292,30 +269,7 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
         const { currentTask, adaptiveState, skillMastery, sessionTasksHistory, attemptCount } = get();
         if (!currentTask) return;
 
-        // 1. Record error bank (shared SB bank + unified master bank via normalize-batch)
-        recordErrorsFromEvaluation(evaluation);
-        try {
-          const { normalizeEvaluatedErrors } = require("@/lib/foundation/error-bank/normalize-batch.service") as typeof import("@/lib/foundation/error-bank/normalize-batch.service");
-          const { ingestEvaluatedErrors } = require("@/lib/foundation/error-bank/error-bank.service") as typeof import("@/lib/foundation/error-bank/error-bank.service");
-          const occurrences = normalizeEvaluatedErrors(evaluation.errors, {
-            fallbackUserTranscript: evaluation.userTranscript,
-            fallbackCorrection: evaluation.betterVersion,
-            contextSentence: currentTask.promptVi,
-            latencyMs: evaluation.latencyMs,
-            communicativelyValid: evaluation.isCommunicativelyValid,
-            wpm: evaluation.hesitationMetrics?.wpm,
-          });
-          if (occurrences.length > 0) {
-            ingestEvaluatedErrors(occurrences, {
-              sourceModule: "sentence_builder",
-              responseLatencyMs: evaluation.latencyMs,
-              wasRetried: attemptCount > 1,
-              retrySucceeded: evaluation.isSuccessful,
-            });
-          }
-        } catch {}
-
-        // 2. Update adaptive ladder
+        // 1. Update adaptive ladder
         const updatedAdaptive = updateAdaptiveProgression(adaptiveState, evaluation, currentTask);
 
         // 3. Update 5-D skill mastery
@@ -346,8 +300,6 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
           nextTask,
           sessionTasksHistory,
           sessionStartedAt,
-          skillMastery,
-          adaptiveState,
         } = get();
 
         const nextIndex = currentTaskIndex + 1;
@@ -366,8 +318,6 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
             sessionTasksHistory.reduce((acc, h) => acc + h.evaluation.overallScore, 0) / Math.max(1, sessionTasksHistory.length)
           );
 
-          const topWeakness = getTopWeakness();
-
           const summary: SentenceBuilderSessionSummary = {
             sessionId: `sb_sess_${Date.now()}`,
             mode: sessionConfig.mode,
@@ -382,8 +332,8 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
             averageOverallScore: avgOverall,
             masteryDelta: Math.min(10, Math.max(2, Math.round(avgOverall / 15))),
             practicedSkills: ["Sentence Construction", "Spoken Retrieval", "Conversational English"],
-            topWeaknessIdentified: topWeakness ? topWeakness.labelVi : "Past Tense Retrieval",
-            recommendedNextAction: "Luyện thêm 5 phút bài tập tập trung: " + (topWeakness ? topWeakness.labelVi : "Khôi phục câu tức thì"),
+            topWeaknessIdentified: "Phản xạ câu giao tiếp",
+            recommendedNextAction: "Tiếp tục duy trì phản xạ tự nhiên mỗi ngày!",
             history: sessionTasksHistory,
           };
 
@@ -438,8 +388,6 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
           sessionTasksHistory.reduce((acc, h) => acc + (h.evaluation?.overallScore || 0), 0) / count
         );
 
-        const topWeakness = getTopWeakness();
-
         const summary: SentenceBuilderSessionSummary = {
           sessionId: `sb_sess_${Date.now()}`,
           mode: sessionConfig.mode,
@@ -454,7 +402,7 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
           averageOverallScore: avgOverall,
           masteryDelta: Math.min(10, Math.max(2, Math.round(avgOverall / 15))),
           practicedSkills: ["Sentence Construction", "Spoken Retrieval", "Conversational English"],
-          topWeaknessIdentified: topWeakness ? topWeakness.labelVi : "Phản xạ câu giao tiếp",
+          topWeaknessIdentified: "Phản xạ câu giao tiếp",
           recommendedNextAction: "Tiếp tục duy trì phản xạ tự nhiên mỗi ngày!",
           history: sessionTasksHistory,
         };

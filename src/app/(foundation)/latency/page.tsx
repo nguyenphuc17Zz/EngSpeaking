@@ -616,11 +616,12 @@ export default function LatencyTrainingPage() {
             size="sm"
             onClick={handleSkipOrNextTask}
             disabled={isGenerating || isEvaluating}
-            className="h-8 px-2.5 rounded-xl font-bold text-xs gap-1.5 border-amber-500/40 bg-amber-500/5 hover:bg-amber-500 hover:text-white text-amber-600 dark:text-amber-400 transition-all shadow-2xs btn-spring"
+            className="h-8 px-3 rounded-xl font-bold text-xs gap-1.5 border-amber-500/40 bg-amber-500/10 hover:bg-amber-500 hover:text-white text-amber-600 dark:text-amber-400 transition-all shadow-2xs btn-spring shrink-0 cursor-pointer"
             title="Đổi sang câu hỏi tiếp theo (Phím R)"
           >
             <Sparkles className={`size-3.5 ${isGenerating ? "animate-spin" : ""}`} />
-            <span className="hidden sm:inline">Câu tiếp</span>
+            <span>Câu tiếp theo</span>
+            <ArrowRight className="size-3.5 hidden sm:inline" />
             <span className="text-[9px] font-mono opacity-60 hidden md:inline">[R]</span>
           </Button>
 

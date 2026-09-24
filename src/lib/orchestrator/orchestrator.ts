@@ -1,6 +1,5 @@
 // Central AI Orchestrator §43 — ONE BRAIN, MULTIPLE ENGINES
 import type { AITask } from "./task-registry";
-import { getTaskRequirements } from "./task-registry";
 import { getTaskPolicy } from "./task-policies";
 import { selectModel } from "./router";
 import { buildAIContext, estimateTokens } from "./context/engine";
@@ -50,7 +49,6 @@ export class AIOrchestrator {
   async execute<T>(req: AIExecutionRequest): Promise<AIExecutionResponse<T>> {
     const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     const start = Date.now();
-    const taskReq = getTaskRequirements(req.task);
     const policy = getTaskPolicy(req.task);
     const useCache = req.cache?.enabled !== false && policy.cacheStrategy !== "none";
 

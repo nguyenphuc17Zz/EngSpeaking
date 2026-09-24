@@ -78,9 +78,7 @@ export function computeContentHash(text: string): string {
 
 // Global In-Memory fallbacks for server-side persistence with SQLite database mirror
 declare global {
-  // eslint-disable-next-line no-var
   var __CONTENT_BANK_STORE__: Map<string, ContentBankRecord> | undefined;
-  // eslint-disable-next-line no-var
   var __USER_EXPOSURES_STORE__: UserContentExposure[] | undefined;
 }
 
