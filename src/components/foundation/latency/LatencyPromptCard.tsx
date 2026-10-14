@@ -71,173 +71,185 @@ export function LatencyPromptCard({
   };
 
   return (
-    <Card className="rounded-3xl border border-border/80 bg-gradient-to-br from-card via-card to-amber-500/5 shadow-xs overflow-hidden flex flex-col h-full">
-      <CardContent className="p-3.5 sm:p-4 flex flex-col h-full space-y-2.5 overflow-hidden">
-        {/* Top Meta Header */}
-        <div className="flex items-center justify-between gap-2 border-b border-border/40 pb-2 shrink-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="size-2 rounded-full bg-amber-500 animate-pulse" />
-            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-              1. Đề bài & Tốc độ
+    <Card className="h-full flex flex-col justify-between rounded-none border-2 border-border bg-card shadow-[4px_4px_0px_var(--industrial-shadow-color)] overflow-hidden">
+      <CardContent className="p-3.5 sm:p-4 flex flex-col h-full space-y-3 overflow-hidden">
+        {/* Top Meta Header (JapSpeak BuilderTaskCard Style) */}
+        <div className="flex flex-wrap items-center justify-between gap-1.5 border-b-2 border-border pb-2 shrink-0">
+          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+            <span className="size-2.5 bg-primary border border-border shrink-0" />
+            <span className="text-[11px] font-mono font-extrabold uppercase tracking-wider text-foreground">
+              1. ĐỀ BÀI &amp; TỐC ĐỘ
             </span>
             <Badge
               variant="outline"
-              className="text-[10px] font-mono px-1.5 py-0 border border-amber-500/30 text-amber-600 dark:text-amber-400 gap-1"
+              className="text-[9px] font-mono font-extrabold px-1.5 py-0 border bg-accent text-accent-foreground border-border gap-1"
             >
-              <Zap className="size-2.5 text-amber-500 fill-amber-500" />
-              <span>{(targetMs / 1000).toFixed(1)}s</span>
+              <Zap className="size-2.5 text-primary fill-primary" />
+              <span>{(targetMs / 1000).toFixed(1)}S SLA</span>
             </Badge>
-            <Badge variant="secondary" className="text-[10px] font-mono capitalize">
-              {(task.topic || task.category).replace(/_/g, " ")}
-            </Badge>
+          </div>
 
-            {task.source === "ai" ? (
-              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 gap-1 font-normal">
-                <Sparkles className="size-2.5 text-emerald-500" />
-                AI Generated
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-blue-500/40 text-blue-600 dark:text-blue-400 bg-blue-500/10 gap-1 font-normal">
-                Từ ngân hàng
-              </Badge>
+          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+            {rapidStreak > 0 && (
+              <span className="px-1.5 py-0.5 bg-[#FFB800] text-[#0D0E0D] border border-border font-mono text-[10px] font-extrabold inline-flex items-center gap-0.5">
+                <Flame className="size-2.5 fill-current" />
+                <span>{rapidStreak}</span>
+              </span>
             )}
-
             {onRegenerateWithAI && (
               <Button
                 type="button"
-                variant="ghost"
+                variant="outline"
                 size="xs"
                 onClick={onRegenerateWithAI}
                 disabled={isRegeneratingAI || isGeneratingNext}
-                className="h-5 px-1.5 text-[10px] gap-1 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted/80 cursor-pointer"
+                className="h-6 px-2 text-[10px] gap-1 text-foreground border-2 border-border bg-secondary hover:bg-accent hover:text-accent-foreground cursor-pointer font-mono font-extrabold shadow-[2px_2px_0px_var(--industrial-shadow-color)]"
                 title="Yêu cầu AI tạo câu hỏi phản xạ hoàn toàn mới"
               >
-                <Sparkles className={`size-2.5 text-emerald-500 ${isRegeneratingAI ? "animate-spin" : ""}`} />
-                <span>{isRegeneratingAI ? "Đang tạo..." : "Tạo mới bằng AI"}</span>
+                <Sparkles
+                  className={`size-3 text-primary ${isRegeneratingAI ? "animate-spin" : ""}`}
+                />
+                <span>{isRegeneratingAI ? "ĐANG TẠO..." : "TẠO MỚI AI"}</span>
               </Button>
             )}
-          </div>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            {rapidStreak > 0 && (
-              <Badge className="bg-gradient-to-r from-amber-500 to-orange-500 text-white font-mono text-[9px] font-bold gap-0.5 shadow-2xs py-0 px-1.5">
-                <Flame className="size-2.5 fill-white" />
-                <span>{rapidStreak}</span>
-              </Badge>
-            )}
-            <span className="text-[10px] font-mono text-muted-foreground">
-              {totalTasks > 0 ? `#${currentTaskIndex + 1}/${totalTasks}` : `Câu #${currentTaskIndex + 1}`}
+            <span className="px-1.5 py-0.5 bg-foreground text-background border border-border text-[10px] font-mono font-extrabold">
+              #{currentTaskIndex + 1}/{totalTasks > 0 ? totalTasks : 10}
             </span>
           </div>
         </div>
 
-        {/* Scrollable Container with Zero-scroll ergonomics */}
-        <div className="flex-1 overflow-y-auto space-y-2.5 pr-0.5 min-h-0">
-          {/* Prompt Section */}
-          <div className="p-3 rounded-2xl bg-muted/25 border border-border/60 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1.5">
-                <Brain className="size-3 text-primary" />
-                <span>Tình huống phản xạ tức thì:</span>
+        {/* Scrollable Container */}
+        <div className="flex-1 overflow-y-auto space-y-3 pr-0.5 min-h-0">
+          {/* Prompt Section — Crisp #F6F4EC Paper Box with 2px Hard Border */}
+          <div className="p-3.5 bg-background border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] space-y-2">
+            <div className="flex items-center justify-between gap-2 border-b border-dashed border-border pb-1.5">
+              <span className="text-[10px] font-mono uppercase font-extrabold text-primary tracking-wider flex items-center gap-1.5">
+                <Brain className="size-3.5 text-primary stroke-[2.5]" />
+                <span>TÌNH HUỐNG PHẢN XẠ TỨC THÌ:</span>
               </span>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-[9px] font-mono font-extrabold px-1.5 py-0.5 bg-secondary text-foreground border border-border uppercase">
+                  {task.source === "ai" ? "AI GEN" : "BANK 70/30"}
+                </span>
                 <button
                   type="button"
                   onClick={() => handleCopy(task.promptText, "latency-prompt")}
-                  className="text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-muted/60 cursor-pointer transition-colors"
+                  className="text-muted-foreground hover:text-foreground p-1 border border-transparent hover:border-border bg-card cursor-pointer transition-colors"
                   title="Sao chép tình huống"
                 >
                   {copiedId === "latency-prompt" ? (
-                    <Check className="size-3 text-emerald-500" />
+                    <Check className="size-3 text-[#00A854]" />
                   ) : (
                     <Copy className="size-3" />
                   )}
                 </button>
                 <Button
                   type="button"
-                  variant="ghost"
-                  size="sm"
+                  variant="outline"
+                  size="xs"
                   onClick={() => handlePlayAudio(task.promptText)}
-                  className="h-6 px-1.5 text-[10px] gap-1 rounded-lg text-primary hover:bg-primary/10 transition-all cursor-pointer"
+                  className="h-6 px-2 text-[10px] font-mono font-extrabold gap-1 text-foreground bg-card border border-border hover:bg-accent cursor-pointer"
                   title="Nghe phát âm"
                 >
-                  <Volume2 className="size-3" />
-                  <span className="hidden sm:inline">Nghe</span>
+                  <Volume2 className="size-3 text-primary" />
+                  <span className="hidden sm:inline">NGHE</span>
                 </Button>
               </div>
             </div>
 
-            <h2 className="font-serif text-lg sm:text-xl font-bold tracking-tight text-foreground leading-snug select-text cursor-text">
-              "{task.promptText}"
+            <h2 className="font-serif text-lg sm:text-xl font-extrabold tracking-tight text-foreground leading-snug select-text cursor-text">
+              &ldquo;{task.promptText}&rdquo;
             </h2>
           </div>
 
           {/* Target Intent Explanation */}
           {task.targetIntent && (
-            <div className="p-2.5 rounded-2xl bg-primary/5 border border-primary/20 space-y-1 text-xs">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1">
-                <Sparkles className="size-3" />
-                Mục tiêu phản xạ cần đạt:
+            <div className="p-3 bg-background border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] space-y-1 text-xs">
+              <span className="text-[10px] font-mono font-extrabold uppercase tracking-wider text-primary flex items-center gap-1">
+                <Sparkles className="size-3 stroke-[2.5]" />
+                <span>MỤC TIÊU PHẢN XẠ CẦN ĐẠT:</span>
               </span>
-              <p className="font-medium text-foreground leading-snug select-text cursor-text">
+              <p className="font-mono font-bold text-foreground leading-snug select-text cursor-text">
                 {task.targetIntent}
               </p>
             </div>
           )}
 
-          {/* Expected Keywords Chips with Audio */}
-          {task.expectedKeywords && task.expectedKeywords.length > 0 && (
-            <div className="p-2.5 rounded-2xl bg-amber-500/5 border border-amber-500/20 space-y-1.5 shadow-2xs">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 flex items-center gap-1">
-                  <Zap className="size-3 text-amber-500" />
-                  Từ khoá trọng tâm:
+          {/* Expected Keywords / Suggested Vocabulary — JapSpeak Split Hardware Chips */}
+          {(task.suggestedVocabulary && task.suggestedVocabulary.length > 0) ||
+          (task.expectedKeywords && task.expectedKeywords.length > 0) ? (
+            <div className="p-3 bg-background border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] space-y-2">
+              <div className="flex items-center justify-between border-b border-dashed border-border pb-1">
+                <span className="text-[10px] font-mono font-extrabold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                  <Zap className="size-3.5 text-primary fill-primary" />
+                  <span>TỪ KHOÁ &amp; CỤM TỪ TRỌNG TÂM:</span>
                 </span>
-                <span className="text-[9px] text-muted-foreground font-mono">
-                  Bấm nghe phát âm
+                <span className="text-[9px] text-muted-foreground font-mono font-bold uppercase">
+                  [CLICK ĐỂ NGHE]
                 </span>
               </div>
 
-              <div className="flex flex-wrap gap-1.5">
-                {task.expectedKeywords.map((kw, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => handlePlayAudio(kw)}
-                    className="group inline-flex items-center gap-1 px-2 py-1 rounded-xl bg-card border border-amber-500/30 hover:border-amber-500/60 hover:bg-amber-500/10 transition-all text-xs font-semibold text-foreground shadow-2xs cursor-pointer btn-spring"
-                    title={`Nghe phát âm "${kw}"`}
-                  >
-                    <Volume2 className="size-3 text-amber-500 opacity-70 group-hover:opacity-100 group-hover:scale-110 transition-all" />
-                    <span>{kw}</span>
-                  </button>
-                ))}
+              <div className="flex flex-wrap gap-2">
+                {task.suggestedVocabulary && task.suggestedVocabulary.length > 0
+                  ? task.suggestedVocabulary.map((vocab, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handlePlayAudio(vocab.term)}
+                        className="group inline-flex items-stretch bg-card border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] hover:bg-accent hover:text-accent-foreground transition-all text-xs cursor-pointer active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+                        title={`Nghe phát âm "${vocab.term}"`}
+                      >
+                        <span className="px-1.5 py-1 bg-secondary group-hover:bg-primary group-hover:text-primary-foreground border-r-2 border-border flex items-center justify-center transition-colors">
+                          <Volume2 className="size-3 stroke-[2.5]" />
+                        </span>
+                        <span className="px-2 py-1 flex items-center gap-1.5 font-mono">
+                          <strong className="font-extrabold text-foreground group-hover:text-accent-foreground">
+                            {vocab.term}
+                          </strong>
+                          {vocab.meaningVi && (
+                            <span className="text-muted-foreground group-hover:text-accent-foreground/80 text-[10px] font-sans font-semibold">
+                              ({vocab.meaningVi})
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    ))
+                  : task.expectedKeywords.map((kw, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handlePlayAudio(kw)}
+                        className="group inline-flex items-stretch bg-card border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] hover:bg-accent hover:text-accent-foreground transition-all text-xs cursor-pointer active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+                        title={`Nghe phát âm "${kw}"`}
+                      >
+                        <span className="px-1.5 py-1 bg-secondary group-hover:bg-primary group-hover:text-primary-foreground border-r-2 border-border flex items-center justify-center transition-colors">
+                          <Volume2 className="size-3 stroke-[2.5]" />
+                        </span>
+                        <span className="px-2 py-1 flex items-center gap-1.5 font-mono">
+                          <strong className="font-extrabold text-foreground group-hover:text-accent-foreground">
+                            {kw}
+                          </strong>
+                        </span>
+                      </button>
+                    ))}
               </div>
             </div>
-          )}
+          ) : null}
         </div>
 
-        {/* Card Footer: Always-visible Next Task action & Pacing Info */}
-        <div className="pt-2 border-t border-border/40 flex items-center justify-between gap-2 shrink-0">
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono">
-            <Zap className="size-3 text-amber-500 fill-amber-500" />
-            <span>Mục tiêu: &lt;{(targetMs / 1000).toFixed(1)}s</span>
+        {/* Card Footer: Pacing Info */}
+        <div className="pt-2 border-t-2 border-border flex items-center justify-between text-[10px] text-muted-foreground shrink-0 font-mono font-extrabold uppercase">
+          <div className="flex items-center gap-1.5">
+            <Zap className="size-3.5 text-primary fill-primary" />
+            <span>MỤC TIÊU SLA: &lt;{(targetMs / 1000).toFixed(1)}S</span>
+            <span className="text-border">•</span>
+            <span className="truncate max-w-[140px]">
+              {(task.topic || task.category).replace(/_/g, " ")}
+            </span>
           </div>
-
-          {onNextTask && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onNextTask}
-              disabled={isGeneratingNext}
-              className="h-8 px-3 rounded-xl font-bold text-xs gap-1.5 border-amber-500/40 bg-amber-500/10 hover:bg-amber-500 hover:text-white text-amber-600 dark:text-amber-400 transition-all shadow-2xs btn-spring cursor-pointer"
-              title="Đổi sang câu hỏi tiếp theo (Phím R)"
-            >
-              <span>Câu tiếp theo</span>
-              <ArrowRight className="size-3.5" />
-              <span className="text-[9px] font-mono opacity-60 hidden sm:inline">[R]</span>
-            </Button>
-          )}
+          <span className="px-1.5 py-0.5 bg-secondary text-foreground border border-border">
+            BLITZ DRILL
+          </span>
         </div>
       </CardContent>
     </Card>

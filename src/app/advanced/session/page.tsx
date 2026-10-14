@@ -425,7 +425,18 @@ function AdvancedStudioInner() {
         </DialogContent>
       </Dialog>
 
-      <AdvSummaryModal isOpen={isSessionCompleted} summary={sessionSummary} onRestart={() => { resetSession(); void initSession({ mode: sessionConfig.mode, track: sessionConfig.track, level: adaptiveState.currentLevel }); }} />
+      <AdvSummaryModal
+        isOpen={isSessionCompleted}
+        summary={sessionSummary}
+        onRestart={() => {
+          resetSession();
+          void initSession({ mode: sessionConfig.mode, track: sessionConfig.track, level: adaptiveState.currentLevel });
+        }}
+        onContinue={() => {
+          resetSession();
+          void initSession({ mode: sessionConfig.mode, track: sessionConfig.track, level: adaptiveState.currentLevel });
+        }}
+      />
     </div>
   );
 }

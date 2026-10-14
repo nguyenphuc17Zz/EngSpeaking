@@ -9,10 +9,16 @@ export async function GET(req: Request) {
   const rawProvider = url.searchParams.get("provider") || "edge-tts";
   const rawVoice = url.searchParams.get("voice")?.trim();
   const speedParam = url.searchParams.get("speed");
-  const speed = speedParam ? parseFloat(speedParam) : 1.0;
+  const speed = speedParam !== null ? parseFloat(speedParam) : 1.0;
 
   if (!text) {
     return NextResponse.json({ error: { code: "INVALID_REQUEST", message: "Thiếu tham số text" } }, { status: 400 });
+  }
+  if (text.length > 2000) {
+    return NextResponse.json({ error: { code: "INVALID_REQUEST", message: "Văn bản quá dài (tối đa 2000 ký tự)" } }, { status: 400 });
+  }
+  if (!Number.isFinite(speed) || speed < 0.5 || speed > 2.0) {
+    return NextResponse.json({ error: { code: "INVALID_REQUEST", message: "Tốc độ phát âm không hợp lệ (0.5 - 2.0)" } }, { status: 400 });
   }
 
   // Determine provider: if voice starts with Kokoro prefix or provider is kokoro
@@ -89,6 +95,13 @@ export async function POST(req: Request) {
   if (!text || !text.trim()) {
     return NextResponse.json({ error: { code: "INVALID_REQUEST", message: "Thiếu text" } }, { status: 400 });
   }
+  if (text.trim().length > 2000) {
+    return NextResponse.json({ error: { code: "INVALID_REQUEST", message: "Văn bản quá dài (tối đa 2000 ký tự)" } }, { status: 400 });
+  }
+  const resolvedSpeed = speed !== undefined ? Number(speed) : 1.0;
+  if (!Number.isFinite(resolvedSpeed) || resolvedSpeed < 0.5 || resolvedSpeed > 2.0) {
+    return NextResponse.json({ error: { code: "INVALID_REQUEST", message: "Tốc độ phát âm không hợp lệ (0.5 - 2.0)" } }, { status: 400 });
+  }
 
   // Browser TTS is client-side — server just validates and returns info if requested
   if (provider === "browser" || model === "browser-tts") {
@@ -98,7 +111,7 @@ export async function POST(req: Request) {
   if (process.env.MOCK_AI === "true" || provider === "mock") {
     const { MockProvider } = await import("@/lib/ai/providers/mock");
     const mock = new MockProvider();
-    const result = await mock.synthesizeSpeech({ text, language, voice, speed, model: "mock-tts" });
+    const result = await mock.synthesizeSpeech({ text, language, voice, speed: resolvedSpeed, model: "mock-tts" });
     const buf = await result.audio.arrayBuffer();
     const base64 = Buffer.from(buf).toString("base64");
     return NextResponse.json({ audioBase64: base64, mimeType: result.mimeType, provider: result.provider, model: result.model });
@@ -123,7 +136,7 @@ export async function POST(req: Request) {
       const { audioBuffer, mimeType } = await synthesizeKokoroTTS({
         text,
         voice: targetVoice,
-        speed: speed ?? 1.0,
+        speed: resolvedSpeed,
       });
 
       const base64 = audioBuffer.toString("base64");
@@ -161,7 +174,7 @@ export async function POST(req: Request) {
     const { audioBuffer, mimeType } = await synthesizeEdgeTTS({
       text,
       voice: targetVoice,
-      speed: speed ?? 1.0,
+      speed: resolvedSpeed,
     });
 
     const base64 = audioBuffer.toString("base64");

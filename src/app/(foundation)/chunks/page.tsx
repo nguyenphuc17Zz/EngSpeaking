@@ -49,7 +49,6 @@ import { ChunkContextCard } from "@/components/foundation/chunks/ChunkContextCar
 import { ChunkFeedbackCard } from "@/components/foundation/chunks/ChunkFeedbackCard";
 import { MyChunksDrawer } from "@/components/foundation/chunks/MyChunksDrawer";
 import { ChunkSummaryModal } from "@/components/foundation/chunks/ChunkSummaryModal";
-import { GlobalAiSelector } from "@/components/common/GlobalAiSelector";
 import { SpeakingController } from "@/components/foundation/sentence-builder/SpeakingController";
 import {
   PRESET_TOPICS,
@@ -105,6 +104,20 @@ const PRAGMATIC_STRATEGIES: Array<{
     descVi: "Buffer → Trigger → Consequence → Elaboration. Giải thích cơ chế tác động.",
     badge: "Động",
     color: "bg-rose-500/10 text-rose-600 border-rose-500/30",
+  },
+  {
+    id: "casual_banter",
+    labelVi: "Tán gẫu & Chém gió",
+    descVi: "Buffer → Casual Stance → Phrasal Action → Bounce-back. Hội thoại đời thường tự nhiên.",
+    badge: "Bản xứ ⚡",
+    color: "bg-amber-500/10 text-amber-600 border-amber-500/30",
+  },
+  {
+    id: "phrasal_storytelling",
+    labelVi: "Kể chuyện Phrasal Verbs",
+    descVi: "Narrative Hook → Snag → Phrasal Turnaround → Takeaway. Kể chuyện đời thường dí dỏm.",
+    badge: "Kể chuyện 📖",
+    color: "bg-indigo-500/10 text-indigo-600 border-indigo-500/30",
   },
 ];
 
@@ -170,6 +183,7 @@ export default function ChunkAutomaticityPage() {
   const [pendingSpokenText, setPendingSpokenText] = useState<string | null>(null);
   const [pendingLatencyMs, setPendingLatencyMs] = useState<number>(2000);
   const durationRef = useRef<NodeJS.Timeout | null>(null);
+  const isSubmittingRef = useRef(false);
 
   // ── Topic Dialog State ────────────────────────────────────────────────────
   const [isTopicDialogOpen, setIsTopicDialogOpen] = useState(false);
@@ -355,14 +369,32 @@ export default function ChunkAutomaticityPage() {
   }, [recorder, speechRec, promptDisplayTime]);
 
   const handleConfirmSubmit = useCallback(async () => {
-    if (!pendingSpokenText) return;
-    await executeEvaluation(pendingSpokenText, pendingLatencyMs);
+    if (!pendingSpokenText || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
+    try {
+      await executeEvaluation(pendingSpokenText, pendingLatencyMs);
+    } finally {
+      isSubmittingRef.current = false;
+    }
   }, [pendingSpokenText, pendingLatencyMs, executeEvaluation]);
 
   const handleReRecord = useCallback(() => {
     setPendingSpokenText(null);
     handleStartRecord();
   }, [handleStartRecord]);
+
+  const handleExitStudio = useCallback(() => {
+    if (durationRef.current) clearInterval(durationRef.current);
+    speechRec.stopListening();
+    if (recorder.status === "recording") {
+      recorder.cancel?.();
+    }
+    setIsEvaluating(false);
+    setPendingSpokenText(null);
+    setCurrentHintTier(0);
+    resetSession();
+    router.push("/");
+  }, [speechRec, recorder, setIsEvaluating, resetSession, router]);
 
   const handleContinue = () => {
     setPendingSpokenText(null);
@@ -398,6 +430,23 @@ export default function ChunkAutomaticityPage() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (["INPUT", "TEXTAREA"].includes((e.target as HTMLElement)?.tagName)) return;
+
+      if (e.code === "Escape") {
+        e.preventDefault();
+        if (isTopicDialogOpen) {
+          setIsTopicDialogOpen(false);
+        } else if (isStrategyDialogOpen) {
+          setIsStrategyDialogOpen(false);
+        } else if (isLibraryOpen) {
+          setIsLibraryOpen(false);
+        } else if (currentHintTier > 0) {
+          setCurrentHintTier(0);
+        } else {
+          handleExitStudio();
+        }
+        return;
+      }
+
       if (isTopicDialogOpen || isStrategyDialogOpen) return;
 
       if (e.code === "Space") {
@@ -423,20 +472,9 @@ export default function ChunkAutomaticityPage() {
         e.preventDefault();
         handleContinue();
       } else if (e.code === "Enter") {
-        if (pendingSpokenText && !isEvaluating) {
-          e.preventDefault();
-          handleConfirmSubmit();
-        } else if (lastChainEvaluation || lastSingleEvaluation) {
+        if (lastChainEvaluation || lastSingleEvaluation) {
           e.preventDefault();
           handleContinue();
-        }
-      } else if (e.code === "Escape") {
-        if (isLibraryOpen) {
-          e.preventDefault();
-          setIsLibraryOpen(false);
-        } else if (currentHintTier > 0) {
-          e.preventDefault();
-          setCurrentHintTier(0);
         }
       }
     };
@@ -458,69 +496,78 @@ export default function ChunkAutomaticityPage() {
     handleStopRecord,
     handleConfirmSubmit,
     handleReRecord,
+    handleExitStudio,
     router,
     speechRec,
   ]);
 
   return (
-    <div className="w-full h-full max-h-[calc(100vh-5.5rem)] flex flex-col bg-background overflow-hidden select-none">
-      {/* ── Studio Header ─────────────────────────────────────────────────── */}
-      <header className="h-14 border-b border-border/60 px-4 sm:px-6 flex items-center justify-between bg-card/60 backdrop-blur-md shrink-0">
-        {/* Left: Back + Title */}
-        <div className="flex items-center gap-3">
-          <Link href="/">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="size-8 p-0 rounded-full hover:bg-muted"
-              title="Thoát Studio"
-            >
-              <ArrowLeft className="size-4" />
-            </Button>
-          </Link>
+    <div className="w-full h-full max-h-[calc(100vh-5rem)] flex flex-col justify-between overflow-hidden rounded-none border-2 border-border bg-card p-2.5 sm:p-3.5 shadow-[4px_4px_0px_var(--industrial-shadow-color)] animate-in fade-in-0 duration-200 select-none">
+      {/* ── Studio Header (JapSpeak CombatCapsuleHUD Style) ─────────────────── */}
+      <header className="flex flex-wrap items-center justify-between gap-2.5 border-b-2 border-border pb-2.5 shrink-0">
+        {/* Left: Exit + Lab Badge + Title + Volt Lime Topic Selector + Mode Switcher */}
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
+          <button
+            type="button"
+            onClick={handleExitStudio}
+            className="size-8 shrink-0 bg-foreground text-background hover:bg-primary hover:text-primary-foreground border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] flex items-center justify-center transition-colors cursor-pointer"
+            title="Thoát phiên luyện tập [ESC]"
+          >
+            <X className="size-4 stroke-[2.5]" />
+          </button>
 
-          <div className="flex items-center gap-2">
-            <div className="size-7 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-              <Layers className="size-4" />
-            </div>
-            <span className="font-bold text-sm tracking-tight text-foreground hidden sm:block">
-              Chunk Automaticity Studio
-            </span>
-            <Badge variant="secondary" className="text-[10px] font-mono hidden lg:inline-flex">
-              {mode === "chain_builder" ? "Speech Chain Assembly" : "Progressive Recall"}
-            </Badge>
-          </div>
-        </div>
+          <span className="px-2 py-1 bg-primary text-primary-foreground font-mono text-[10px] font-extrabold border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] uppercase tracking-wider shrink-0">
+            LAB-05 // DAG-4
+          </span>
 
-        {/* Right Controls */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+          <span className="text-xs md:text-sm font-serif font-extrabold uppercase tracking-tight text-foreground hidden sm:inline">
+            Chunk Automaticity
+          </span>
+
+          <button
+            type="button"
+            onClick={() => {
+              setPendingTopicId(selectedTopicId || "random");
+              setLocalCustomTopic(customTopicText || "");
+              setIsTopicDialogOpen(true);
+            }}
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-accent text-accent-foreground hover:bg-primary hover:text-primary-foreground border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] text-xs font-mono font-extrabold transition-all cursor-pointer group max-w-[200px] sm:max-w-[260px] truncate"
+            title="Chọn chủ đề luyện tập"
+          >
+            <Compass className="size-3.5 shrink-0 stroke-[2.5] group-hover:rotate-45 transition-transform" />
+            <span className="truncate">{currentTopicLabel}</span>
+            <ChevronDown className="size-3.5 shrink-0 ml-0.5 stroke-[2.5]" />
+          </button>
+
           {/* Mode Switcher */}
-          <div className="flex items-center bg-muted/60 p-0.5 rounded-xl border border-border/60">
+          <div className="flex items-center border-2 border-border bg-secondary p-0.5 shadow-[2px_2px_0px_var(--industrial-shadow-color)]">
             <button
+              type="button"
               onClick={() => {
                 setMode("chain_builder");
                 setPendingSpokenText(null);
                 fetchNextChainTask();
               }}
               className={cn(
-                "text-xs px-2.5 py-1 rounded-lg font-semibold transition-all",
+                "text-[10px] sm:text-xs px-2.5 py-0.5 font-mono font-extrabold uppercase transition-all cursor-pointer",
                 mode === "chain_builder"
-                  ? "bg-primary text-primary-foreground shadow-xs"
+                  ? "bg-primary text-primary-foreground border border-border"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
               4 Khối
             </button>
             <button
+              type="button"
               onClick={() => {
                 setMode("single_chunk");
                 setPendingSpokenText(null);
                 fetchNextSingleTask();
               }}
               className={cn(
-                "text-xs px-2.5 py-1 rounded-lg font-semibold transition-all",
+                "text-[10px] sm:text-xs px-2.5 py-0.5 font-mono font-extrabold uppercase transition-all cursor-pointer",
                 mode === "single_chunk"
-                  ? "bg-primary text-primary-foreground shadow-xs"
+                  ? "bg-primary text-primary-foreground border border-border"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
@@ -528,260 +575,243 @@ export default function ChunkAutomaticityPage() {
             </button>
           </div>
 
-          {/* Topic Selector Button */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setPendingTopicId(selectedTopicId || "random");
-              setLocalCustomTopic(customTopicText || "");
-              setIsTopicDialogOpen(true);
-            }}
-            className="rounded-xl text-xs font-semibold h-8 gap-1.5 border-border/80 hidden md:inline-flex max-w-[150px]"
-            title="Chọn chủ đề luyện tập"
-          >
-            <Compass className="size-3.5 shrink-0" />
-            <span className="truncate">{currentTopicLabel}</span>
-            <ChevronDown className="size-3 shrink-0 opacity-60" />
-          </Button>
-
           {/* Strategy Selector Button */}
           {mode === "chain_builder" && (
             <Button
               variant="outline"
               size="sm"
               onClick={() => setIsStrategyDialogOpen(true)}
-              className="rounded-xl text-xs font-semibold h-8 gap-1.5 border-border/80 hidden lg:inline-flex max-w-[160px]"
+              className="h-8 px-2.5 font-mono font-extrabold text-xs gap-1.5 border-2 border-border bg-secondary hover:bg-accent hover:text-accent-foreground text-foreground shadow-[2px_2px_0px_var(--industrial-shadow-color)] hidden xl:inline-flex max-w-[170px]"
               title="Chọn mô hình lập luận"
             >
-              <GitFork className="size-3.5 shrink-0" />
+              <GitFork className="size-3.5 shrink-0 text-primary" />
               <span className="truncate">{currentStrategyLabel}</span>
-              <ChevronDown className="size-3 shrink-0 opacity-60" />
+              <ChevronDown className="size-3 shrink-0" />
             </Button>
           )}
+        </div>
 
-          {/* Session Counter */}
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-muted/50 border border-border/60 text-xs font-mono">
-            <span className="text-muted-foreground">Câu #{currentTaskIndex}</span>
-            {completedTasksCount > 0 && (
-              <>
-                <span className="text-border">·</span>
-                <span className="text-emerald-600 font-semibold">✓ {completedTasksCount}</span>
-              </>
-            )}
-          </div>
-
+        {/* Right Controls */}
+        <div className="flex items-center gap-2 shrink-0">
           {/* My Chunks */}
           <Button
             variant="outline"
             size="sm"
             onClick={() => setIsLibraryOpen(true)}
-            className="rounded-xl text-xs font-semibold h-8 gap-1.5 border-border/80 hidden lg:inline-flex"
+            className="h-8 px-2.5 font-mono font-extrabold text-xs gap-1.5 border-2 border-border bg-secondary hover:bg-accent hover:text-accent-foreground text-foreground shadow-[2px_2px_0px_var(--industrial-shadow-color)] hidden lg:inline-flex"
           >
-            <BookOpen className="size-3.5" />
-            <span>My Chunks ({library.length})</span>
+            <BookOpen className="size-3.5 text-primary" />
+            <span>CHUNKS ({library.length})</span>
           </Button>
 
-          {/* Next Chain */}
+          {/* Next Task Action Button */}
           <Button
             variant="outline"
             size="sm"
             onClick={handleContinue}
             disabled={isGenerating || isEvaluating}
-            className="rounded-xl text-xs font-semibold h-8 gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
+            className="h-8 px-2.5 font-mono font-extrabold text-xs gap-1.5 border-2 border-border bg-secondary hover:bg-accent hover:text-accent-foreground text-foreground shadow-[2px_2px_0px_var(--industrial-shadow-color)] transition-all"
             title="Chuỗi tiếp (phím R)"
           >
-            <Sparkles className="size-3.5" />
-            <span className="hidden sm:inline">Tiếp [R]</span>
+            <Sparkles className={`size-3.5 text-primary ${isGenerating ? "animate-spin" : ""}`} />
+            <span>TIẾP</span>
+            <kbd className="hidden sm:inline-flex">R</kbd>
           </Button>
 
-          {/* Finish & Summary */}
-          {completedTasksCount > 0 && (
-            <Button
-              size="sm"
-              onClick={finishSessionManually}
-              className="rounded-xl text-xs font-bold h-8 gap-1.5 bg-amber-500 hover:bg-amber-600 text-white shadow-sm shadow-amber-500/30"
-              title="Kết thúc & Xem kết quả"
-            >
-              <Trophy className="size-3.5" />
-              <span className="hidden sm:inline">Kết thúc</span>
-            </Button>
-          )}
+          {/* Progress Counter */}
+          <div className="hidden md:flex items-center gap-1.5 px-2 py-1 bg-secondary border-2 border-border font-mono text-[10px] font-extrabold text-foreground">
+            <span>#{currentTaskIndex}</span>
+            {completedTasksCount > 0 && (
+              <>
+                <span className="text-border">·</span>
+                <span className="text-[#00A854]">DONE: {completedTasksCount}</span>
+              </>
+            )}
+          </div>
 
-          <GlobalAiSelector size="sm" />
+          {/* Finish & Summary */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={finishSessionManually}
+            disabled={isGenerating || isEvaluating}
+            className="h-8 px-2.5 font-mono font-extrabold text-xs gap-1.5 border-2 border-border bg-foreground text-background hover:bg-primary hover:text-primary-foreground shadow-[2px_2px_0px_var(--industrial-shadow-color)] transition-all"
+            title="Kết thúc & Xem kết quả"
+          >
+            <Trophy className="size-3.5 text-accent" />
+            <span className="hidden sm:inline">KẾT THÚC</span>
+          </Button>
         </div>
       </header>
 
       {/* ── Main Studio Body ───────────────────────────────────────────────── */}
-      <main className="flex-1 p-3 sm:p-4 overflow-hidden min-h-0">
-        <div className="h-full w-full grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 overflow-hidden">
-          {/* Column 1 (4 cols): Prompt Card */}
-          <div className="lg:col-span-4 h-full min-h-0 overflow-hidden flex flex-col">
-            {isGenerating ? (
-              <Card className="h-full rounded-3xl border border-border/80 bg-card p-6 flex flex-col items-center justify-center space-y-4 text-center">
-                <div className="size-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center animate-pulse">
-                  <Sparkles className="size-7 animate-spin" />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-bold text-foreground">
-                    AI đang thiết kế chuỗi khối Speech Chain...
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Chuẩn bị 4 khối kết nối tự nhiên theo chủ đề {currentTopicLabel}
-                  </p>
-                </div>
-                <Skeleton className="h-32 w-full rounded-2xl mt-4" />
-              </Card>
-            ) : generationError ? (
-              <Card className="h-full rounded-3xl border border-red-500/30 bg-red-500/5 p-6 flex flex-col items-center justify-center space-y-4 text-center">
-                <div className="size-12 rounded-2xl bg-red-500/15 text-red-600 flex items-center justify-center">
-                  <AlertTriangle className="size-6" />
-                </div>
-                <div className="space-y-1">
-                  <h3 className="text-sm font-bold text-foreground">Không thể tạo bài tập từ AI</h3>
-                  <p className="text-xs text-muted-foreground max-w-sm">{generationError}</p>
-                </div>
-                <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+      <main className="flex-1 min-h-0 p-2 sm:p-2.5 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-2.5 lg:gap-3">
+        {/* Column 1 (4 cols): Prompt Card */}
+        <div className="lg:col-span-4 h-full min-h-0 overflow-hidden flex flex-col">
+          {isGenerating ? (
+            <Card className="h-full rounded-none border-2 border-border bg-card shadow-[4px_4px_0px_var(--industrial-shadow-color)] p-6 flex flex-col items-center justify-center space-y-4 text-center">
+              <div className="size-14 bg-primary text-primary-foreground border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] flex items-center justify-center animate-pulse">
+                <Sparkles className="size-7 animate-spin" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-mono font-extrabold uppercase text-foreground">
+                  AI ĐANG THIẾT KẾ CHUỖI KHỐI SPEECH CHAIN...
+                </p>
+                <p className="text-xs font-mono text-muted-foreground">
+                  Chuẩn bị 4 khối kết nối tự nhiên theo chủ đề {currentTopicLabel}
+                </p>
+              </div>
+              <Skeleton className="h-32 w-full rounded-none border-2 border-border mt-4" />
+            </Card>
+          ) : generationError ? (
+            <Card className="h-full rounded-none border-2 border-border bg-card shadow-[4px_4px_0px_var(--industrial-shadow-color)] p-6 flex flex-col items-center justify-center space-y-4 text-center">
+              <div className="size-12 bg-destructive text-destructive-foreground border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] flex items-center justify-center">
+                <AlertTriangle className="size-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-mono font-extrabold uppercase text-foreground">
+                  KHÔNG THỂ TẠO BÀI TẬP TỪ AI
+                </h3>
+                <p className="text-xs font-mono text-muted-foreground max-w-sm">{generationError}</p>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    clearGenerationError();
+                    if (mode === "chain_builder") fetchNextChainTask();
+                    else fetchNextSingleTask();
+                  }}
+                  className="font-mono font-extrabold text-xs gap-1.5 h-8 px-3 border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)]"
+                >
+                  <RotateCcw className="size-3.5" />
+                  <span>THỬ LẠI NGAY</span>
+                </Button>
+                <Link href="/settings">
                   <Button
+                    variant="outline"
                     size="sm"
-                    onClick={() => {
-                      clearGenerationError();
-                      if (mode === "chain_builder") fetchNextChainTask();
-                      else fetchNextSingleTask();
-                    }}
-                    className="rounded-xl font-bold text-xs gap-1.5 h-9 px-4 btn-spring"
+                    className="font-mono font-extrabold text-xs h-8 px-3 gap-1.5 border-2 border-border bg-secondary shadow-[2px_2px_0px_var(--industrial-shadow-color)]"
                   >
-                    <RotateCcw className="size-3.5" />
-                    <span>Thử lại ngay</span>
+                    <Settings2 className="size-3.5" />
+                    <span>CÀI ĐẶT AI MODEL</span>
                   </Button>
-                  <Link href="/settings">
-                    <Button variant="outline" size="sm" className="rounded-xl text-xs h-9 px-3 gap-1.5">
-                      <Settings2 className="size-3.5" />
-                      <span>Cài đặt AI Model</span>
-                    </Button>
-                  </Link>
-                </div>
-              </Card>
-            ) : (
-              <ChunkPromptCard
-                mode={mode}
-                chainTask={currentChainTask}
-                singleTask={currentSingleTask}
-                currentHintTier={currentHintTier}
-                onSelectHintTier={setCurrentHintTier}
-                onNextTask={handleContinue}
-                isGeneratingNext={isGenerating}
-                onRegenerateAI={generateNewTaskWithAI}
-                isRegeneratingAI={isRegeneratingAI}
-              />
-            )}
-          </div>
-
-          {/* Column 2 (5 cols): Context Card */}
-          <div className="lg:col-span-5 h-full min-h-0 overflow-hidden flex flex-col">
-            <ChunkContextCard
+                </Link>
+              </div>
+            </Card>
+          ) : (
+            <ChunkPromptCard
               mode={mode}
               chainTask={currentChainTask}
               singleTask={currentSingleTask}
               currentHintTier={currentHintTier}
               onSelectHintTier={setCurrentHintTier}
+              onNextTask={handleContinue}
+              isGeneratingNext={isGenerating}
+              onRegenerateAI={generateNewTaskWithAI}
+              isRegeneratingAI={isRegeneratingAI}
             />
-          </div>
+          )}
+        </div>
 
-          {/* Column 3 (3 cols): Speaking Controller OR Feedback */}
-          <div className="lg:col-span-3 h-full min-h-0 overflow-hidden flex flex-col">
-            {lastChainEvaluation || lastSingleEvaluation ? (
-              <ChunkFeedbackCard
-                chainEvaluation={lastChainEvaluation}
-                singleEvaluation={lastSingleEvaluation}
-                onRetry={handleRetryCurrent}
-                onContinue={handleContinue}
-              />
-            ) : (
-              <SpeakingController
-                compact={true}
-                status={
-                  isEvaluating
-                    ? "processing"
-                    : recorder.status === "recording"
-                    ? "recording"
-                    : "idle"
-                }
-                isListening={speechRec.isListening}
-                liveTranscript={speechRec.fullTranscript || speechRec.transcript}
-                durationMs={recordingDurationMs}
-                autoStartMic={autoStartMic}
-                onToggleAutoStartMic={setAutoStartMic}
-                onStartRecord={handleStartRecord}
-                onStopRecord={handleStopRecord}
-                onSubmitTextFallback={(text) => executeEvaluation(text, 1500)}
-                onOpenHints={() => setCurrentHintTier((prev) => (prev >= 4 ? 0 : prev + 1))}
-                isEvaluating={isEvaluating}
-                onResetLiveTranscript={() => {
-                  speechRec.resetTranscript();
-                  setPendingSpokenText(null);
-                }}
-                pendingText={pendingSpokenText}
-                onConfirmSubmit={handleConfirmSubmit}
-                onReRecord={handleReRecord}
-              />
-            )}
-          </div>
+        {/* Column 2 (5 cols): Context Card */}
+        <div className="lg:col-span-5 h-full min-h-0 overflow-hidden flex flex-col">
+          <ChunkContextCard
+            mode={mode}
+            chainTask={currentChainTask}
+            singleTask={currentSingleTask}
+            currentHintTier={currentHintTier}
+            onSelectHintTier={setCurrentHintTier}
+          />
+        </div>
+
+        {/* Column 3 (3 cols): Speaking Controller OR Feedback */}
+        <div className="lg:col-span-3 h-full min-h-0 overflow-hidden flex flex-col">
+          {lastChainEvaluation || lastSingleEvaluation ? (
+            <ChunkFeedbackCard
+              chainEvaluation={lastChainEvaluation}
+              singleEvaluation={lastSingleEvaluation}
+              onRetry={handleRetryCurrent}
+              onContinue={handleContinue}
+            />
+          ) : (
+            <SpeakingController
+              compact={true}
+              status={
+                isEvaluating
+                  ? "processing"
+                  : recorder.status === "recording"
+                  ? "recording"
+                  : "idle"
+              }
+              isListening={speechRec.isListening}
+              liveTranscript={speechRec.fullTranscript || speechRec.transcript}
+              durationMs={recordingDurationMs}
+              autoStartMic={autoStartMic}
+              onToggleAutoStartMic={setAutoStartMic}
+              onStartRecord={handleStartRecord}
+              onStopRecord={handleStopRecord}
+              onSubmitTextFallback={(text) => executeEvaluation(text, 1500)}
+              onOpenHints={() => setCurrentHintTier((prev) => (prev >= 4 ? 0 : prev + 1))}
+              isEvaluating={isEvaluating}
+              onResetLiveTranscript={() => {
+                speechRec.resetTranscript();
+                setPendingSpokenText(null);
+              }}
+              pendingText={pendingSpokenText}
+              onConfirmSubmit={handleConfirmSubmit}
+              onReRecord={handleReRecord}
+            />
+          )}
         </div>
       </main>
 
-      {/* ── Studio Footer Dock ─────────────────────────────────────────────── */}
-      <footer className="h-10 border-t border-border/40 px-4 sm:px-6 flex items-center justify-between bg-card/40 backdrop-blur-xs text-[11px] text-muted-foreground font-mono shrink-0">
-        <div className="flex items-center gap-4 overflow-x-auto">
-          <span className="flex items-center gap-1.5">
-            <kbd className="px-1 py-0.5 rounded bg-muted border text-[10px]">Space</kbd>
+      {/* ── Studio Footer Dock (JapSpeak Mechanical Keycaps Style) ─────────── */}
+      <footer className="flex flex-wrap items-center justify-between gap-2 border-t-2 border-border pt-2 shrink-0 text-[10px] font-mono font-extrabold text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="flex items-center gap-1">
+            <kbd>SPACE</kbd>
             <span>
               {lastChainEvaluation || lastSingleEvaluation
-                ? "Nói lại"
+                ? "NÓI LẠI"
                 : pendingSpokenText
-                ? "Thu âm lại"
+                ? "THU LẠI"
                 : recorder.status === "recording"
-                ? "Dừng nói"
-                : "Bật mic"}
+                ? "DỪNG NÓI"
+                : "THU ÂM/DỪNG"}
             </span>
           </span>
-          {recorder.status === "recording" && (
-            <span className="flex items-center gap-1.5 text-red-500 font-semibold animate-pulse">
-              <kbd className="px-1 py-0.5 rounded bg-red-500/20 text-red-500 border border-red-500/30 text-[10px]">
-                Backspace
-              </kbd>
-              <span>Xóa câu dở</span>
-            </span>
-          )}
-          <span className="flex items-center gap-1.5">
-            <kbd className="px-1 py-0.5 rounded bg-muted border text-[10px]">H</kbd>
-            <span>Đổi gợi ý T1-T4</span>
+          <span className="flex items-center gap-1">
+            <kbd>BKSP</kbd>
+            <span>XOÁ NÓI LẠI</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <kbd>H</kbd>
+            <span>GỢI Ý (T{currentHintTier}/4)</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <kbd>R</kbd>
+            <span>ĐỔI BÀI</span>
           </span>
           {pendingSpokenText && !isEvaluating && (
-            <span className="flex items-center gap-1.5 text-primary font-bold">
-              <kbd className="px-1 py-0.5 rounded bg-primary text-primary-foreground border text-[10px]">Enter</kbd>
-              <span>Nộp bài chấm điểm</span>
+            <span className="flex items-center gap-1 text-primary">
+              <kbd>ENTER</kbd>
+              <span>NỘP BÀI</span>
             </span>
           )}
           {(lastChainEvaluation || lastSingleEvaluation) && (
-            <span className="flex items-center gap-1.5 text-primary font-bold">
-              <kbd className="px-1 py-0.5 rounded bg-primary text-primary-foreground border text-[10px]">Enter</kbd>
-              <span>Chuỗi tiếp theo</span>
+            <span className="flex items-center gap-1 text-primary">
+              <kbd>ENTER</kbd>
+              <span>BÀI MỚI</span>
             </span>
           )}
-          <span className="flex items-center gap-1.5">
-            <kbd className="px-1 py-0.5 rounded bg-muted border text-[10px]">R</kbd>
-            <span>Chuỗi mới</span>
-          </span>
-          <span className="flex items-center gap-1.5">
-            <kbd className="px-1 py-0.5 rounded bg-muted border text-[10px]">Esc</kbd>
-            <span>Thoát Studio</span>
-          </span>
         </div>
 
-        <span className="hidden sm:inline text-primary font-bold">
-          100% Real Dynamic AI Engine
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="px-2 py-0.5 bg-secondary text-foreground border border-border uppercase">
+            MODE: {mode === "chain_builder" ? "DAG-4 CHAIN" : "RECALL T1-T4"}
+          </span>
+        </div>
       </footer>
 
       {/* ── My Chunks Drawer ───────────────────────────────────────────────── */}

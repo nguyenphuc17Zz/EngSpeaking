@@ -262,7 +262,7 @@ export const useSurvivalStore = create<SurvivalStoreState>()(
         set({
           sessionMode: mode,
           sessionConfig: config,
-          autoStartMic: false,
+          autoStartMic: get().autoStartMic,
           sessionStartedAt: new Date().toISOString(),
           completedTasksCount: 0,
           currentTaskIndex: 0,
@@ -441,6 +441,7 @@ export const useSurvivalStore = create<SurvivalStoreState>()(
           lastEvaluation: evalResult,
           adaptiveState: updatedAdaptive,
           skillMastery: updatedMastery,
+          completedTasksCount: sessionHistory.length + 1,
           sessionHistory: [
             ...sessionHistory,
             { kind: mode, task: currentTask, evaluation: evalResult, attemptsCount: attemptCount },

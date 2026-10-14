@@ -1,4 +1,5 @@
 import OXFORD_5000_ENTRIES from "./data/oxford-5000.json";
+import CORE_IPA_DATA from "@/lib/foundation/shadowing/data/core-ipa.json";
 import type { SpokenWordItem } from "@/types/vocabulary-context";
 
 export interface RawLexiconEntry {
@@ -39,7 +40,7 @@ for (const item of OXFORD_5000_ENTRIES) {
       l: level,
       i: item.i || `/${item.w}/`,
       m: item.m || item.w,
-      s: typeof item.s === "number" ? item.s : 1,
+      s: typeof (item as any).s === "number" ? (item as any).s : 1,
       c: [`use ${item.w}`, `practice ${item.w}`],
     };
     wordMap.set(lower, raw);
@@ -418,10 +419,11 @@ export async function resolveWordFast(word: string): Promise<SpokenWordItem> {
   const localHit = lookupLexiconWord(clean);
   if (localHit) return localHit;
 
-  // 2. Tier 2: Local English-Vietnamese 103k Dictionary
+  // 2. Tier 2: Local English-Vietnamese 103k Dictionary + 40k Core IPA
+  const directCoreIpa = (CORE_IPA_DATA as Record<string, string>)[clean];
   let dictMeaning = "";
   let dictPos = "noun";
-  let dictIpa = `/${clean}/`;
+  let dictIpa = directCoreIpa ? `/${directCoreIpa}/` : `/${clean}/`;
 
   try {
     if (typeof window !== "undefined") {

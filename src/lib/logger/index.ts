@@ -2,22 +2,39 @@
 
 type LogLevel = "info" | "warn" | "error" | "debug";
 
-function log(level: LogLevel, event: string, data?: Record<string, unknown>) {
-  if (process.env.NODE_ENV === "production" && level === "debug") return;
-  const payload = data ? ` ${JSON.stringify(sanitize(data))}` : "";
-  const prefix = `[VoiceEngine:${event}]`;
-  if (level === "error") console.error(prefix, data ? sanitize(data) : "");
-  else if (level === "warn") console.warn(prefix, data ? sanitize(data) : "");
-  else console.log(prefix + payload);
+function sanitizeValue(val: unknown, depth = 0): unknown {
+  if (depth > 5 || val === null || val === undefined) return val;
+  if (typeof val === "string") {
+    return val.length > 500 ? val.slice(0, 500) + "…" : val;
+  }
+  if (Array.isArray(val)) {
+    return val.map((item) => sanitizeValue(item, depth + 1));
+  }
+  if (typeof val === "object") {
+    return sanitize(val as Record<string, unknown>, depth + 1);
+  }
+  return val;
 }
 
-function sanitize(obj: Record<string, unknown>): Record<string, unknown> {
-  const clone: Record<string, unknown> = { ...obj };
-  for (const k of Object.keys(clone)) {
-    if (/api[_-]?key|secret|authorization|token/i.test(k)) clone[k] = "***";
-    if (typeof clone[k] === "string" && (clone[k] as string).length > 500) clone[k] = (clone[k] as string).slice(0, 500) + "…";
+function sanitize(obj: Record<string, unknown>, depth = 0): Record<string, unknown> {
+  const clone: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (/api[_-]?key|secret|authorization|token|password/i.test(k)) {
+      clone[k] = "***";
+    } else {
+      clone[k] = sanitizeValue(v, depth);
+    }
   }
   return clone;
+}
+
+function log(level: LogLevel, event: string, data?: Record<string, unknown>) {
+  if (process.env.NODE_ENV === "production" && level === "debug") return;
+  const sanitized = data ? sanitize(data) : undefined;
+  const prefix = `[VoiceEngine:${event}]`;
+  if (level === "error") console.error(prefix, sanitized ?? "");
+  else if (level === "warn") console.warn(prefix, sanitized ?? "");
+  else console.log(sanitized ? `${prefix} ${JSON.stringify(sanitized)}` : prefix);
 }
 
 export const logger = {

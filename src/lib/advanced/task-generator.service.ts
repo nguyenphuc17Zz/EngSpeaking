@@ -4,6 +4,11 @@ import { generateTextWithRouting } from "@/lib/ai";
 import { advancedTaskSchema } from "@/lib/validation/advanced-schemas";
 import { sampleBankTask, saveBankTask, recordUserExposure } from "@/lib/foundation/services/content-bank.service";
 import { resolveTopicForPrompt } from "@/lib/foundation/sentence-builder/topics";
+import {
+  buildCreativeAngleDirective,
+  formatAntiRepetitionList,
+  hydrateStandardFiveTierHints,
+} from "@/lib/ai/prompts/diversity-engine";
 import { ADVANCED_LEVEL_CONFIG } from "./adaptive-engine";
 import { defaultSkillTagForTrack } from "./track-map";
 import type { AdvancedLevel, AdvancedTask, AdvancedTrack, AdvancedTrainingType } from "@/types/advanced";
@@ -137,8 +142,9 @@ function cleanJson(text: string): unknown {
 
 const GENERATOR_SYSTEM = `You generate Advanced English speaking tasks for Vietnamese learners (B2-C1).
 Return ONLY valid JSON matching AdvancedTask (no markdown).
-Fields: id(string), track(reflex|argument|extended), level(L1|L2|L3), skillTag(string), instruction(Vietnamese), promptVi(Vietnamese situation), targetIntent(English core meaning), expectedResponses(2 English natural answers, L3 longer 60-120s outline), requiredMeaningElements(3-4 chunks), scaffold{level 1|2|3, template?, keywords?, starter?, constraints?}, hints[5 tiers 0-4 with penaltyWeight 0/0.1/0.25/0.5/0.85], suggestedVocabulary[{term,meaningVi}], sayItBetter{professional,casual,idiomatic}, difficulty{overall 1-10, grammarComplexity 1-5, retrievalDemand 0-1, semanticDensity 1-5}, skills[], grammarTargets[], vocabularyTargets[], topic, prepTimeSec, blitzLimitSec, requiredToulminElements.
-Keep promptVi grounded in the given topic. Avoid repeating recentPrompts.`;
+Do NOT output "hints" array — the server synthesizes 5-tier hints automatically.
+Fields: id(string), track(reflex|argument|extended), level(L1|L2|L3), skillTag(string), instruction(Vietnamese), promptVi(vivid Vietnamese situation/question), targetIntent(English core meaning), expectedResponses(2 natural English answers, L3 longer 60-120s discourse), requiredMeaningElements(3-4 chunks), scaffold{level 1|2|3, template?, keywords?, starter?, constraints?}, suggestedVocabulary[{term,meaningVi}], sayItBetter{professional,casual,idiomatic}, difficulty{overall 1-10, grammarComplexity 1-5, retrievalDemand 0-1, semanticDensity 1-5}, skills[], grammarTargets[], vocabularyTargets[], topic, prepTimeSec, blitzLimitSec, requiredToulminElements.
+Keep promptVi grounded in the given topic and creative angle. Strictly avoid clichés.`;
 
 export async function generateAdvancedTask(options: GenerateAdvancedTaskOptions = {}): Promise<AdvancedTask> {
   const track = options.track || "reflex";
@@ -149,7 +155,7 @@ export async function generateAdvancedTask(options: GenerateAdvancedTaskOptions 
 
   if (provider === "mock") return getMockTask({ ...options, track, level });
 
-  const effectiveTopic = resolveTopicForPrompt(options.topic);
+  const effectiveTopic = resolveTopicForPrompt(options.topic, options.recentPrompts);
 
   if (options.forceSource !== "ai") {
     try {
@@ -167,16 +173,20 @@ export async function generateAdvancedTask(options: GenerateAdvancedTaskOptions 
     } catch {}
   }
 
+  const creativeAngle = buildCreativeAngleDirective();
+  const avoidBlock = formatAntiRepetitionList(options.recentPrompts, 10);
+
   const userPrompt = [
     `Track: ${track} — ${TRACK_PROMPT[track]}`,
     `Level: ${level} — ${LEVEL_PROMPT[level]}`,
     `Topic: ${effectiveTopic}`,
+    creativeAngle,
     `Target difficulty: ${options.targetDifficulty ?? cfg.difficulty}/10, prepTimeSec ${options.prepTimeSec ?? cfg.prepTimeSec}, blitzLimitSec ${options.blitzLimitSec ?? cfg.blitzLimitSec}`,
     options.skillTag ? `Skill tag: ${options.skillTag}` : "",
     options.targetErrorPatternKey ? `Must naturally elicit and repair weakness: ${options.targetErrorPatternKey}` : "",
     options.recentErrors?.length ? `Recent errors to remediate: ${options.recentErrors.slice(-5).join(", ")}` : "",
-    options.recentPrompts?.length ? `Avoid repeating: ${options.recentPrompts.slice(-6).join(" | ").slice(0, 500)}` : "",
     options.pedagogicalConstraint ? `Constraint: ${options.pedagogicalConstraint}` : "",
+    avoidBlock,
   ]
     .filter(Boolean)
     .join("\n");
@@ -186,7 +196,7 @@ export async function generateAdvancedTask(options: GenerateAdvancedTaskOptions 
       const res = await generateTextWithRouting({
         provider,
         model,
-        input: { messages: [{ role: "user", content: userPrompt }], systemInstruction: GENERATOR_SYSTEM, temperature: 0.7, maxOutputTokens: 1100 },
+        input: { messages: [{ role: "user", content: userPrompt }], systemInstruction: GENERATOR_SYSTEM, temperature: 0.75, maxOutputTokens: 850 },
       });
       const parsed = cleanJson(res.text) as Record<string, unknown>;
       if (!parsed) return null;
@@ -200,6 +210,25 @@ export async function generateAdvancedTask(options: GenerateAdvancedTaskOptions 
       if (!Array.isArray(parsed.requiredToulminElements) || parsed.requiredToulminElements.length === 0) {
         parsed.requiredToulminElements = cfg.toulmin;
       }
+
+      // Deterministically hydrate 5-tier hints when omitted by compact LLM schema
+      if (!Array.isArray(parsed.hints) || parsed.hints.length === 0) {
+        const expected = Array.isArray(parsed.expectedResponses) ? (parsed.expectedResponses as string[]) : [];
+        const kws = Array.isArray(parsed.requiredMeaningElements) ? (parsed.requiredMeaningElements as string[]) : [];
+        const scaf = parsed.scaffold && typeof parsed.scaffold === "object" ? (parsed.scaffold as Record<string, unknown>) : {};
+        const toulminCue = Array.isArray(parsed.requiredToulminElements)
+          ? (parsed.requiredToulminElements as string[]).join(" → ")
+          : "Claim → Data → Warrant → Rebuttal";
+        parsed.hints = hydrateStandardFiveTierHints({
+          modelAnswer: expected[0] || String(parsed.targetIntent || "In my view, this approach is effective."),
+          keywords: kws,
+          starterOrGrammarCue: typeof scaf.starter === "string" && scaf.starter ? scaf.starter : toulminCue,
+          skeletonTemplate: typeof scaf.template === "string" && scaf.template ? scaf.template : undefined,
+          tier0Content: "Tự phản xạ và trình bày lập luận ngay.",
+          tier2Title: "Khung Toulmin & Mở đầu",
+        });
+      }
+
       parsed.source = "ai";
       const validated = advancedTaskSchema.safeParse(parsed);
       if (!validated.success) {
@@ -218,7 +247,13 @@ export async function generateAdvancedTask(options: GenerateAdvancedTaskOptions 
   if (!task) {
     if (options.forceSource !== "ai") {
       try {
-        const fb = await sampleBankTask<AdvancedTask>({ module: "advanced", level: `${track}_${level}`, difficulty: options.targetDifficulty ?? cfg.difficulty, forceSource: "bank" });
+        const fb = await sampleBankTask<AdvancedTask>({
+          module: "advanced",
+          level: `${track}_${level}`,
+          difficulty: options.targetDifficulty ?? cfg.difficulty,
+          topic: options.topic && options.topic !== "random" ? options.topic : undefined,
+          forceSource: "bank",
+        });
         if (fb) {
           recordUserExposure(fb.contentId, "advanced").catch(() => {});
           return { ...fb.task, source: "bank" };

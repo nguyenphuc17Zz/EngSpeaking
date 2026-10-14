@@ -344,6 +344,128 @@ export const PRAGMATIC_DAG_STRATEGIES: Record<PragmaticStrategyType, PragmaticDA
       },
     ],
   },
+
+  casual_banter: {
+    strategy: "casual_banter",
+    titleVi: "Tán gẫu & Chém gió đời thường (Casual Banter)",
+    descriptionVi: "Phản xạ đệm lời tự nhiên, bày tỏ thái độ dí dỏm, chêm hành động đời thường và ném lại câu hỏi để giữ lửa hội thoại.",
+    recommendedLatencyMs: 2500,
+    blocksBlueprint: [
+      {
+        blockType: "buffer",
+        labelVi: "1. Đệm lời cảm thán (Conversational Reaction)",
+        rhetoricalRole: "Phản hồi cảm xúc tức thì để tạo sự kết nối thân mật",
+        transitionConnector: "Tell me about it...",
+        suggestedChunk: "Tell me about it! I completely agree...",
+        alternativeChunks: [
+          "No way! That's so true...",
+          "Fair enough, I hear you on that...",
+          "Honestly, you took the words right out of my mouth...",
+          "To be fair, that happens all the time...",
+        ],
+      },
+      {
+        blockType: "stance",
+        labelVi: "2. Thái độ đời thường (Casual Stance)",
+        rhetoricalRole: "Bộc lộ góc nhìn cá nhân thoải mái, tự nhiên",
+        transitionConnector: "The thing is...",
+        suggestedChunk: "The thing is, I kinda feel like...",
+        alternativeChunks: [
+          "I gotta say, from my perspective...",
+          "If you ask me, it's pretty clear that...",
+          "Truth is, I'm usually leaning towards...",
+          "To be completely honest with you...",
+        ],
+      },
+      {
+        blockType: "reason",
+        labelVi: "3. Hành động với Phrasal Verbs (Everyday Action)",
+        rhetoricalRole: "Dùng phrasal verbs miêu tả thói quen hoặc hành động",
+        transitionConnector: "I usually end up...",
+        suggestedChunk: "I usually end up wrapping things up early...",
+        alternativeChunks: [
+          "We ran into a crazy situation where...",
+          "I'm just trying to catch up on some rest...",
+          "I almost called off the whole thing because...",
+          "I figured out that the best way is to...",
+        ],
+      },
+      {
+        blockType: "example",
+        labelVi: "4. Ném lại câu hỏi giữ nhịp (Bounce-back Question)",
+        rhetoricalRole: "Chuyền lại lượt lời cho bạn nói để giữ mạch đàm thoại",
+        transitionConnector: "What about you?",
+        suggestedChunk: "What about you? How's that sitting with you?",
+        alternativeChunks: [
+          "Are you in the same boat as me?",
+          "What do you reckon about this?",
+          "Does that make sense, or is it just me?",
+          "What's your game plan for that?",
+        ],
+      },
+    ],
+  },
+
+  phrasal_storytelling: {
+    strategy: "phrasal_storytelling",
+    titleVi: "Kể chuyện bằng Phrasal Verbs (Phrasal Storytelling)",
+    descriptionVi: "Mở đầu câu chuyện tự nhiên, đẩy tình huống lên cao trào bằng phrasal verbs, cách tháo gỡ và đúc kết dí dỏm.",
+    recommendedLatencyMs: 3000,
+    blocksBlueprint: [
+      {
+        blockType: "buffer",
+        labelVi: "1. Khơi gợi câu chuyện (Narrative Hook)",
+        rhetoricalRole: "Thu hút sự chú ý của người nghe bằng lời dẫn chuyện tự nhiên",
+        transitionConnector: "So the other day...",
+        suggestedChunk: "So the other day, out of nowhere...",
+        alternativeChunks: [
+          "You won't believe what happened recently...",
+          "Funny story actually, it all started when...",
+          "Long story short, I found myself in...",
+          "Just the other day, something crazy went down...",
+        ],
+      },
+      {
+        blockType: "stance",
+        labelVi: "2. Tình huống éo le (The Snag)",
+        rhetoricalRole: "Đưa ra biến cố hoặc áp lực bằng phrasal verb",
+        transitionConnector: "We suddenly ran into...",
+        suggestedChunk: "We suddenly ran into an unexpected snag...",
+        alternativeChunks: [
+          "I was completely snowed under with work, and then...",
+          "We completely ran out of time and had to...",
+          "Things started falling apart when...",
+          "I had to put up with this annoying issue where...",
+        ],
+      },
+      {
+        blockType: "reason",
+        labelVi: "3. Tháo gỡ tình thế (The Turnaround)",
+        rhetoricalRole: "Hành động giải quyết nút thắt câu chuyện",
+        transitionConnector: "Luckily, we figured out...",
+        suggestedChunk: "Luckily, we came up with a quick workaround...",
+        alternativeChunks: [
+          "So we decided to call off the initial plan and...",
+          "I finally figured out how to sort it out by...",
+          "My buddy dropped by and helped me out...",
+          "We ended up turning things around by...",
+        ],
+      },
+      {
+        blockType: "example",
+        labelVi: "4. Đúc kết & Bài học vui (The Takeaway)",
+        rhetoricalRole: "Chốt lại câu chuyện bằng cảm nhận hài hước hoặc bài học",
+        transitionConnector: "At the end of the day...",
+        suggestedChunk: "At the end of the day, it all turned out fine.",
+        alternativeChunks: [
+          "Lesson learned: always have a backup plan!",
+          "Looking back, it was actually hilarious.",
+          "Long story short, we barely made it through.",
+          "So yeah, that's pretty much how it went down.",
+        ],
+      },
+    ],
+  },
 };
 
 // 2. Rich Dynamic Persona & Scenario Seeds
@@ -412,6 +534,22 @@ export const DYNAMIC_SCENARIO_SEEDS: DynamicScenarioSeed[] = [
     targetQuestion: "Do you believe short-form video content is genuinely shortening our attention spans?",
     recommendedStrategy: "cause_effect_chain",
   },
+  {
+    domain: "daily_life",
+    topic: "Kế hoạch xả hơi cuối tuần (Weekend Chill & Banter)",
+    persona: "Bạn thân rủ bạn đi chơi cuối tuần và hỏi thăm tình hình dạo này",
+    situationVi: "Bạn thân hỏi cuối tuần này bạn có tính đi đâu xõa không hay lại nằm nhà cày phim sau một tuần ngập đầu trong công việc.",
+    targetQuestion: "Any fun plans for this weekend, or are you just gonna chill at home?",
+    recommendedStrategy: "casual_banter",
+  },
+  {
+    domain: "daily_life",
+    topic: "Sự cố dở khóc dở cười khi đi du lịch hoặc đi làm (Mishap Story)",
+    persona: "Đồng nghiệp hỏi thăm về chuyến đi nghỉ gần nhất của bạn",
+    situationVi: "Đồng nghiệp hỏi thăm chuyến đi nghỉ tuần trước của bạn có suôn sẻ không sau khi nghe tin chuyến bay bị trễ giờ.",
+    targetQuestion: "I heard your trip had a bit of drama last week! How did that whole situation turn out?",
+    recommendedStrategy: "phrasal_storytelling",
+  },
 ];
 
 /**
@@ -436,9 +574,10 @@ export function samplePragmaticDAG(options: {
     if (filtered.length > 0) candidateSeeds = filtered;
   }
 
-  const scenarioSeed =
+  const rawSeed =
     candidateSeeds[Math.floor(Math.random() * candidateSeeds.length)] ||
     DYNAMIC_SCENARIO_SEEDS[0];
+  const scenarioSeed: DynamicScenarioSeed = { ...rawSeed };
 
   // If user provided a custom topic override
   if (options.topic && options.topic.trim()) {

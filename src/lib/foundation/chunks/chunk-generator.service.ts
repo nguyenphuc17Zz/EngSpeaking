@@ -27,6 +27,7 @@ import {
 import { sampleBankTask, saveBankTask, recordUserExposure } from "@/lib/foundation/services/content-bank.service";
 
 import { SEED_CHUNK_LIBRARY } from "./seed-chunks";
+import { buildCreativeAngleDirective } from "@/lib/ai/prompts/diversity-engine";
 export { SEED_CHUNK_LIBRARY };
 
 // Minimal test fixture strictly for offline test runner when provider === "mock"
@@ -69,29 +70,14 @@ export function getMockChainTask(topic?: string, strategy: PragmaticStrategyType
   };
 }
 
+import { cleanAiJson } from "@/lib/foundation/shared/json-parser";
+
 function cleanJson(text: string): unknown {
-  let cleaned = text.trim()
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "");
-
-  // Clean invalid assignments like "var_name = " inside arrays/objects
-  cleaned = cleaned.replace(/\b[a-zA-Z0-9_]+\s*=\s*(")/g, "$1");
-  // Clean trailing commas before closing braces/brackets
-  cleaned = cleaned.replace(/,\s*([}\]])/g, "$1");
-
+  const cleaned = cleanAiJson(text);
+  if (!cleaned) return null;
   try {
     return JSON.parse(cleaned);
   } catch {
-    const m = cleaned.match(/\{[\s\S]*\}/);
-    if (m) {
-      try {
-        const candidate = m[0]
-          .replace(/\b[a-zA-Z0-9_]+\s*=\s*(")/g, "$1")
-          .replace(/,\s*([}\]])/g, "$1");
-        return JSON.parse(candidate);
-      } catch {}
-    }
     return null;
   }
 }
@@ -145,7 +131,7 @@ export async function generateChunkChainTask(options: {
   forceSource?: "bank" | "ai" | "auto";
 } = {}): Promise<ChunkChainTask> {
   const provider = options.provider || "gemini";
-  const model = options.model && options.model !== "auto" ? options.model : "gemini-3.5-flash-lite";
+  const model = options.model || "auto";
 
   // 1. Sample Pragmatic DAG Blueprint & Dynamic Scenario Seed
   const { strategyDef, scenarioSeed } = samplePragmaticDAG({
@@ -196,8 +182,8 @@ export async function generateChunkChainTask(options: {
         input: {
           messages: [{ role: "user", content: userPrompt }],
           systemInstruction: CHUNK_CHAIN_GENERATOR_SYSTEM,
-          temperature: 0.7,
-          maxOutputTokens: 1000,
+          temperature: 0.75,
+          maxOutputTokens: 850,
         },
       });
 
@@ -256,7 +242,7 @@ export async function generateChunkChainTask(options: {
         }));
       }
 
-      // Robust 4-Tier hints sanitization
+      // Robust 4-Tier hints hydration
       if (!Array.isArray(parsed.hints) || parsed.hints.length === 0) {
         const blocks = Array.isArray(parsed.blocks) ? (parsed.blocks as any[]) : [];
         const overview = blocks.map((b, i) => `Khối ${i + 1} (${b.labelVi || ""}): "${b.suggestedChunk || ""}"`).join(" → ");
@@ -355,7 +341,7 @@ export async function generateSingleChunkTask(options: {
   const chunk = options.chunk || SEED_CHUNK_LIBRARY[0];
   const stage = options.stage || "contextual_use";
   const provider = options.provider || "gemini";
-  const model = options.model && options.model !== "auto" ? options.model : "gemini-3.5-flash-lite";
+  const model = options.model || "auto";
 
   if (provider === "mock") {
     return getMockSingleChunkTask(chunk, stage);
@@ -363,9 +349,11 @@ export async function generateSingleChunkTask(options: {
 
   const domains = ["workplace", "daily_life", "opinions", "travel"] as const;
   const domain = domains[Math.floor(Math.random() * domains.length)];
+  const creativeAngle = buildCreativeAngleDirective();
 
   const userPrompt = `Generate a realistic spoken communicative task for the target chunk "${chunk.canonicalChunk}" (Meaning: "${chunk.meaningVi}") in domain "${domain}" at progressive stage "${stage}".
-Make sure situationVi is in natural Vietnamese and promptText is an authentic question in English. Return strict JSON.`;
+- ${creativeAngle}
+Make sure situationVi is in vivid Vietnamese and promptText is an authentic conversational question in English. Return strict JSON.`;
 
   let lastErrorMsg = "";
 
@@ -377,8 +365,8 @@ Make sure situationVi is in natural Vietnamese and promptText is an authentic qu
         input: {
           messages: [{ role: "user", content: userPrompt }],
           systemInstruction: CHUNK_TASK_GENERATOR_SYSTEM,
-          temperature: 0.7,
-          maxOutputTokens: 800,
+          temperature: 0.75,
+          maxOutputTokens: 600,
         },
       });
 
@@ -393,6 +381,17 @@ Make sure situationVi is in natural Vietnamese and promptText is an authentic qu
       parsed.stage = stage;
       parsed.expectedChunkUsage = chunk.canonicalChunk;
 
+      const modelSentence =
+        typeof parsed.modelSentence === "string" && parsed.modelSentence.trim()
+          ? parsed.modelSentence
+              .replace(/^(câu mẫu hoàn chỉnh|câu mẫu|model answer|sample sentence):\s*/i, "")
+              .trim()
+          : `Well, ${chunk.canonicalChunk} the current situation.`;
+      const scaffold =
+        typeof parsed.scaffoldText === "string" && parsed.scaffoldText.trim()
+          ? parsed.scaffoldText.trim()
+          : `Well, ${chunk.canonicalChunk} ______ .`;
+
       if (!Array.isArray(parsed.hints) || parsed.hints.length === 0) {
         parsed.hints = [
           { tier: 0, title: "Không gợi ý", content: "Tự bật cụm từ ngay lập tức." },
@@ -400,17 +399,17 @@ Make sure situationVi is in natural Vietnamese and promptText is an authentic qu
           {
             tier: 2,
             title: "Cụm biến thể",
-            content: (chunk.variants || []).map((v: { expression: string }) => v.expression).join(" / "),
+            content: (chunk.variants || []).map((v: { expression: string }) => v.expression).join(" / ") || chunk.canonicalChunk,
           },
           {
             tier: 3,
             title: "Khung câu",
-            content: `Well, ${chunk.canonicalChunk} ______ .`,
+            content: scaffold,
           },
           {
             tier: 4,
             title: "Câu mẫu hoàn chỉnh",
-            content: `Well, ${chunk.canonicalChunk} the current situation.`,
+            content: modelSentence,
           },
         ];
       } else {

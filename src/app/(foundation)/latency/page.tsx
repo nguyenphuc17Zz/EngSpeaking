@@ -169,6 +169,7 @@ export default function LatencyTrainingPage() {
 
   const stopwatchRef = useRef<NodeJS.Timeout | null>(null);
   const speechDurationRef = useRef<NodeJS.Timeout | null>(null);
+  const isSubmittingRef = useRef(false);
 
   // Zero-Lobby: Automatically initialize Endless Mode on first mount if no task
   useEffect(() => {
@@ -356,8 +357,13 @@ export default function LatencyTrainingPage() {
 
   // Confirm submit pending speech
   const handleConfirmSubmit = useCallback(async () => {
-    if (!pendingSpokenText) return;
-    await submitAttemptForEvaluation(pendingSpokenText, pendingLatencyMs, pendingDurationMs);
+    if (!pendingSpokenText || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
+    try {
+      await submitAttemptForEvaluation(pendingSpokenText, pendingLatencyMs, pendingDurationMs);
+    } finally {
+      isSubmittingRef.current = false;
+    }
   }, [pendingSpokenText, pendingLatencyMs, pendingDurationMs, submitAttemptForEvaluation]);
 
   // Re-record
@@ -464,21 +470,22 @@ export default function LatencyTrainingPage() {
         handleSkipOrNextTask();
       }
 
-      // Enter: Confirm pending submit or Advance to next question
+      // Enter: Advance to next question after evaluation (pending review Enter is handled by SpeakingController)
       if (e.code === "Enter") {
-        if (pendingSpokenText && !isEvaluating) {
-          e.preventDefault();
-          handleConfirmSubmit();
-        } else if (lastEvaluation) {
+        if (lastEvaluation) {
           e.preventDefault();
           handleContinueTask();
         }
       }
 
-      // Esc: Collapse hint or Exit Studio
+      // Esc: Close modals, collapse hint, or Exit Studio
       if (e.code === "Escape") {
         e.preventDefault();
-        if (currentHintTier > 0) {
+        if (isTopicModalOpen) {
+          setIsTopicModalOpen(false);
+        } else if (isDrillModalOpen) {
+          setIsDrillModalOpen(false);
+        } else if (currentHintTier > 0) {
           setCurrentHintTier(0);
         } else {
           handleExitStudio();
@@ -494,6 +501,8 @@ export default function LatencyTrainingPage() {
     currentHintTier,
     isEvaluating,
     pendingSpokenText,
+    isTopicModalOpen,
+    isDrillModalOpen,
     handleStartRecord,
     handleStopRecord,
     handleConfirmSubmit,
@@ -547,34 +556,37 @@ export default function LatencyTrainingPage() {
     );
   }
 
-  // ==================== 1. ZERO-LOBBY STUDIO VIEW ====================
+  // ==================== 1. ZERO-LOBBY STUDIO VIEW (JapSpeak CombatCapsuleHUD Style) ====================
   return (
-    <div className="w-full h-full max-h-[calc(100vh-5.5rem)] flex flex-col overflow-hidden text-foreground rounded-3xl border border-border/80 bg-card shadow-xs">
-      {/* Studio Top Header Bar */}
-      <header className="h-13 border-b border-border/80 bg-card/95 backdrop-blur-md px-3 sm:px-5 flex items-center justify-between gap-2 shrink-0 z-10">
-        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-          <Button
+    <div className="w-full h-full max-h-[calc(100vh-5rem)] flex flex-col justify-between overflow-hidden rounded-none border-2 border-border bg-card p-2.5 sm:p-3.5 shadow-[4px_4px_0px_var(--industrial-shadow-color)] animate-in fade-in-0 duration-200">
+      {/* Studio Top Header Bar (JapSpeak CombatCapsuleHUD Style) */}
+      <header className="flex flex-wrap items-center justify-between gap-2.5 border-b-2 border-border pb-2.5 shrink-0">
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
+          <button
             type="button"
-            variant="ghost"
-            size="sm"
             onClick={handleExitStudio}
-            className="h-8 px-2.5 rounded-xl text-xs font-semibold gap-1.5 text-muted-foreground hover:text-foreground hover:bg-muted shrink-0"
-            title="Thoát phòng tập (Esc)"
+            className="size-8 shrink-0 bg-foreground text-background hover:bg-primary hover:text-primary-foreground border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] flex items-center justify-center transition-colors cursor-pointer"
+            title="Thoát phòng tập [ESC]"
           >
-            <ArrowLeft className="size-4" />
-            <span className="hidden sm:inline">Rời Studio</span>
-          </Button>
+            <X className="size-4 stroke-[2.5]" />
+          </button>
 
-          <div className="h-4 w-px bg-border/60 hidden sm:block shrink-0" />
+          <span className="px-2 py-1 bg-primary text-primary-foreground font-mono text-[10px] font-extrabold border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] uppercase tracking-wider shrink-0">
+            LAB-04 // BLITZ #{String(currentTaskIndex + 1).padStart(2, "0")}
+          </span>
+
+          <span className="text-xs md:text-sm font-serif font-extrabold uppercase tracking-tight text-foreground hidden sm:inline">
+            Phản xạ tốc độ
+          </span>
 
           {/* Topic Selector Button */}
           <button
             type="button"
             onClick={() => setIsTopicModalOpen(true)}
-            className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-xl border border-border/70 hover:border-primary/50 bg-muted/40 hover:bg-muted text-xs font-semibold text-foreground transition-all cursor-pointer shadow-2xs shrink-0 max-w-[130px] sm:max-w-[180px]"
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-accent text-accent-foreground hover:bg-primary hover:text-primary-foreground border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] text-xs font-mono font-extrabold transition-all cursor-pointer group max-w-[200px] sm:max-w-[260px] truncate"
             title="Đổi chủ đề / ngữ cảnh luyện phản xạ"
           >
-            <Compass className="size-3.5 text-primary shrink-0" />
+            <Compass className="size-3.5 shrink-0 stroke-[2.5] group-hover:rotate-45 transition-transform" />
             <span className="truncate">
               {
                 getTopicDisplay(
@@ -584,69 +596,52 @@ export default function LatencyTrainingPage() {
                 ).label
               }
             </span>
-            <ChevronDown className="size-3 text-muted-foreground shrink-0 ml-0.5" />
+            <ChevronDown className="size-3.5 shrink-0 ml-0.5 stroke-[2.5]" />
           </button>
 
           {/* Drill Mode Switcher Button */}
           <button
             type="button"
             onClick={() => setIsDrillModalOpen(true)}
-            className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-semibold transition-all cursor-pointer shadow-2xs shrink-0"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-none border-2 border-border bg-secondary hover:bg-accent hover:text-accent-foreground text-foreground text-xs font-mono font-extrabold transition-all cursor-pointer shadow-[2px_2px_0px_var(--industrial-shadow-color)] shrink-0"
             title="Chuyển chế độ luyện phản xạ tốc độ"
           >
-            <currentModeInfo.icon className="size-3.5 text-amber-500" />
-            <span className="hidden md:inline">{currentModeInfo.label}</span>
-            <ChevronDown className="size-3 opacity-60 ml-0.5" />
+            <currentModeInfo.icon className="size-3.5 text-primary shrink-0" />
+            <span className="hidden md:inline uppercase">{currentModeInfo.label}</span>
+            <ChevronDown className="size-3 shrink-0 ml-0.5" />
           </button>
-
-          <div className="hidden lg:block shrink-0">
-            <GlobalAiSelector size="sm" />
-          </div>
         </div>
 
-        {/* Right Header: Next Task Button + Progress Bar + Finish Button */}
+        {/* Right Header: Next Task Button + Streak + Progress + Finish Button */}
         <div className="flex items-center gap-2 shrink-0">
-          <div className="lg:hidden">
-            <GlobalAiSelector size="sm" />
-          </div>
-
           {/* Next Task Action Button */}
           <Button
             variant="outline"
             size="sm"
             onClick={handleSkipOrNextTask}
             disabled={isGenerating || isEvaluating}
-            className="h-8 px-3 rounded-xl font-bold text-xs gap-1.5 border-amber-500/40 bg-amber-500/10 hover:bg-amber-500 hover:text-white text-amber-600 dark:text-amber-400 transition-all shadow-2xs btn-spring shrink-0 cursor-pointer"
+            className="h-8 px-2.5 font-mono font-extrabold text-xs gap-1.5 border-2 border-border bg-secondary hover:bg-accent hover:text-accent-foreground text-foreground shadow-[2px_2px_0px_var(--industrial-shadow-color)] transition-all"
             title="Đổi sang câu hỏi tiếp theo (Phím R)"
           >
-            <Sparkles className={`size-3.5 ${isGenerating ? "animate-spin" : ""}`} />
-            <span>Câu tiếp theo</span>
-            <ArrowRight className="size-3.5 hidden sm:inline" />
-            <span className="text-[9px] font-mono opacity-60 hidden md:inline">[R]</span>
+            <Sparkles className={`size-3.5 text-primary ${isGenerating ? "animate-spin" : ""}`} />
+            <span>BÀI TIẾP</span>
+            <kbd className="hidden sm:inline-flex">R</kbd>
           </Button>
 
+          {adaptiveState.rapidStreak > 1 && (
+            <div className="hidden sm:flex items-center gap-1 px-2 py-1 bg-[#FFB800] text-[#0D0E0D] border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] text-[10px] font-mono font-extrabold uppercase">
+              <Flame className="size-3 fill-current" />
+              <span>STREAK {adaptiveState.rapidStreak}</span>
+            </div>
+          )}
+
           {/* Progress Indicator */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono font-bold text-foreground">
+          <div className="hidden md:flex items-center gap-1.5 px-2 py-1 bg-secondary border-2 border-border font-mono text-[10px] font-extrabold text-foreground">
+            <span>
               {targetCount > 0
                 ? `${currentTaskIndex + 1}/${targetCount}`
-                : `Câu #${currentTaskIndex + 1}`}
+                : `DONE: ${completedTasksCount}`}
             </span>
-            {targetCount === 0 ? (
-              <Badge
-                variant="outline"
-                className="text-[10px] font-mono border-amber-500/30 text-amber-600 dark:text-amber-400 hidden sm:inline-flex"
-              >
-                Đã xong {completedTasksCount}
-              </Badge>
-            ) : (
-              <div className="w-16 sm:w-20">
-                <Progress
-                  value={((currentTaskIndex + 1) / targetCount) * 100}
-                  className="h-1.5 rounded-full"
-                />
-              </div>
-            )}
           </div>
 
           {/* Finish & View Results Button */}
@@ -655,12 +650,11 @@ export default function LatencyTrainingPage() {
             size="sm"
             onClick={handleFinishSession}
             disabled={isGenerating || isEvaluating}
-            className="h-8 px-2.5 rounded-xl font-bold text-xs gap-1.5 border-amber-500/40 bg-amber-500/10 hover:bg-amber-500 hover:text-white text-amber-600 dark:text-amber-400 transition-all shadow-2xs btn-spring"
+            className="h-8 px-2.5 font-mono font-extrabold text-xs gap-1.5 border-2 border-border bg-foreground text-background hover:bg-primary hover:text-primary-foreground shadow-[2px_2px_0px_var(--industrial-shadow-color)] transition-all"
             title="Kết thúc buổi tập và xem báo cáo tổng kết"
           >
-            <Trophy className="size-3.5" />
-            <span className="hidden sm:inline">Kết thúc & Xem kết quả</span>
-            <span className="sm:hidden">Nghỉ tập</span>
+            <Trophy className="size-3.5 text-accent" />
+            <span className="hidden sm:inline">KẾT THÚC</span>
           </Button>
         </div>
       </header>
@@ -703,7 +697,7 @@ export default function LatencyTrainingPage() {
       )}
 
       {/* Studio Main Body: Professional 3-Column Split */}
-      <main className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-2.5 lg:gap-3 p-2.5 sm:p-3.5 overflow-hidden">
+      <main className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-2.5 lg:gap-3 p-2 sm:p-2.5 overflow-hidden">
         {/* Column 1 (4 cols): Prompt & Millisecond Stopwatch Gauge */}
         <section className="lg:col-span-4 h-full overflow-hidden flex flex-col min-h-0">
           {currentTask ? (
@@ -721,8 +715,8 @@ export default function LatencyTrainingPage() {
               isRegeneratingAI={isRegeneratingAI}
             />
           ) : (
-            <Card className="rounded-3xl border border-border/80 bg-card p-6 h-full flex flex-col items-center justify-center text-center space-y-4">
-              <Loader2 className="size-8 text-amber-500 animate-spin" />
+            <Card className="rounded-none border-2 border-border bg-card p-6 h-full flex flex-col items-center justify-center text-center space-y-4">
+              <Loader2 className="size-8 text-primary animate-spin" />
               <div className="space-y-1">
                 <h3 className="text-sm font-bold text-foreground">
                   AI đang chuẩn bị câu hỏi phản xạ tiếp theo...
@@ -786,53 +780,43 @@ export default function LatencyTrainingPage() {
         </section>
       </main>
 
-      {/* Studio Footer Keybindings Dock */}
-      <footer className="h-9 border-t border-border/40 bg-card/80 px-4 flex items-center justify-between text-[11px] text-muted-foreground shrink-0 select-none">
-        <div className="flex items-center gap-3 overflow-x-auto py-1">
-          <span className="flex items-center gap-1 font-mono">
-            <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
-              Space
-            </kbd>
-            <span>{lastEvaluation ? "Nói lại" : pendingSpokenText ? "Thu âm lại" : "Nói / Dừng"}</span>
+      {/* Bottom Footer Dock (JapSpeak Mechanical Keycaps Style) */}
+      <footer className="flex flex-wrap items-center justify-between gap-2 border-t-2 border-border pt-2 shrink-0 text-[10px] font-mono font-extrabold text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="flex items-center gap-1">
+            <kbd>SPACE</kbd>
+            <span>{lastEvaluation ? "NÓI LẠI" : pendingSpokenText ? "THU LẠI" : "THU ÂM/DỪNG"}</span>
           </span>
-          <span className="flex items-center gap-1 font-mono hidden sm:inline-flex">
-            <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
-              Backspace
-            </kbd>
-            <span>Xóa nói lại</span>
+          <span className="flex items-center gap-1">
+            <kbd>BKSP</kbd>
+            <span>XOÁ NÓI LẠI</span>
           </span>
-          <span className="flex items-center gap-1 font-mono">
-            <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
-              H
-            </kbd>
-            <span>Đổi gợi ý</span>
+          <span className="flex items-center gap-1">
+            <kbd>H</kbd>
+            <span>GỢI Ý (T{currentHintTier}/4)</span>
           </span>
-          {pendingSpokenText && !isEvaluating ? (
-            <span className="flex items-center gap-1 font-mono text-primary font-bold">
-              <kbd className="px-1.5 py-0.5 rounded bg-primary text-primary-foreground border text-[10px] font-bold">
-                Enter
-              </kbd>
-              <span>Nộp bài chấm điểm</span>
-            </span>
-          ) : (
-            <span className="flex items-center gap-1 font-mono hidden md:inline-flex">
-              <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
-                Enter
-              </kbd>
-              <span>Câu tiếp</span>
+          <span className="flex items-center gap-1">
+            <kbd>R</kbd>
+            <span>ĐỔI BÀI</span>
+          </span>
+          {pendingSpokenText && !isEvaluating && (
+            <span className="flex items-center gap-1 text-primary">
+              <kbd>ENTER</kbd>
+              <span>NỘP BÀI</span>
             </span>
           )}
-          <span className="flex items-center gap-1 font-mono">
-            <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-bold text-foreground">
-              Esc
-            </kbd>
-            <span>Đóng gợi ý / Thoát</span>
-          </span>
+          {lastEvaluation && (
+            <span className="flex items-center gap-1 text-primary">
+              <kbd>ENTER</kbd>
+              <span>BÀI MỚI</span>
+            </span>
+          )}
         </div>
 
-        <div className="flex items-center gap-1.5 font-mono text-[10px]">
-          <span className="size-2 rounded-full bg-amber-500 animate-pulse" />
-          <span className="hidden md:inline">Response Latency Active</span>
+        <div className="flex items-center gap-2">
+          <span className="px-2 py-0.5 bg-secondary text-foreground border border-border">
+            SLA TARGET: &lt;{((adaptiveState.currentTargetLatencyMs ?? 3000) / 1000).toFixed(1)}S
+          </span>
         </div>
       </footer>
 

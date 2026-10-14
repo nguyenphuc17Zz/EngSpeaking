@@ -4,16 +4,6 @@ import type { AIModel } from "@/types/ai";
 export const CATALOG: AIModel[] = [
   // Gemini — primary provider §8
   {
-    id: "gemini-3.7-flash",
-    providerId: "gemini",
-    displayName: "Gemini 3.7 Flash",
-    capabilities: { textGeneration: true, speechToText: false, textToSpeech: false, streaming: true, structuredOutput: true },
-    speedClass: "fast",
-    costClass: "free",
-    contextWindow: 1_048_576,
-    active: true,
-  },
-  {
     id: "gemini-2.5-flash",
     providerId: "gemini",
     displayName: "Gemini 2.5 Flash (Khuyên dùng)",
@@ -24,9 +14,9 @@ export const CATALOG: AIModel[] = [
     active: true,
   },
   {
-    id: "gemini-3.5-flash-lite",
+    id: "gemini-2.5-flash-lite",
     providerId: "gemini",
-    displayName: "Gemini 3.5 Flash Lite",
+    displayName: "Gemini 2.5 Flash Lite (Siêu tốc)",
     capabilities: { textGeneration: true, speechToText: false, textToSpeech: false, streaming: true, structuredOutput: true },
     speedClass: "fast",
     costClass: "free",
@@ -34,9 +24,9 @@ export const CATALOG: AIModel[] = [
     active: true,
   },
   {
-    id: "gemini-3.6-flash",
+    id: "gemini-2.0-flash",
     providerId: "gemini",
-    displayName: "Gemini 3.6 Flash",
+    displayName: "Gemini 2.0 Flash",
     capabilities: { textGeneration: true, speechToText: false, textToSpeech: false, streaming: true, structuredOutput: true },
     speedClass: "fast",
     costClass: "free",
@@ -44,12 +34,12 @@ export const CATALOG: AIModel[] = [
     active: true,
   },
   {
-    id: "gemini-3.5-flash",
+    id: "gemini-2.5-pro",
     providerId: "gemini",
-    displayName: "Gemini 3.5 Flash",
+    displayName: "Gemini 2.5 Pro (Chất lượng cao)",
     capabilities: { textGeneration: true, speechToText: false, textToSpeech: false, streaming: true, structuredOutput: true },
-    speedClass: "fast",
-    costClass: "free",
+    speedClass: "balanced",
+    costClass: "low",
     contextWindow: 1_048_576,
     active: true,
   },
@@ -328,6 +318,15 @@ export function getModelsForProvider(providerId: string): AIModel[] {
   return getCatalog().filter((m) => m.providerId === providerId.toLowerCase());
 }
 
+const LEGACY_GEMINI_ALIASES: Record<string, string> = {
+  "gemini-3.7-flash": "gemini-2.5-flash",
+  "gemini-3.6-flash": "gemini-2.5-flash",
+  "gemini-3.5-flash": "gemini-2.5-flash",
+  "gemini-3.5-flash-lite": "gemini-2.5-flash-lite",
+};
+
 export function getModelById(modelId: string): AIModel | undefined {
-  return getCatalog().find((m) => m.id.toLowerCase() === modelId.toLowerCase());
+  const lower = modelId.toLowerCase();
+  const resolvedId = LEGACY_GEMINI_ALIASES[lower] || lower;
+  return getCatalog().find((m) => m.id.toLowerCase() === resolvedId);
 }

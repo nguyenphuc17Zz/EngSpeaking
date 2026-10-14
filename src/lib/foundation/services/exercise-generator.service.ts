@@ -2,9 +2,25 @@
 import { generateTextWithRouting } from "@/lib/ai";
 import { foundationExerciseSchema } from "@/lib/validation/foundation-schemas";
 import { EXERCISE_GENERATOR_SYSTEM, buildExerciseUserPrompt } from "@/lib/foundation/prompts/exercise-generator";
-import type { FoundationExercise } from "@/types/foundation";
+import type { FoundationExercise, FoundationSkill, FoundationExerciseType, FoundationLevel } from "@/types/foundation";
 import { getLevelForSkill } from "@/lib/foundation/skills/taxonomy";
-import type { GenerateExerciseParams } from "@/lib/foundation/engines/exercise-engine";
+
+export interface GenerateExerciseParams {
+  skill?: FoundationSkill;
+  type?: FoundationExerciseType;
+  difficulty?: number;
+  level?: FoundationLevel;
+  mode?: "learn" | "practice" | "challenge" | "daily";
+  topic?: string;
+  previousPerformance?: string;
+  speechBank?: string[];
+  translationDependency?: number;
+  provider?: string;
+  model?: string;
+  weaknesses?: FoundationSkill[];
+  previousPrompt?: string;
+  forceSource?: "ai" | "bank" | "auto";
+}
 
 function mockExercise(params: GenerateExerciseParams): FoundationExercise {
   const skill = params.skill || "sentence_retrieval";
@@ -89,18 +105,14 @@ function durationFor(type: string, difficulty: number): number {
   return 20;
 }
 
+import { cleanAiJson } from "@/lib/foundation/shared/json-parser";
+
 function extractJson(text: string): unknown {
-  const trimmed = text.trim();
-  // Remove markdown fences if present
-  const withoutFence = trimmed.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "");
+  const cleaned = cleanAiJson(text);
+  if (!cleaned) return null;
   try {
-    return JSON.parse(withoutFence);
+    return JSON.parse(cleaned);
   } catch {
-    // Try to find first {...} block
-    const m = withoutFence.match(/\{[\s\S]*\}/);
-    if (m) {
-      try { return JSON.parse(m[0]); } catch {}
-    }
     return null;
   }
 }
@@ -171,18 +183,27 @@ export async function generateExercise(
           messages: [{ role: "user", content: userPrompt }],
           systemInstruction: EXERCISE_GENERATOR_SYSTEM,
           temperature: 0.6,
-          maxOutputTokens: 700,
+          maxOutputTokens: 450,
         },
       });
       const parsed = extractJson(res.text);
-      if (!parsed) {
+      if (!parsed || typeof parsed !== "object") {
         lastErrorMsg = "AI trả về nội dung không phải JSON hợp lệ";
         return null;
       }
-      // Ensure id exists
+      // Hydrate deterministic defaults
       const withId = parsed as Record<string, unknown>;
       if (!withId.id) withId.id = `ex_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
       if (!withId.source) withId.source = "ai";
+      if (!withId.skill) withId.skill = params.skill || "sentence_retrieval";
+      if (!withId.type) withId.type = params.type || "one_sentence";
+      if (withId.level === undefined) withId.level = level;
+      if (withId.difficulty === undefined) withId.difficulty = difficulty;
+      if (!withId.expectedDurationSec) withId.expectedDurationSec = durationFor(String(withId.type), Number(withId.difficulty));
+      if (!withId.hintPolicy) withId.hintPolicy = { maxHints: 3, allowSentenceStarter: true, allowModelAnswer: true };
+      if (!Array.isArray(withId.evaluationCriteria) || withId.evaluationCriteria.length === 0) {
+        withId.evaluationCriteria = [{ dimension: "completion", weight: 1, description: "Completed the task in spoken English" }];
+      }
       // Validate
       const validated = foundationExerciseSchema.safeParse(withId);
       if (!validated.success) {

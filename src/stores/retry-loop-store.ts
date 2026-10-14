@@ -167,7 +167,7 @@ export const useRetryLoopStore = create<RetryLoopStoreState>()(
       },
 
       // Generate a fresh AI Spoken Repair Challenge on the fly
-      generateAiRepairChallenge: async (category, topicOverride, forceSource = "ai") => {
+      generateAiRepairChallenge: async (category, topicOverride, forceSource = "auto") => {
         set({ isGeneratingChallenge: true, generationError: null, lastRepairResult: null });
 
         let provider = "gemini";

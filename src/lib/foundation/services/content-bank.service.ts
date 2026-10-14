@@ -435,7 +435,7 @@ function seedInitialMemoryBank(store: Map<string, ContentBankRecord>): void {
         targetQuestion: "Why do you prefer working remotely rather than going to the office every day?",
         blocks: [
           {
-            blockType: "discourse_marker",
+            blockType: "buffer",
             labelVi: "Khối Đệm",
             suggestedChunk: "Well, to be honest,",
             alternativeChunks: ["As far as I'm concerned,", "From my point of view,"],
@@ -443,7 +443,7 @@ function seedInitialMemoryBank(store: Map<string, ContentBankRecord>): void {
             transitionConnector: "I personally feel that",
           },
           {
-            blockType: "stance_statement",
+            blockType: "stance",
             labelVi: "Khối Quan Điểm",
             suggestedChunk: "I strongly believe that remote work enhances productivity,",
             alternativeChunks: ["I'm convinced that remote flexibility is essential,"],
@@ -451,7 +451,7 @@ function seedInitialMemoryBank(store: Map<string, ContentBankRecord>): void {
             transitionConnector: "mainly because",
           },
           {
-            blockType: "reason_justification",
+            blockType: "reason",
             labelVi: "Khối Lý Do",
             suggestedChunk: "it eliminates daily commute stress and allows deeper focus,",
             alternativeChunks: ["it gives people autonomy over their optimal working hours,"],
@@ -459,7 +459,7 @@ function seedInitialMemoryBank(store: Map<string, ContentBankRecord>): void {
             transitionConnector: "For example,",
           },
           {
-            blockType: "grounding_example",
+            blockType: "example",
             labelVi: "Khối Ví Dụ",
             suggestedChunk: "in my personal routine, I save two hours each day for focused coding.",
             alternativeChunks: ["I can deliver complex features much faster without constant office noise."],
@@ -637,7 +637,7 @@ function seedInitialMemoryBank(store: Map<string, ContentBankRecord>): void {
     };
     store.set(id, seedRecord);
     try {
-      saveSqliteBankTask(seedRecord);
+      saveSqliteBankTask(seedRecord, { skipIncrementOnConflict: true });
     } catch {}
   }
 }
@@ -666,14 +666,23 @@ export async function sampleBankTask<T>(
     forceSource = "auto",
   } = options;
 
-  // 1. Check force mode
+  // 1. Check force mode & roll probability ONCE before checking SQLite + memory fallback
   if (forceSource === "ai") {
     return null;
   }
 
+  if (forceSource === "auto") {
+    if (Math.random() > bankRatio) {
+      return null;
+    }
+  }
+
   // 2. Try SQLite Local Database first (Primary 100% persistent local DB)
   try {
-    const sqliteResult = sampleSqliteBankTask<T>(options);
+    const sqliteResult = sampleSqliteBankTask<T>({
+      ...options,
+      forceSource: "bank",
+    });
     if (sqliteResult) {
       return sqliteResult;
     }
@@ -684,12 +693,6 @@ export async function sampleBankTask<T>(
   }
 
   // 3. Fallback to In-Memory store
-  if (forceSource === "auto") {
-    const dice = Math.random();
-    if (dice > bankRatio) {
-      return null;
-    }
-  }
 
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);

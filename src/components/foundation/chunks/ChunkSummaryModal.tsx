@@ -78,7 +78,7 @@ export function ChunkSummaryModal({
   const totalStrategyTasks = strategyEntries.reduce((s, [, c]) => s + c, 0);
 
   return (
-    <Dialog open={isOpen} onOpenChange={() => {}}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onDismiss(); }}>
       <DialogContent className="sm:max-w-lg rounded-3xl p-6 md:p-8 bg-card border border-border/80 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex flex-col items-center text-center space-y-2">

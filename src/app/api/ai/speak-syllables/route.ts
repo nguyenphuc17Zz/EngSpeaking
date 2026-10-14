@@ -17,20 +17,30 @@ export interface SyllablesAudioResponse {
   totalDurationSec: number;
 }
 
-// In-memory cache: cacheKey -> SyllablesAudioResponse
+// In-memory cache: cacheKey -> SyllablesAudioResponse (bounded to 200 entries)
+const MAX_SYLLABLES_CACHE_SIZE = 200;
 const cache = new Map<string, SyllablesAudioResponse>();
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const word = url.searchParams.get("word")?.trim();
   const countParam = url.searchParams.get("count");
-  const count = countParam ? parseInt(countParam, 10) : 1;
+  const count = countParam !== null ? parseInt(countParam, 10) : 1;
   const voice = url.searchParams.get("voice") || "en-US-JennyNeural";
   const speedParam = url.searchParams.get("speed");
-  const speed = speedParam ? parseFloat(speedParam) : 1.0;
+  const speed = speedParam !== null ? parseFloat(speedParam) : 1.0;
 
   if (!word) {
     return NextResponse.json({ error: "Missing word parameter" }, { status: 400 });
+  }
+  if (word.length > 60) {
+    return NextResponse.json({ error: "Word parameter exceeds maximum length of 60 characters" }, { status: 400 });
+  }
+  if (!Number.isFinite(count) || count < 1 || count > 10) {
+    return NextResponse.json({ error: "Invalid count parameter (must be between 1 and 10)" }, { status: 400 });
+  }
+  if (!Number.isFinite(speed) || speed < 0.5 || speed > 2.0) {
+    return NextResponse.json({ error: "Invalid speed parameter (must be between 0.5 and 2.0)" }, { status: 400 });
   }
 
   const cacheKey = `${word.toLowerCase()}_${count}_${voice}_${speed}`;
@@ -43,13 +53,14 @@ export async function GET(req: Request) {
   // Join with comma to trigger distinct syllable pauses with contextual phonetics
   const phrase = syllables.join(", ");
 
+  const tts = new MsEdgeTTS();
   try {
-    const tts = new MsEdgeTTS();
     await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3, {
       wordBoundaryEnabled: true,
     });
 
-    const rateParam = speed !== 1 ? `${Math.round((speed - 1) * 100)}%` : undefined;
+    const pct = Math.round((speed - 1) * 100);
+    const rateParam = pct === 0 ? undefined : pct > 0 ? `+${pct}%` : `${pct}%`;
     const { audioStream, metadataStream } = tts.toStream(phrase, rateParam ? { rate: rateParam } : undefined);
 
     const audioChunks: Buffer[] = [];
@@ -130,6 +141,12 @@ export async function GET(req: Request) {
       totalDurationSec: parseFloat(totalDurationSec.toFixed(3)),
     };
 
+    if (cache.has(cacheKey)) {
+      cache.delete(cacheKey);
+    } else if (cache.size >= MAX_SYLLABLES_CACHE_SIZE) {
+      const oldestKey = cache.keys().next().value as string | undefined;
+      if (oldestKey) cache.delete(oldestKey);
+    }
     cache.set(cacheKey, responseData);
     return NextResponse.json(responseData);
   } catch (err: unknown) {
@@ -143,5 +160,9 @@ export async function GET(req: Request) {
       { error: "Failed to synthesize syllable audio", detail: String(err) },
       { status: 500 }
     );
+  } finally {
+    try {
+      tts.close();
+    } catch {}
   }
 }

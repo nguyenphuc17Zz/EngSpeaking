@@ -13,25 +13,27 @@ import type { SpokenWordItem } from "@/types/vocabulary-context";
 
 export { INITIAL_DEFAULT_WORD } from "./default-word";
 
+import { cleanAiJson } from "@/lib/foundation/shared/json-parser";
+import { buildCreativeAngleDirective } from "@/lib/ai/prompts/diversity-engine";
+import { decomposeIpa } from "./phoneme-stress.engine";
+
 function cleanJson(text: string): unknown {
-  const trimmed = text.trim();
-  const withoutThink = trimmed.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
-  const withoutFence = withoutThink
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "");
+  const cleaned = cleanAiJson(text);
+  if (!cleaned) return null;
   try {
-    return JSON.parse(withoutFence);
+    return JSON.parse(cleaned);
   } catch {
-    const m = withoutFence.match(/\{[\s\S]*\}/);
-    if (m) {
-      try {
-        return JSON.parse(m[0]);
-      } catch {}
-    }
     return null;
   }
 }
+
+const DOMAIN_TITLES_VI: Record<string, string> = {
+  workplace: "Công việc (Workplace)",
+  daily_life: "Đời sống (Daily Life)",
+  opinions: "Quan điểm (Opinions)",
+  academic: "Học thuật (Academic)",
+  casual_banter: "Trò chuyện tự nhiên (Casual)",
+};
 
 /**
  * Fetch public phonetics from Free Dictionary API
@@ -146,11 +148,11 @@ export async function searchSpokenDictionary(
 
   // 2. On-Demand AI Spoken Lexicographer Deep Enrichment (Cách 2)
   const dictApiData = await fetchFreeDictionaryApi(cleanWord);
+  const creativeAngle = buildCreativeAngleDirective();
 
-  const prompt = `Provide detailed pronunciation, IPA, Vietnamese definition, collocations, and context sentences for the English word: "${cleanWord}".
-${dictApiData?.phonetic ? `Verified phonetic IPA: ${dictApiData.phonetic}` : ""}
-${dictApiData?.definition ? `Standard definition: ${dictApiData.definition}` : ""}
-Return strict JSON matching the schema.`;
+  const prompt = `Word: "${cleanWord}"
+${dictApiData?.phonetic ? `Verified IPA: ${dictApiData.phonetic}\n` : ""}${dictApiData?.definition ? `Definition: ${dictApiData.definition}\n` : ""}${creativeAngle}
+Return strict JSON.`;
 
   let lastErrorMsg = "";
   try {
@@ -161,14 +163,27 @@ Return strict JSON matching the schema.`;
         messages: [{ role: "user", content: prompt }],
         systemInstruction: DICTIONARY_ENRICHMENT_SYSTEM,
         temperature: 0.3,
-        maxOutputTokens: 3500,
+        maxOutputTokens: 1400,
       },
     });
 
-    const parsed = cleanJson(res.text) as Record<string, unknown>;
-    if (!parsed) throw new Error("Could not parse JSON");
+    const parsed = cleanJson(res.text) as Record<string, any>;
+    if (!parsed || typeof parsed !== "object") throw new Error("Could not parse JSON");
     if (!parsed.id) parsed.id = `word_${cleanWord}_${Date.now()}`;
     if (!parsed.word) parsed.word = cleanWord;
+    if (!parsed.stressedSyllableIndex && parsed.ipaUS) {
+      const decomposed = decomposeIpa(String(parsed.ipaUS));
+      parsed.stressedSyllableIndex = (decomposed.primaryStressIndex ?? 0) + 1;
+    }
+    if (Array.isArray(parsed.contextSentences)) {
+      parsed.contextSentences = parsed.contextSentences.map((s: any, idx: number) => ({
+        ...s,
+        id: s.id || `s${idx + 1}`,
+        domain: s.domain || "workplace",
+        domainTitleVi: s.domainTitleVi || DOMAIN_TITLES_VI[s.domain] || "Giao tiếp thực tế",
+        targetWordHighlighted: s.targetWordHighlighted || cleanWord,
+      }));
+    }
     if (!parsed.spontaneousChallenge) {
       parsed.spontaneousChallenge = {
         promptEn: `Speak 1-2 spontaneous sentences using "${cleanWord}".`,
@@ -176,6 +191,10 @@ Return strict JSON matching the schema.`;
         targetCollocation: `use ${cleanWord}`,
       };
     }
+    parsed.wordMasteryScore = parsed.wordMasteryScore ?? 0;
+    parsed.sentenceMasteryScore = parsed.sentenceMasteryScore ?? 0;
+    parsed.isMastered = parsed.isMastered ?? false;
+    parsed.practiceCount = parsed.practiceCount ?? 0;
 
     const validated = spokenWordItemSchema.safeParse(parsed);
     if (!validated.success) throw new Error(`Schema validation error: ${validated.error.message.slice(0, 100)}`);

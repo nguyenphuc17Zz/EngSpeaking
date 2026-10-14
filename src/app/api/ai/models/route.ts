@@ -20,31 +20,44 @@ export async function GET(req: Request) {
 
   let liveModels: AIModel[] = [];
 
-  // Fetch live Gemini models
-  if (!provider || provider === "all" || provider === "gemini" || provider === "auto") {
-    if (geminiKey) {
-      try {
-        const gemini = new GeminiProvider(geminiKey);
-        const gModels = await gemini.getModels();
-        if (gModels.length) liveModels.push(...gModels);
-      } catch {}
-    } else if (provider === "gemini") {
-      liveModels.push(...CATALOG.filter((m) => m.providerId === "gemini"));
-    }
-  }
+  const wantGemini = !provider || provider === "all" || provider === "gemini" || provider === "auto";
+  const wantGroq = !provider || provider === "all" || provider === "groq" || provider === "auto";
 
-  // Fetch live Groq models
-  if (!provider || provider === "all" || provider === "groq" || provider === "auto") {
-    if (groqKey) {
-      try {
-        const groq = new GroqProvider(groqKey);
-        const grModels = await groq.getModels();
-        if (grModels.length) liveModels.push(...grModels);
-      } catch {}
-    } else if (provider === "groq") {
-      liveModels.push(...CATALOG.filter((m) => m.providerId === "groq"));
-    }
-  }
+  const [geminiModels, groqModels] = await Promise.all([
+    (async (): Promise<AIModel[]> => {
+      if (!wantGemini) return [];
+      if (geminiKey) {
+        try {
+          const gemini = new GeminiProvider(geminiKey);
+          return await gemini.getModels();
+        } catch {
+          return [];
+        }
+      }
+      if (provider === "gemini") {
+        return CATALOG.filter((m) => m.providerId === "gemini");
+      }
+      return [];
+    })(),
+    (async (): Promise<AIModel[]> => {
+      if (!wantGroq) return [];
+      if (groqKey) {
+        try {
+          const groq = new GroqProvider(groqKey);
+          return await groq.getModels();
+        } catch {
+          return [];
+        }
+      }
+      if (provider === "groq") {
+        return CATALOG.filter((m) => m.providerId === "groq");
+      }
+      return [];
+    })(),
+  ]);
+
+  if (geminiModels.length) liveModels.push(...geminiModels);
+  if (groqModels.length) liveModels.push(...groqModels);
 
   // Include edge-tts, kokoro-tts, whisper-local, browser and mock models if asking for all/auto/etc.
   if (!provider || provider === "all" || provider === "auto" || provider === "edge-tts" || provider === "kokoro-tts" || provider === "whisper-local" || provider === "browser" || provider === "mock") {

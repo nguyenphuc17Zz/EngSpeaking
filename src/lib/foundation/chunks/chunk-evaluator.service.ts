@@ -10,6 +10,11 @@ import {
   CHUNK_EVALUATOR_SYSTEM,
   CHUNK_CHAIN_EVALUATOR_SYSTEM,
 } from "@/lib/ai/prompts/chunk-prompts";
+import {
+  compactSingleChunkTaskForEval,
+  compactChunkChainTaskForEval,
+} from "@/lib/ai/prompts/diversity-engine";
+import { normalizeSpokenText } from "@/lib/foundation/shared/text-similarity";
 import type {
   ChunkTrainingTask,
   ChunkChainTask,
@@ -17,21 +22,14 @@ import type {
   ChunkChainEvaluationResult,
 } from "@/types/chunk-automaticity";
 
+import { cleanAiJson } from "@/lib/foundation/shared/json-parser";
+
 function cleanJson(text: string): unknown {
-  const trimmed = text.trim();
-  const withoutFence = trimmed
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "");
+  const cleaned = cleanAiJson(text);
+  if (!cleaned) return null;
   try {
-    return JSON.parse(withoutFence);
+    return JSON.parse(cleaned);
   } catch {
-    const m = withoutFence.match(/\{[\s\S]*\}/);
-    if (m) {
-      try {
-        return JSON.parse(m[0]);
-      } catch {}
-    }
     return null;
   }
 }
@@ -42,22 +40,41 @@ export async function evaluateSingleChunkAttempt(params: {
   responseLatencyMs: number;
   provider?: string;
   model?: string;
+  forceAi?: boolean;
 }): Promise<ChunkEvaluationResult> {
   const provider = params.provider || "gemini";
   const model = params.model || "auto";
 
-  const lowerUser = params.userTranscript.toLowerCase();
-  const targetLower = params.task.expectedChunkUsage.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()?"'’]/g, "");
+  const normUser = normalizeSpokenText(params.userTranscript);
+  const userWordCount = normUser.split(/\s+/).filter(Boolean).length;
+  const candidateExpressions = [
+    params.task.expectedChunkUsage,
+    params.task.chunk?.canonicalChunk,
+    ...(params.task.chunk?.variants || []).map((v) => v.expression),
+  ].filter(Boolean) as string[];
 
-  // Check if chunk or variant exists
-  const isChunkSpoken = lowerUser.includes("depend") || lowerUser.includes("sure") || lowerUser.includes("honest");
+  let matchedExpr: string | undefined;
+  for (const expr of candidateExpressions) {
+    const normExpr = normalizeSpokenText(expr);
+    if (normExpr && normUser.includes(normExpr)) {
+      matchedExpr = expr;
+      break;
+    }
+  }
+
+  const lowerUser = params.userTranscript.toLowerCase();
+  const isChunkSpoken = Boolean(matchedExpr) || lowerUser.includes("depend") || lowerUser.includes("sure") || lowerUser.includes("honest");
+  const modelExample =
+    params.task.hints?.find((h) => h.tier === 4)?.content ||
+    `Well, ${params.task.expectedChunkUsage} the situation.`;
+  const variantsList = (params.task.chunk?.variants || []).map((v) => v.expression);
 
   if (provider === "mock") {
     const isSuccessful = isChunkSpoken && params.userTranscript.length >= 8;
     return {
       isSuccessful,
       chunkDetected: isChunkSpoken,
-      detectedExpression: params.task.expectedChunkUsage,
+      detectedExpression: matchedExpr || params.task.expectedChunkUsage,
       isNaturalInsertion: true,
       retrievalLatencyMs: params.responseLatencyMs,
       grammarAroundChunkScore: 92,
@@ -67,21 +84,39 @@ export async function evaluateSingleChunkAttempt(params: {
       coachFeedbackVi: isSuccessful
         ? "Xuất sắc! Bạn đã lồng ghép cụm khẩu ngữ rất tự nhiên vào câu trả lời."
         : "Hãy chú ý dùng đúng cụm khẩu ngữ mục tiêu.",
-      betterVersion: `Well, ${params.task.expectedChunkUsage} the situation.`,
-      alternativeVariants: params.task.chunk.variants.map((v) => v.expression),
+      betterVersion: modelExample,
+      alternativeVariants: variantsList,
       transferDomainSuccess: true,
       masteryDelta: isSuccessful ? 6 : -2,
     };
   }
 
-  const userPrompt = `Evaluate this single chunk attempt:
-TASK:
-${JSON.stringify(params.task)}
-USER TRANSCRIPT:
-"${params.userTranscript}"
-MEASURED LATENCY:
-${params.responseLatencyMs} ms
+  // 1. 0ms / 0-Token Deterministic Fast-Pass when chunk or variant is cleanly used in a full sentence
+  if (!params.forceAi && matchedExpr && userWordCount >= 5) {
+    const isFast = params.responseLatencyMs <= (params.task.targetLatencyMs || 3000) * 1.25;
+    const overallScore = isFast ? 94 : 88;
+    return {
+      isSuccessful: true,
+      chunkDetected: true,
+      detectedExpression: matchedExpr,
+      isNaturalInsertion: true,
+      retrievalLatencyMs: params.responseLatencyMs,
+      grammarAroundChunkScore: 92,
+      naturalnessScore: isFast ? 95 : 88,
+      overallScore,
+      userTranscript: params.userTranscript,
+      coachFeedbackVi: `Tuyệt vời! Bạn đã bật ra cụm "${matchedExpr}" tự nhiên và trọn vẹn ngữ cảnh chỉ trong ${(params.responseLatencyMs / 1000).toFixed(1)}s.`,
+      betterVersion: modelExample,
+      alternativeVariants: variantsList,
+      transferDomainSuccess: true,
+      masteryDelta: isFast ? 8 : 5,
+    };
+  }
 
+  // 2. Compact LLM Evaluation
+  const userPrompt = `TASK: ${compactSingleChunkTaskForEval(params.task)}
+SPOKEN: "${params.userTranscript}"
+LATENCY: ${params.responseLatencyMs}ms
 Return strict JSON.`;
 
   const attemptEvaluate = async (): Promise<ChunkEvaluationResult | null> => {
@@ -93,14 +128,25 @@ Return strict JSON.`;
           messages: [{ role: "user", content: userPrompt }],
           systemInstruction: CHUNK_EVALUATOR_SYSTEM,
           temperature: 0.2,
-          maxOutputTokens: 600,
+          maxOutputTokens: 450,
         },
       });
 
       const parsed = cleanJson(res.text);
-      if (!parsed) return null;
+      if (!parsed || typeof parsed !== "object") return null;
 
-      const validated = chunkEvaluationSchema.safeParse(parsed);
+      const raw = parsed as Record<string, unknown>;
+      const hydrated: Record<string, unknown> = {
+        ...raw,
+        retrievalLatencyMs: typeof raw.retrievalLatencyMs === "number" ? raw.retrievalLatencyMs : params.responseLatencyMs,
+        userTranscript: typeof raw.userTranscript === "string" ? raw.userTranscript : params.userTranscript,
+        betterVersion: typeof raw.betterVersion === "string" && raw.betterVersion.trim() ? raw.betterVersion : modelExample,
+        alternativeVariants: Array.isArray(raw.alternativeVariants) && raw.alternativeVariants.length > 0 ? raw.alternativeVariants : variantsList,
+        transferDomainSuccess: typeof raw.transferDomainSuccess === "boolean" ? raw.transferDomainSuccess : Boolean(raw.isSuccessful),
+        masteryDelta: typeof raw.masteryDelta === "number" ? raw.masteryDelta : raw.isSuccessful ? 6 : -2,
+      };
+
+      const validated = chunkEvaluationSchema.safeParse(hydrated);
       if (!validated.success) return null;
       return validated.data as ChunkEvaluationResult;
     } catch {
@@ -124,20 +170,31 @@ export async function evaluateChunkChainAttempt(params: {
   responseLatencyMs: number;
   provider?: string;
   model?: string;
+  forceAi?: boolean;
 }): Promise<ChunkChainEvaluationResult> {
   const provider = params.provider || "gemini";
   const model = params.model || "auto";
 
-  const lowerUser = params.userTranscript.toLowerCase();
+  const normUser = normalizeSpokenText(params.userTranscript);
+  const userWordCount = normUser.split(/\s+/).filter(Boolean).length;
 
-  // Deterministic checks for blocks
+  // Deterministic checks for blocks (checking both suggestedChunk and alternativeChunks)
   const detectedBlocks: ChunkChainEvaluationResult["detectedBlocks"] = [];
   params.task.blocks.forEach((b) => {
-    const kw = b.suggestedChunk.split(" ")[0]?.toLowerCase() || "";
-    if (kw && lowerUser.includes(kw)) {
+    const candidates = [b.suggestedChunk, ...(b.alternativeChunks || [])].filter(Boolean);
+    let matchedChunk = "";
+    for (const cand of candidates) {
+      const normCand = normalizeSpokenText(cand);
+      const firstTwoWords = normCand.split(" ").slice(0, 2).join(" ");
+      if ((normCand && normUser.includes(normCand)) || (firstTwoWords.length >= 4 && normUser.includes(firstTwoWords))) {
+        matchedChunk = cand;
+        break;
+      }
+    }
+    if (matchedChunk) {
       detectedBlocks.push({
         blockType: b.blockType,
-        usedChunk: b.suggestedChunk,
+        usedChunk: matchedChunk,
         isAppropriate: true,
       });
     }
@@ -160,14 +217,29 @@ export async function evaluateChunkChainAttempt(params: {
     };
   }
 
-  const userPrompt = `Evaluate this Speech Chain Builder attempt:
-TASK:
-${JSON.stringify(params.task)}
-USER TRANSCRIPT:
-"${params.userTranscript}"
-MEASURED LATENCY:
-${params.responseLatencyMs} ms
+  // 1. 0ms / 0-Token Deterministic Fast-Pass when >= 3 of 4 blocks are detected in a substantial utterance
+  if (!params.forceAi && detectedBlocks.length >= 3 && userWordCount >= 12) {
+    const allFour = detectedBlocks.length >= 4;
+    return {
+      isSuccessful: true,
+      overallScore: allFour ? 95 : 88,
+      blocksUsedCount: detectedBlocks.length,
+      totalBlocks: params.task.blocks.length,
+      detectedBlocks,
+      fluencyFlowScore: allFour ? 94 : 87,
+      responseLatencyMs: params.responseLatencyMs,
+      userTranscript: params.userTranscript,
+      coachFeedbackVi: allFour
+        ? "Xuất sắc! Bạn đã kết nối trọn vẹn cả 4 khối (Đệm → Quan điểm → Lý do → Ví dụ) thành một chuỗi lập luận cực kỳ tự nhiên và mạch lạc."
+        : `Rất tốt! Bạn đã ghép nối thành công ${detectedBlocks.length}/4 khối giao tiếp một cách trôi chảy.`,
+      idealCombinedSpeech: params.task.expectedAssemblyExample,
+    };
+  }
 
+  // 2. Compact LLM Evaluation
+  const userPrompt = `TASK: ${compactChunkChainTaskForEval(params.task)}
+SPOKEN: "${params.userTranscript}"
+LATENCY: ${params.responseLatencyMs}ms
 Return strict JSON.`;
 
   const attemptEvaluate = async (): Promise<ChunkChainEvaluationResult | null> => {
@@ -179,14 +251,26 @@ Return strict JSON.`;
           messages: [{ role: "user", content: userPrompt }],
           systemInstruction: CHUNK_CHAIN_EVALUATOR_SYSTEM,
           temperature: 0.2,
-          maxOutputTokens: 750,
+          maxOutputTokens: 500,
         },
       });
 
       const parsed = cleanJson(res.text);
-      if (!parsed) return null;
+      if (!parsed || typeof parsed !== "object") return null;
 
-      const validated = chunkChainEvaluationSchema.safeParse(parsed);
+      const raw = parsed as Record<string, unknown>;
+      const hydrated: Record<string, unknown> = {
+        ...raw,
+        totalBlocks: typeof raw.totalBlocks === "number" ? raw.totalBlocks : params.task.blocks.length,
+        responseLatencyMs: typeof raw.responseLatencyMs === "number" ? raw.responseLatencyMs : params.responseLatencyMs,
+        userTranscript: typeof raw.userTranscript === "string" ? raw.userTranscript : params.userTranscript,
+        idealCombinedSpeech:
+          typeof raw.idealCombinedSpeech === "string" && raw.idealCombinedSpeech.trim()
+            ? raw.idealCombinedSpeech
+            : params.task.expectedAssemblyExample,
+      };
+
+      const validated = chunkChainEvaluationSchema.safeParse(hydrated);
       if (!validated.success) return null;
       return validated.data as ChunkChainEvaluationResult;
     } catch {
@@ -203,3 +287,4 @@ Return strict JSON.`;
 
   return result;
 }
+

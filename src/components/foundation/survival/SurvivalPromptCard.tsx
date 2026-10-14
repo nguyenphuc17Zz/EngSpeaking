@@ -80,182 +80,122 @@ export function SurvivalPromptCard({
   };
 
   return (
-    <Card className="rounded-3xl border border-border/80 bg-gradient-to-br from-card via-card to-amber-500/5 shadow-xs overflow-hidden flex flex-col h-full">
-      <CardContent className="p-4 md:p-5 flex flex-col h-full space-y-3 overflow-hidden">
+    <Card className="h-full flex flex-col justify-between rounded-none border-2 border-border bg-card shadow-[4px_4px_0px_var(--industrial-shadow-color)] overflow-hidden">
+      <CardContent className="p-3.5 sm:p-4 flex flex-col h-full space-y-3 overflow-hidden">
         {/* Top Meta Header */}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-2.5 shrink-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            {mode === "circumlocution" ? (
-              <Badge className="bg-primary/90 text-primary-foreground font-mono text-xs font-bold gap-1 px-2.5 py-0.5 rounded-full">
-                <ShieldAlert className="size-3.5" />
-                <span>Circumlocution Gym</span>
-              </Badge>
-            ) : (
-              <Badge className="bg-amber-600 text-white font-mono text-xs font-bold gap-1 px-2.5 py-0.5 rounded-full">
-                <AlertTriangle className="size-3.5" />
-                <span>Survival Scenario</span>
-              </Badge>
-            )}
-
-            <Badge variant="outline" className="text-xs font-mono border-border/80">
-              {mode === "circumlocution" ? circumTask?.category : scenarioTask?.contextTitleVi}
-            </Badge>
-
+        <div className="flex flex-wrap items-center justify-between gap-1.5 border-b-2 border-border pb-2 shrink-0">
+          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+            <span className="size-2.5 bg-primary border border-border shrink-0" />
+            <span className="text-[11px] font-mono font-extrabold uppercase tracking-wider text-foreground">
+              {mode === "circumlocution" ? "1. CIRCUMLOCUTION GYM" : "1. SURVIVAL SCENARIO"}
+            </span>
             <Badge
               variant="outline"
-              className={`text-[10px] font-mono px-1.5 py-0 ${
-                (mode === "circumlocution" ? circumTask?.difficulty : "medium") === "easy"
-                  ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10"
-                  : (mode === "circumlocution" ? circumTask?.difficulty : "medium") === "hard"
-                    ? "border-red-500/40 text-red-600 dark:text-red-400 bg-red-500/10"
-                    : "border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10"
-              }`}
+              className="text-[9px] font-mono font-extrabold px-1.5 py-0 border bg-accent text-accent-foreground border-border uppercase truncate max-w-[140px]"
             >
-              {(mode === "circumlocution" ? circumTask?.difficulty : "medium") || "medium"} ·{" "}
-              {mode === "circumlocution"
-                ? (circumTask?.difficultyOverall ?? 5)
-                : (scenarioTask?.difficultyOverall ?? 5)}
-              /10
+              {mode === "circumlocution" ? circumTask?.category : scenarioTask?.contextTitleVi}
             </Badge>
-            {rapidStreak > 1 && (
-              <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10px] font-mono">
-                🔥 Streak {rapidStreak}
-              </Badge>
-            )}
-
-            {mode === "circumlocution" && circumTask?.source === "ai" && (
-              <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 gap-1 font-normal text-xs">
-                <Sparkles className="size-2.5 text-emerald-500" />
-                AI Generated
-              </Badge>
-            )}
-            {mode === "circumlocution" && circumTask?.source === "bank" && (
-              <Badge variant="outline" className="border-blue-500/40 text-blue-600 dark:text-blue-400 bg-blue-500/10 gap-1 font-normal text-xs">
-                Từ ngân hàng
-              </Badge>
-            )}
-            {mode === "scenarios" && scenarioTask?.source === "ai" && (
-              <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 gap-1 font-normal text-xs">
-                <Sparkles className="size-2.5 text-emerald-500" />
-                AI Generated
-              </Badge>
-            )}
-            {mode === "scenarios" && scenarioTask?.source === "bank" && (
-              <Badge variant="outline" className="border-blue-500/40 text-blue-600 dark:text-blue-400 bg-blue-500/10 gap-1 font-normal text-xs">
-                Từ ngân hàng
-              </Badge>
-            )}
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
             {onRegenerateAI && (
               <Button
+                type="button"
                 variant="outline"
-                size="sm"
+                size="xs"
                 onClick={onRegenerateAI}
                 disabled={isRegeneratingAI}
-                className="h-6 px-2 rounded-lg text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 hover:border-emerald-500 gap-1 shrink-0 cursor-pointer shadow-2xs btn-spring"
+                className="h-6 px-2 text-[10px] gap-1 text-foreground border-2 border-border bg-secondary hover:bg-accent hover:text-accent-foreground cursor-pointer font-mono font-extrabold shadow-[2px_2px_0px_var(--industrial-shadow-color)]"
                 title="Tạo thử thách mới bằng AI"
               >
-                <Sparkles className={cn("size-2.5 text-emerald-500", isRegeneratingAI && "animate-spin")} />
-                <span>{isRegeneratingAI ? "AI đang tạo..." : "Tạo mới bằng AI"}</span>
+                <Sparkles className={cn("size-3 text-primary", isRegeneratingAI && "animate-spin")} />
+                <span>{isRegeneratingAI ? "ĐANG TẠO..." : "TẠO MỚI AI"}</span>
               </Button>
             )}
-            {onNextTask && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onNextTask}
-                className="h-6 px-2 rounded-lg text-[10px] font-bold text-primary border-primary/30 hover:bg-primary/10 hover:border-primary gap-1 shrink-0 cursor-pointer shadow-2xs btn-spring"
-                title="Đổi thử thách tiếp theo [R]"
-              >
-                <span>Tiếp theo</span>
-                <ArrowRight className="size-2.5" />
-              </Button>
-            )}
-            <span className="text-[10px] font-mono text-muted-foreground">
-              #{currentTaskIndex + 1}{totalTasks > 0 ? `/${totalTasks}` : ""}
+            <span className="px-1.5 py-0.5 bg-foreground text-background border border-border text-[10px] font-mono font-extrabold">
+              #{currentTaskIndex + 1}
+              {totalTasks > 0 ? `/${totalTasks}` : ""}
             </span>
-            <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-amber-600 dark:text-amber-400 bg-amber-500/15 px-2.5 py-0.5 rounded-full">
+            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-primary text-primary-foreground border border-border text-[10px] font-mono font-extrabold">
               <Clock className="size-3" />
-              <span>{countdownSeconds}s</span>
+              <span>{countdownSeconds}S</span>
             </div>
           </div>
         </div>
 
-        {/* Topic line (SB/VN-EN aligned) */}
-        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground shrink-0">
-          <Tag className="size-3 text-primary" />
-          <span className="font-mono truncate">
-            Chủ đề:{" "}
-            {(mode === "circumlocution" ? circumTask?.topic : scenarioTask?.topic) || "Giao tiếp tự nhiên"}
-          </span>
-        </div>
-
         {/* Scrollable Main Content */}
-        <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-3">
+        <div className="flex-1 min-h-0 overflow-y-auto pr-0.5 space-y-3">
           {mode === "circumlocution" && circumTask && (
             <div className="space-y-3">
-              <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold block text-center">
-                Mô tả đồ vật / khái niệm này bằng tiếng Anh (KHÔNG ĐƯỢC NÓI TỪ MỤC TIÊU):
-              </span>
-
-              {/* Target Word Display */}
-              <div className="p-4 rounded-2xl bg-muted/40 border-2 border-dashed border-primary/40 text-center space-y-1 relative group">
-                <div className="absolute top-2 right-2 flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleCopy(circumTask.targetWord, "target-word")}
-                    className="h-7 w-7 p-0 rounded-lg text-muted-foreground hover:text-foreground"
-                    title="Sao chép từ mục tiêu"
-                  >
-                    {copiedId === "target-word" ? (
-                      <Check className="size-3.5 text-emerald-500" />
-                    ) : (
-                      <Copy className="size-3.5" />
-                    )}
-                  </Button>
+              {/* Target Word Main Prompt Box */}
+              <div className="p-3.5 bg-background border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] space-y-2">
+                <div className="flex items-center justify-between gap-2 border-b border-dashed border-border pb-1.5">
+                  <span className="text-[10px] font-mono font-extrabold uppercase tracking-wider text-primary flex items-center gap-1">
+                    <ShieldAlert className="size-3 stroke-[2.5]" />
+                    <span>MÔ TẢ KHÁI NIỆM (KHÔNG NÓI TỪ MỤC TIÊU)</span>
+                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[9px] font-mono font-extrabold px-1.5 py-0.5 bg-secondary text-foreground border border-border uppercase">
+                      {circumTask.source === "ai" ? "AI GEN" : "BANK 70/30"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(circumTask.targetWord, "target-word")}
+                      className="text-muted-foreground hover:text-foreground p-1 border border-transparent hover:border-border bg-card cursor-pointer transition-colors"
+                      title="Sao chép từ mục tiêu"
+                    >
+                      {copiedId === "target-word" ? (
+                        <Check className="size-3 text-[#00A854]" />
+                      ) : (
+                        <Copy className="size-3" />
+                      )}
+                    </button>
+                  </div>
                 </div>
 
-                <h2 className="text-3xl font-extrabold tracking-tight text-foreground font-mono">
-                  "{circumTask.targetWord}"
-                </h2>
-                <p className="text-xs font-medium text-muted-foreground">
-                  (Ý nghĩa: {circumTask.vietnameseMeaning})
-                </p>
+                <div className="py-1 text-center space-y-1">
+                  <h2 className="font-serif text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground select-text cursor-text">
+                    &ldquo;{circumTask.targetWord}&rdquo;
+                  </h2>
+                  <p className="text-xs font-mono font-bold text-muted-foreground">
+                    (Ý NGHĨA: <span className="text-foreground">{circumTask.vietnameseMeaning}</span>)
+                  </p>
+                </div>
               </div>
 
               {/* Forbidden Words Banner */}
-              <div className="flex items-center justify-center gap-1.5 text-xs text-red-500 font-semibold bg-red-500/10 py-2 px-3 rounded-xl border border-red-500/20 text-center flex-wrap">
-                <Ban className="size-4 shrink-0" />
-                <span>Từ cấm nói:</span>
-                {circumTask.forbiddenWords.map((w, idx) => (
-                  <span
-                    key={idx}
-                    className="px-1.5 py-0.5 rounded-md bg-red-500/20 text-red-600 dark:text-red-400 font-mono font-bold text-[11px]"
-                  >
-                    "{w}"
-                  </span>
-                ))}
+              <div className="p-2.5 bg-background border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] space-y-1.5">
+                <div className="flex items-center gap-1.5 text-[10px] font-mono font-extrabold uppercase text-destructive border-b border-dashed border-border pb-1">
+                  <Ban className="size-3.5 shrink-0 stroke-[2.5]" />
+                  <span>TỪ CẤM NÓI (TABOO WORDS):</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {circumTask.forbiddenWords.map((w, idx) => (
+                    <span
+                      key={idx}
+                      className="px-2 py-0.5 bg-destructive text-destructive-foreground border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] font-mono font-extrabold text-[11px]"
+                    >
+                      &ldquo;{w}&rdquo;
+                    </span>
+                  ))}
+                </div>
               </div>
 
               {/* Semantic Anchors (if available) */}
               {circumTask.semanticKeyAnchors && circumTask.semanticKeyAnchors.length > 0 && (
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    <Key className="size-3 text-amber-500" />
-                    <span>Ý tưởng từ khóa (Key Anchors):</span>
+                <div className="p-2.5 bg-background border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-[10px] font-mono font-extrabold text-foreground uppercase tracking-wider border-b border-dashed border-border pb-1">
+                    <Key className="size-3 text-primary stroke-[2.5]" />
+                    <span>Ý TƯỞNG TỪ KHÓA (KEY ANCHORS):</span>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {circumTask.semanticKeyAnchors.map((anchor, idx) => (
-                      <Badge
+                      <span
                         key={idx}
-                        variant="secondary"
-                        className="text-[11px] font-mono px-2 py-0.5 rounded-lg bg-muted/60 text-foreground"
+                        className="px-2 py-0.5 bg-card border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] text-[11px] font-mono font-extrabold text-foreground"
                       >
                         {anchor}
-                      </Badge>
+                      </span>
                     ))}
                   </div>
                 </div>
@@ -263,29 +203,39 @@ export function SurvivalPromptCard({
 
               {/* Suggested Vocabulary / Circumlocution Connectors */}
               {circumTask.suggestedVocabulary && circumTask.suggestedVocabulary.length > 0 && (
-                <div className="text-left space-y-1.5 pt-1">
-                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    <Sparkles className="size-3 text-primary" />
-                    <span>Cụm từ diễn giải gợi ý (Bấm nghe):</span>
+                <div className="p-3 bg-background border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] space-y-2">
+                  <div className="flex items-center justify-between border-b border-dashed border-border pb-1">
+                    <span className="text-[10px] font-mono font-extrabold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles className="size-3.5 text-primary stroke-[2.5]" />
+                      <span>CỤM TỪ DIỄN GIẢI GỢI Ý:</span>
+                    </span>
+                    <span className="text-[9px] text-muted-foreground font-mono font-bold uppercase">
+                      [CLICK ĐỂ NGHE]
+                    </span>
                   </div>
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex flex-wrap gap-2">
                     {circumTask.suggestedVocabulary.map((item, idx) => (
-                      <div
+                      <button
                         key={idx}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-card border border-border/80 hover:border-primary/50 text-xs text-foreground transition-all shadow-2xs"
+                        type="button"
+                        onClick={() => handlePlayAudio(item.term)}
+                        className="group inline-flex items-stretch bg-card border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] hover:bg-accent hover:text-accent-foreground transition-all text-xs cursor-pointer active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+                        title={`Nghe phát âm "${item.term}"`}
                       >
-                        <span className="font-semibold text-primary">{item.term}</span>
-                        {item.meaningVi && (
-                          <span className="text-[10px] text-muted-foreground">({item.meaningVi})</span>
-                        )}
-                        <button
-                          onClick={() => handlePlayAudio(item.term)}
-                          className="text-muted-foreground hover:text-primary transition-colors p-0.5 rounded-sm cursor-pointer"
-                          title="Nghe phát âm"
-                        >
-                          <Volume2 className="size-3.5" />
-                        </button>
-                      </div>
+                        <span className="px-1.5 py-1 bg-secondary group-hover:bg-primary group-hover:text-primary-foreground border-r-2 border-border flex items-center justify-center transition-colors">
+                          <Volume2 className="size-3 stroke-[2.5]" />
+                        </span>
+                        <span className="px-2 py-1 flex items-center gap-1.5 font-mono">
+                          <strong className="font-extrabold text-foreground group-hover:text-accent-foreground">
+                            {item.term}
+                          </strong>
+                          {item.meaningVi && (
+                            <span className="text-[10px] text-muted-foreground group-hover:text-accent-foreground/80 font-sans font-semibold">
+                              ({item.meaningVi})
+                            </span>
+                          )}
+                        </span>
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -296,95 +246,109 @@ export function SurvivalPromptCard({
           {mode === "scenarios" && scenarioTask && (
             <div className="space-y-3">
               {/* Problem Situation Description */}
-              <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 flex items-center gap-1">
-                    <AlertTriangle className="size-3" />
-                    <span>Sự cố giao tiếp thực tế:</span>
+              <div className="p-3.5 bg-background border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] space-y-2">
+                <div className="flex items-center justify-between gap-2 border-b border-dashed border-border pb-1.5">
+                  <span className="text-[10px] font-mono font-extrabold uppercase tracking-wider text-primary flex items-center gap-1">
+                    <AlertTriangle className="size-3 stroke-[2.5]" />
+                    <span>SỰ CỐ GIAO TIẾP THỰC TẾ:</span>
                   </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleCopy(scenarioTask.problemDescriptionVi, "scenario-desc")}
-                    className="h-6 w-6 p-0 rounded-lg text-amber-700 hover:text-foreground"
-                    title="Sao chép tình huống"
-                  >
-                    {copiedId === "scenario-desc" ? (
-                      <Check className="size-3 text-emerald-500" />
-                    ) : (
-                      <Copy className="size-3" />
-                    )}
-                  </Button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[9px] font-mono font-extrabold px-1.5 py-0.5 bg-secondary text-foreground border border-border uppercase">
+                      {scenarioTask.source === "ai" ? "AI GEN" : "BANK 70/30"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(scenarioTask.problemDescriptionVi, "scenario-desc")}
+                      className="text-muted-foreground hover:text-foreground p-1 border border-transparent hover:border-border bg-card cursor-pointer transition-colors"
+                      title="Sao chép tình huống"
+                    >
+                      {copiedId === "scenario-desc" ? (
+                        <Check className="size-3 text-[#00A854]" />
+                      ) : (
+                        <Copy className="size-3" />
+                      )}
+                    </button>
+                  </div>
                 </div>
-                <p className="text-xs font-semibold text-foreground leading-relaxed">
+                <h2 className="font-serif text-base sm:text-lg font-extrabold tracking-tight text-foreground leading-snug select-text cursor-text">
                   {scenarioTask.problemDescriptionVi}
-                </p>
+                </h2>
               </div>
 
               {/* Incoming Dialogue Audio Prompt */}
-              <div className="p-3.5 rounded-2xl bg-muted/40 border border-border/70 flex items-center justify-between gap-3">
-                <div className="space-y-0.5">
-                  <span className="text-[10px] uppercase font-bold text-muted-foreground">
-                    Câu đối phương vừa nói:
+              <div className="p-3 bg-background border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] space-y-1.5">
+                <div className="flex items-center justify-between border-b border-dashed border-border pb-1">
+                  <span className="text-[10px] uppercase font-mono font-extrabold text-foreground">
+                    CÂU ĐỐI PHƯƠNG VỪA NÓI:
                   </span>
-                  <p className="font-mono text-sm md:text-base font-bold text-foreground">
-                    "{scenarioTask.audioPromptText}"
-                  </p>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(scenarioTask.audioPromptText, "dialog-prompt")}
+                      className="text-muted-foreground hover:text-foreground p-1 bg-card border border-border cursor-pointer transition-colors"
+                      title="Sao chép câu đối phương nói"
+                    >
+                      {copiedId === "dialog-prompt" ? (
+                        <Check className="size-3 text-[#00A854]" />
+                      ) : (
+                        <Copy className="size-3" />
+                      )}
+                    </button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePlayAudio(scenarioTask.audioPromptText)}
+                      className="h-6 px-2 text-[10px] font-mono font-extrabold gap-1 border-2 border-border bg-card hover:bg-accent"
+                      title="Nghe phát âm"
+                    >
+                      <Volume2 className="size-3" />
+                      <span>NGHE</span>
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleCopy(scenarioTask.audioPromptText, "dialog-prompt")}
-                    className="h-8 w-8 p-0 rounded-xl text-muted-foreground hover:text-foreground"
-                    title="Sao chép câu đối phương nói"
-                  >
-                    {copiedId === "dialog-prompt" ? (
-                      <Check className="size-3.5 text-emerald-500" />
-                    ) : (
-                      <Copy className="size-3.5" />
-                    )}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handlePlayAudio(scenarioTask.audioPromptText)}
-                    className="gap-1 text-xs font-bold rounded-xl h-8 px-2.5 border-primary/30 text-primary hover:bg-primary/10"
-                    title="Nghe phát âm"
-                  >
-                    <Volume2 className="size-3.5" />
-                    <span>Nghe</span>
-                  </Button>
-                </div>
+                <p className="font-serif text-base sm:text-lg font-extrabold text-foreground leading-snug select-text cursor-text">
+                  &ldquo;{scenarioTask.audioPromptText}&rdquo;
+                </p>
               </div>
 
               {/* Survival Phrases Chips Bar */}
-              <div className="space-y-1.5 pt-0.5">
-                <div className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                  <Sparkles className="size-3 text-primary" />
-                  <span>Cụm từ cứu cánh đề xuất (Bấm nghe):</span>
+              <div className="p-3 bg-background border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] space-y-2">
+                <div className="flex items-center justify-between border-b border-dashed border-border pb-1">
+                  <span className="text-[10px] font-mono font-extrabold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="size-3.5 text-primary stroke-[2.5]" />
+                    <span>CỤM TỪ CỨU CÁNH ĐỀ XUẤT:</span>
+                  </span>
+                  <span className="text-[9px] text-muted-foreground font-mono font-bold uppercase">
+                    [CLICK ĐỂ NGHE]
+                  </span>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-2">
                   {(
                     scenarioTask.suggestedVocabulary ||
                     scenarioTask.suggestedRepairPhrases.map((p) => ({ term: p, meaningVi: "" }))
                   ).map((item: SurvivalVocabularyItem, idx: number) => (
-                    <div
+                    <button
                       key={idx}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-card border border-border/80 hover:border-primary/50 text-xs text-foreground transition-all shadow-2xs"
+                      type="button"
+                      onClick={() => handlePlayAudio(item.term)}
+                      className="group inline-flex items-stretch bg-card border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] hover:bg-accent hover:text-accent-foreground transition-all text-xs cursor-pointer active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+                      title={`Nghe phát âm "${item.term}"`}
                     >
-                      <span className="font-semibold text-primary font-mono">"{item.term}"</span>
-                      {item.meaningVi && (
-                        <span className="text-[10px] text-muted-foreground">({item.meaningVi})</span>
-                      )}
-                      <button
-                        onClick={() => handlePlayAudio(item.term)}
-                        className="text-muted-foreground hover:text-primary transition-colors p-0.5 rounded-sm cursor-pointer"
-                        title="Nghe phát âm"
-                      >
-                        <Volume2 className="size-3.5" />
-                      </button>
-                    </div>
+                      <span className="px-1.5 py-1 bg-secondary group-hover:bg-primary group-hover:text-primary-foreground border-r-2 border-border flex items-center justify-center transition-colors">
+                        <Volume2 className="size-3 stroke-[2.5]" />
+                      </span>
+                      <span className="px-2 py-1 flex items-center gap-1.5 font-mono">
+                        <strong className="font-extrabold text-foreground group-hover:text-accent-foreground">
+                          {item.term}
+                        </strong>
+                        {item.meaningVi && (
+                          <span className="text-[10px] text-muted-foreground group-hover:text-accent-foreground/80 font-sans font-semibold">
+                            ({item.meaningVi})
+                          </span>
+                        )}
+                      </span>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -393,26 +357,31 @@ export function SurvivalPromptCard({
         </div>
 
         {/* Bottom prep timer bar (SB/VN-EN aligned) */}
-        <div className="pt-1.5 border-t border-border/40 flex items-center justify-between text-[10px] text-muted-foreground shrink-0 font-mono">
+        <div className="pt-2 border-t-2 border-border flex items-center justify-between text-[10px] text-muted-foreground shrink-0 font-mono font-extrabold uppercase">
           {isCountingDown && prepCountdown !== null ? (
-            <div className="flex items-center gap-1 text-primary font-bold animate-pulse">
-              <Clock className="size-3" />
-              <span>Chuẩn bị nói: {prepCountdown}s...</span>
+            <div className="flex items-center gap-1.5 text-primary animate-pulse">
+              <Clock className="size-3.5" />
+              <span>CHUẨN BỊ NÓI: {prepCountdown}S...</span>
             </div>
           ) : (
-            <div className="flex items-center gap-1">
-              <Clock className="size-3" />
+            <div className="flex items-center gap-1.5">
+              <Clock className="size-3.5 text-foreground" />
               <span>
-                Chuẩn bị:{" "}
+                PREP SLA:{" "}
                 {mode === "circumlocution"
                   ? (circumTask?.prepTimeSec ?? 2.5)
                   : (scenarioTask?.prepTimeSec ?? 2.0)}
-                s
+                S
+              </span>
+              <span className="text-border">•</span>
+              <span className="truncate max-w-[140px]">
+                {(mode === "circumlocution" ? circumTask?.topic : scenarioTask?.topic) ||
+                  "SURVIVAL"}
               </span>
             </div>
           )}
-          <span>
-            Độ khó:{" "}
+          <span className="px-1.5 py-0.5 bg-secondary text-foreground border border-border">
+            LVL{" "}
             {mode === "circumlocution"
               ? (circumTask?.difficultyOverall ?? 5)
               : (scenarioTask?.difficultyOverall ?? 5)}

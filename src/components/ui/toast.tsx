@@ -71,24 +71,21 @@ const STYLES: Record<
 
 function ToastMessage({ toast }: { toast: ToastItem }) {
   const { removeToast } = useToastStore();
-  const [progress, setProgress] = useState(100);
+  const [started, setStarted] = useState(false);
   const duration = toast.durationMs ?? 4000;
   const style = STYLES[toast.type];
   const Icon = ICONS[toast.type];
 
   useEffect(() => {
-    const startTime = Date.now();
-    const interval = setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      const remaining = Math.max(0, 100 - (elapsed / duration) * 100);
-      setProgress(remaining);
-      if (remaining <= 0) {
-        clearInterval(interval);
-        removeToast(toast.id);
-      }
-    }, 50);
+    const frameId = requestAnimationFrame(() => setStarted(true));
+    const timer = setTimeout(() => {
+      removeToast(toast.id);
+    }, duration);
 
-    return () => clearInterval(interval);
+    return () => {
+      cancelAnimationFrame(frameId);
+      clearTimeout(timer);
+    };
   }, [toast.id, duration, removeToast]);
 
   return (
@@ -145,8 +142,12 @@ function ToastMessage({ toast }: { toast: ToastItem }) {
       {/* Progress countdown bar */}
       <div className="h-0.5 w-full bg-border/40">
         <div
-          className={cn("h-full transition-all duration-75", style.progressColor)}
-          style={{ width: `${progress}%` }}
+          className={cn("h-full ease-linear", style.progressColor)}
+          style={{
+            width: started ? "0%" : "100%",
+            transitionProperty: "width",
+            transitionDuration: `${duration}ms`,
+          }}
         />
       </div>
     </div>

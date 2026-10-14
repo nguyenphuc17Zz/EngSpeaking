@@ -2,6 +2,7 @@
 
 import { generateTextWithRouting } from "@/lib/ai";
 import { advancedEvaluationSchema } from "@/lib/validation/advanced-schemas";
+import { compactAdvancedTaskForEval } from "@/lib/ai/prompts/diversity-engine";
 import { computeAdvancedFastPass, buildAdvancedFastPassEvaluation, normalizeAdvancedText } from "./fast-pass.service";
 import {
   analyzeToulminArgumentation,
@@ -34,7 +35,7 @@ function deterministicEvaluation(
   const hintTier = opts.hintTierUsed ?? 0;
   const attempt = opts.attemptNumber ?? 1;
 
-  const toulmin = analyzeToulminArgumentation(userTranscript);
+  const toulmin = analyzeToulminArgumentation(userTranscript, task.requiredToulminElements);
   const fallacies = detectLogicalFallacies(userTranscript);
   const bridge = detectTransitionalBridging(userTranscript);
   const words = clean.split(/\s+/).filter(Boolean).length;
@@ -135,7 +136,7 @@ function cleanJson(text: string): unknown {
 }
 
 const EVALUATOR_SYSTEM = `You evaluate advanced English speaking (B2-C1) for Vietnamese learners.
-Return ONLY JSON matching AdvancedEvaluation: overallScore, meaningScore, grammarScore, naturalnessScore, fluencyScore, retrievalScore, independenceScore (0-100; independence 100/90/75/50/15 for hintTier 0-4), isCommunicativelyValid, isSuccessful(overall>=70), needsRetry, isSayItBetterNeeded, gapType(none|retrieval_gap|knowledge_gap|production_gap), gapExplanation(Vietnamese), userTranscript, cleanTranscript, responseLatencyMs, speechDurationMs, errors[{type,severity,userText,correction,explanation,patternKey}], betterVersion(native model), naturalAlternatives[{expression,tone,explanationVi}], sayItBetter{professional,casual,idiomatic}, praisePoints[], actionableFeedback(Vietnamese, mention missing Toulmin elements), hintTierUsed, attemptNumber.
+Return ONLY JSON (no markdown): overallScore, meaningScore, grammarScore, naturalnessScore, fluencyScore, retrievalScore (0-100), isCommunicativelyValid, isSuccessful(overall>=70), needsRetry, isSayItBetterNeeded, gapType(none|retrieval_gap|knowledge_gap|production_gap), gapExplanation(Vietnamese), errors[{type,severity,userText,correction,explanation,patternKey}], betterVersion(native model), naturalAlternatives[{expression,tone,explanationVi}], sayItBetter{professional,casual,idiomatic}, praisePoints[], actionableFeedback(Vietnamese, mention missing Toulmin elements).
 Score meaning first (did they convey requiredMeaningElements + targetIntent?), then Toulmin completeness, then fluency under blitz.`;
 
 export async function evaluateAdvancedAttempt(params: EvaluateAdvancedParams): Promise<AdvancedEvaluation> {
@@ -162,23 +163,46 @@ export async function evaluateAdvancedAttempt(params: EvaluateAdvancedParams): P
     const res = await generateTextWithRouting({
       provider, model: params.model || "auto",
       input: {
-        messages: [{ role: "user", content: `Task: ${JSON.stringify(params.task).slice(0, 2200)}\nTranscript: "${params.userTranscript}"\nLatencyMs: ${latency}, DurationMs: ${duration}, hintTier: ${hintTier}, attempt: ${attempt}` }],
-        systemInstruction: EVALUATOR_SYSTEM, temperature: 0.2, maxOutputTokens: 1000,
+        messages: [{ role: "user", content: `TASK: ${compactAdvancedTaskForEval(params.task)}\nSPOKEN: "${params.userTranscript}"\nMETRICS: latency=${latency}ms, duration=${duration}ms, hintTier=${hintTier}, attempt=${attempt}` }],
+        systemInstruction: EVALUATOR_SYSTEM, temperature: 0.2, maxOutputTokens: 700,
       },
     });
     const parsed = cleanJson(res.text);
-    if (!parsed) throw new Error("Invalid JSON from evaluator");
-    const validated = advancedEvaluationSchema.safeParse(parsed);
+    if (!parsed || typeof parsed !== "object") throw new Error("Invalid JSON from evaluator");
+
+    const raw = parsed as Record<string, unknown>;
+    const independenceScore = hintTier === 0 ? 100 : hintTier === 1 ? 90 : hintTier === 2 ? 75 : hintTier === 3 ? 50 : 15;
+    const clean = normalizeAdvancedText(params.userTranscript);
+    const hydrated: Record<string, unknown> = {
+      ...raw,
+      independenceScore: typeof raw.independenceScore === "number" ? raw.independenceScore : independenceScore,
+      userTranscript: typeof raw.userTranscript === "string" ? raw.userTranscript : params.userTranscript,
+      cleanTranscript: typeof raw.cleanTranscript === "string" ? raw.cleanTranscript : clean,
+      responseLatencyMs: typeof raw.responseLatencyMs === "number" ? raw.responseLatencyMs : latency,
+      speechDurationMs: typeof raw.speechDurationMs === "number" ? raw.speechDurationMs : duration,
+      hintTierUsed: typeof raw.hintTierUsed === "number" ? raw.hintTierUsed : hintTier,
+      attemptNumber: typeof raw.attemptNumber === "number" ? raw.attemptNumber : attempt,
+      betterVersion: typeof raw.betterVersion === "string" && raw.betterVersion ? raw.betterVersion : params.task.expectedResponses[0] || params.userTranscript,
+      sayItBetter: raw.sayItBetter && typeof raw.sayItBetter === "object" ? raw.sayItBetter : params.task.sayItBetter,
+    };
+
+    const validated = advancedEvaluationSchema.safeParse(hydrated);
     if (!validated.success) throw new Error("Invalid evaluation schema");
     const data = validated.data as unknown as AdvancedEvaluation;
-    // Enrich with local secondary analytics (cheap, deterministic)
-    if (!params.forceAi) {
-      try {
-        data.toulmin = analyzeToulminArgumentation(params.userTranscript);
-        data.fallacies = detectLogicalFallacies(params.userTranscript);
-        data.bridge = detectTransitionalBridging(params.userTranscript);
-      } catch {}
-    }
+    // Always enrich with local secondary analytics (cheap, deterministic)
+    try {
+      const words = clean.split(/\s+/).filter(Boolean).length;
+      const wpm = Math.round((words / Math.max(0.6, duration / 1000)) * 60);
+      data.toulmin = analyzeToulminArgumentation(params.userTranscript, params.task.requiredToulminElements);
+      data.fallacies = detectLogicalFallacies(params.userTranscript);
+      data.bridge = detectTransitionalBridging(params.userTranscript);
+      data.composure = calculateComposureMetrics({
+        latencyMs: latency,
+        timeLimitMs: (params.task.blitzLimitSec || 6) * 1000,
+        wpm,
+        hesitationCount: 0,
+      });
+    } catch {}
     data.evaluationSource = "ai_llm";
     return data;
   } catch (err) {

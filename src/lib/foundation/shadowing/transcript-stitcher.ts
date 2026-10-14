@@ -226,6 +226,7 @@ const COORDINATING_CONJUNCTIONS = new Set([
  * Normalizes raw text from YouTube captions
  */
 export function cleanSegmentText(text: string): string {
+  if (!text) return "";
   return text
     .replace(/\[(?:Applause|Music|Laughter|Cheering|Silence|Audio)\]/gi, "")
     .replace(/\s+/g, " ")

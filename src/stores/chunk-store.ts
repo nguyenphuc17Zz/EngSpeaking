@@ -400,6 +400,9 @@ export const useChunkStore = create<ChunkStoreState>()(
 
       resetSession: () => {
         set({
+          currentChainTask: null,
+          currentSingleTask: null,
+          generationError: null,
           lastChainEvaluation: null,
           lastSingleEvaluation: null,
           isGenerating: false,
@@ -415,7 +418,12 @@ export const useChunkStore = create<ChunkStoreState>()(
     }),
     {
       name: "chunk_automaticity_store_v2",
-      partialize: (s) => ({ library: s.library, selectedTopicId: s.selectedTopicId, selectedStrategy: s.selectedStrategy }),
+      partialize: (s) => ({
+        library: s.library,
+        selectedTopicId: s.selectedTopicId,
+        selectedStrategy: s.selectedStrategy,
+        customTopicText: s.customTopicText,
+      }),
     }
   )
 );

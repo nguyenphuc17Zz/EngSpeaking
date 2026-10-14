@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
-import { Lora, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
+import { Space_Grotesk, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/layout/AppShell";
 import { AgentationWrapper } from "@/components/AgentationWrapper";
 
-const fontSerif = Lora({
+const fontSerif = Space_Grotesk({
   variable: "--font-serif",
   subsets: ["latin", "vietnamese"],
+  weight: ["600", "700"],
   display: "swap",
 });
 
@@ -18,7 +19,7 @@ const fontSans = Plus_Jakarta_Sans({
 
 const fontMono = JetBrains_Mono({
   variable: "--font-mono",
-  subsets: ["latin"],
+  subsets: ["latin", "vietnamese"],
   display: "swap",
 });
 

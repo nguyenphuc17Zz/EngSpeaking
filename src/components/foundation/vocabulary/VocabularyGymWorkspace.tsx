@@ -80,18 +80,29 @@ export function VocabularyGymWorkspace({ initialWord }: VocabularyGymWorkspacePr
     }
   }, [initialWord]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const recorderRef = useRef(recorder);
+  recorderRef.current = recorder;
+  const speechRecRef = useRef(speechRec);
+  speechRecRef.current = speechRec;
+
   // Reset hint tier on step or word change & release mic
   useEffect(() => {
     setCurrentHintTier(0);
     setPendingSpokenText(null);
-    speechRec.stopListening();
-    if (recorder.status === "recording") {
-      recorder.cancel?.();
-    }
+    speechRecRef.current.stopListening();
+    recorderRef.current.cancel?.();
     if (activeStep === 1) {
       setSpeakingMode("guided");
     }
-  }, [activeStep, currentWord.id]);
+  }, [activeStep, currentWord.id, currentWord.word]);
+
+  // Ensure mic and speech recognition are released on unmount
+  useEffect(() => {
+    return () => {
+      recorderRef.current.cancel?.();
+      speechRecRef.current.stopListening();
+    };
+  }, []);
 
   // Recording duration timer
   useEffect(() => {

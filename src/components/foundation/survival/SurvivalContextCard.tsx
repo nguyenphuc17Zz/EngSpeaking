@@ -16,6 +16,7 @@ import {
   ChevronDown,
   Quote,
   Target,
+  Lock,
 } from "lucide-react";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 import { sanitizeTextForTTS } from "@/lib/tts/browser";
@@ -165,26 +166,29 @@ export function SurvivalContextCard({
         "";
 
   return (
-    <Card className="rounded-3xl border border-border/80 bg-card shadow-xs overflow-hidden flex flex-col h-full">
-      <CardContent className="p-4 flex flex-col h-full space-y-3 overflow-hidden">
+    <Card className="rounded-none border-2 border-border bg-card shadow-[4px_4px_0px_var(--industrial-shadow-color)] overflow-hidden flex flex-col h-full">
+      <CardContent className="p-3.5 sm:p-4 flex flex-col h-full space-y-3 overflow-hidden">
         {/* Header: Title + Tier Jump Selectors */}
-        <div className="flex items-center justify-between gap-2 border-b border-border/40 pb-2.5 shrink-0">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
-            <ShieldCheck className="size-4 text-amber-500" />
-            <span>Khung Diễn Giải & Gợi Ý</span>
+        <div className="flex items-center justify-between gap-2 border-b-2 border-border pb-2 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="size-2.5 bg-accent border border-border shrink-0" />
+            <span className="text-[11px] font-mono font-extrabold uppercase tracking-wider text-foreground truncate">
+              2. KHUNG DIỄN GIẢI &amp; GỢI Ý
+            </span>
           </div>
 
-          <div className="flex items-center gap-1 bg-muted/60 p-0.5 rounded-xl border border-border/60">
+          <div className="flex items-center gap-0.5 bg-secondary p-0.5 border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] shrink-0">
             {[0, 1, 2, 3, 4].map((t) => {
               const penalty = [0, 0.1, 0.25, 0.5, 0.85][t];
               return (
                 <button
                   key={t}
+                  type="button"
                   onClick={() => onSelectHintTier(t)}
-                  className={`text-[10px] font-mono px-2 py-0.5 rounded-lg font-bold transition-all ${
+                  className={`text-[10px] font-mono px-2 py-0.5 font-extrabold transition-all cursor-pointer ${
                     currentHintTier === t
-                      ? "bg-amber-600 text-white shadow-xs"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? "bg-primary text-primary-foreground border border-border"
+                      : "text-muted-foreground hover:text-foreground hover:bg-card"
                   }`}
                   title={`Nấc gợi ý T${t} (trừ ${Math.round(penalty * 100)}% tự lập)`}
                 >
@@ -196,133 +200,163 @@ export function SurvivalContextCard({
         </div>
 
         {/* Scrollable Middle Container */}
-        <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-3">
+        <div className="flex-1 min-h-0 overflow-y-auto pr-0.5 space-y-3">
           {/* Framework / Scaffolding Formula */}
           {mode === "circumlocution" && circumTask ? (
-            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 flex items-center gap-1">
-                  <Target className="size-3" />
-                  <span>Cấu trúc Aristotelian Definition:</span>
+            <div className="p-3 bg-background border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] space-y-2">
+              <div className="flex items-center justify-between border-b border-dashed border-border pb-1">
+                <span className="text-[10px] font-mono font-extrabold uppercase tracking-wider text-primary flex items-center gap-1">
+                  <Target className="size-3 stroke-[2.5]" />
+                  <span>CẤU TRÚC ARISTOTELIAN DEFINITION:</span>
                 </span>
-                <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-700 dark:text-amber-400 font-mono">
-                  Genus + Differentia
-                </Badge>
+                <span className="text-[9px] font-mono font-extrabold px-1.5 py-0.5 bg-secondary text-foreground border border-border uppercase">
+                  GENUS + DIFFERENTIA
+                </span>
               </div>
 
               <div className="grid grid-cols-1 gap-1.5 text-xs font-mono">
-                <div className="p-2 rounded-xl bg-card/80 border border-border/60">
-                  <span className="text-[10px] uppercase font-bold text-muted-foreground block">
-                    1. Phân loại (Genus):
+                <div className="p-2 bg-card border-2 border-border">
+                  <span className="text-[10px] uppercase font-extrabold text-muted-foreground block">
+                    1. PHÂN LOẠI (GENUS):
                   </span>
-                  <span className="text-foreground font-semibold">
-                    "It is a kind of {circumTask.genus || circumTask.category || "object / concept"}..."
+                  <span className="text-foreground font-extrabold">
+                    {currentHintTier >= 2
+                      ? `"It is a kind of ${circumTask.genus || circumTask.category || "object / concept"}..."`
+                      : `"It is a kind of [nhóm / chủng loại]..."`}
                   </span>
                 </div>
-                <div className="p-2 rounded-xl bg-card/80 border border-border/60">
-                  <span className="text-[10px] uppercase font-bold text-muted-foreground block">
-                    2. Đặc tính khác biệt (Differentia):
+                <div className="p-2 bg-card border-2 border-border">
+                  <span className="text-[10px] uppercase font-extrabold text-muted-foreground block">
+                    2. ĐẶC TÍNH KHÁC BIỆT (DIFFERENTIA):
                   </span>
-                  <span className="text-foreground font-semibold">
-                    "...that people use to {circumTask.differentia || circumTask.hints.functionHint || "perform a specific task"}."
+                  <span className="text-foreground font-extrabold">
+                    {currentHintTier >= 1
+                      ? `"...that people use to ${circumTask.differentia || circumTask.hints.functionHint || "perform a specific task"}."`
+                      : `"...that people use to [công dụng / chức năng chính]."`}
                   </span>
                 </div>
               </div>
             </div>
           ) : mode === "scenarios" && scenarioTask ? (
-            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 flex items-center gap-1">
-                  <Lightbulb className="size-3" />
-                  <span>Chiến lược cứu cánh:</span>
+            <div className="p-3 bg-background border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] space-y-1.5">
+              <div className="flex items-center justify-between border-b border-dashed border-border pb-1">
+                <span className="text-[10px] font-mono font-extrabold uppercase tracking-wider text-primary flex items-center gap-1">
+                  <Lightbulb className="size-3 stroke-[2.5]" />
+                  <span>CHIẾN LƯỢC CỨU CÁNH:</span>
                 </span>
-                <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-700 dark:text-amber-400 font-mono">
+                <span className="text-[9px] font-mono font-extrabold px-1.5 py-0.5 bg-accent text-accent-foreground border border-border uppercase">
                   {scenarioTask.recommendedSkill}
-                </Badge>
+                </span>
               </div>
-              <p className="text-xs text-foreground/90 leading-relaxed font-medium">
+              <p className="text-xs font-mono text-foreground leading-relaxed font-bold">
                 Giữ phong thái tự tin, xác nhận thông tin tức thì và yêu cầu đối phương lặp lại hoặc làm rõ mà không gây ngắt quãng buổi hội thoại.
               </p>
             </div>
           ) : null}
 
-          {/* Model Answer Showcase */}
-          {modelAnswer && (
-            <div className="p-3 rounded-2xl bg-muted/40 border border-border/70 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                  <Quote className="size-3 text-amber-500" />
-                  <span>
-                    {mode === "circumlocution" ? "Diễn giải mẫu chuẩn:" : "Câu cứu cánh mẫu:"}
+          {/* Model Answer Showcase (Gated behind T4) */}
+          {modelAnswer &&
+            (currentHintTier >= 4 ? (
+              <div className="p-3 bg-accent/35 border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] space-y-1.5">
+                <div className="flex items-center justify-between border-b border-border pb-1">
+                  <span className="text-[10px] font-mono font-extrabold uppercase tracking-wider text-foreground flex items-center gap-1">
+                    <Quote className="size-3 text-primary" />
+                    <span>
+                      {mode === "circumlocution"
+                        ? "DIỄN GIẢI MẪU CHUẨN (T4 UNLOCKED):"
+                        : "CÂU CỨU CÁNH MẪU (T4 UNLOCKED):"}
+                    </span>
                   </span>
-                </span>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleCopy(modelAnswer, "model-answer")}
-                    className="h-6 w-6 p-0 rounded-lg text-muted-foreground hover:text-foreground"
-                    title="Sao chép câu mẫu"
-                  >
-                    {copiedId === "model-answer" ? (
-                      <Check className="size-3 text-emerald-500" />
-                    ) : (
-                      <Copy className="size-3" />
-                    )}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handlePlayAudio(modelAnswer)}
-                    className="h-6 w-6 p-0 rounded-lg text-muted-foreground hover:text-primary"
-                    title="Nghe phát âm chuẩn"
-                  >
-                    <Volume2 className="size-3" />
-                  </Button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleCopy(modelAnswer, "model-answer")}
+                      className="size-6 p-0 bg-card border border-border shrink-0"
+                      title="Sao chép câu mẫu"
+                    >
+                      {copiedId === "model-answer" ? (
+                        <Check className="size-3 text-[#00A854]" />
+                      ) : (
+                        <Copy className="size-3" />
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePlayAudio(modelAnswer)}
+                      className="h-6 px-2 text-[10px] font-mono font-extrabold gap-1 bg-card border border-border hover:bg-primary hover:text-primary-foreground shrink-0"
+                      title="Nghe phát âm chuẩn"
+                    >
+                      <Volume2 className="size-3" />
+                      <span>NGHE</span>
+                    </Button>
+                  </div>
                 </div>
+                <p className="font-serif text-sm sm:text-base font-extrabold text-foreground leading-relaxed select-text cursor-text">
+                  &ldquo;{modelAnswer}&rdquo;
+                </p>
               </div>
-              <p className="text-xs sm:text-sm font-semibold text-foreground leading-relaxed">
-                "{modelAnswer}"
-              </p>
-            </div>
-          )}
+            ) : (
+              <button
+                type="button"
+                onClick={() => onSelectHintTier(4)}
+                className="w-full text-left p-2.5 bg-background hover:bg-accent hover:text-accent-foreground border-2 border-dashed border-border transition-all flex items-center justify-between gap-2 cursor-pointer group"
+              >
+                <div className="flex items-center gap-2 text-xs font-mono font-bold text-foreground">
+                  <Lock className="size-3.5 text-primary shrink-0" />
+                  <span>Mở gợi ý T4 (hoặc bấm [H] 4 lần) để xem câu mẫu hoàn chỉnh</span>
+                </div>
+                <span className="px-2 py-0.5 bg-foreground text-accent border border-border text-[10px] font-mono font-extrabold shrink-0 uppercase">
+                  MỞ T4
+                </span>
+              </button>
+            ))}
 
-          {/* Say It Better trio (SB/VN-EN aligned) */}
-          {(circumTask?.sayItBetter || scenarioTask?.sayItBetter) && (
-            <div className="p-2.5 rounded-2xl border border-indigo-500/25 bg-indigo-500/5 space-y-1.5">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-300 flex items-center gap-1">
-                <Layers className="size-3" />
-                <span>Bộ 3 cách nói bản xứ (Say It Better):</span>
+          {/* Say It Better trio (Gated behind T4) */}
+          {currentHintTier >= 4 && (circumTask?.sayItBetter || scenarioTask?.sayItBetter) && (
+            <div className="p-3 bg-background border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] space-y-2">
+              <div className="text-[10px] font-mono font-extrabold uppercase tracking-wider text-foreground flex items-center gap-1.5 border-b border-dashed border-border pb-1">
+                <Layers className="size-3.5 text-primary" />
+                <span>BỘ 3 CÁCH NÓI BẢN XỨ (SAY IT BETTER):</span>
               </div>
               <div className="grid gap-1.5 text-xs font-mono">
                 {(
                   [
-                    { k: "Đời thường", v: (circumTask?.sayItBetter || scenarioTask?.sayItBetter)?.casual },
-                    { k: "Công sở", v: (circumTask?.sayItBetter || scenarioTask?.sayItBetter)?.professional },
-                    { k: "Khẩu ngữ", v: (circumTask?.sayItBetter || scenarioTask?.sayItBetter)?.idiomatic },
+                    { k: "ĐỜI THƯỜNG", v: (circumTask?.sayItBetter || scenarioTask?.sayItBetter)?.casual },
+                    { k: "CÔNG SỞ", v: (circumTask?.sayItBetter || scenarioTask?.sayItBetter)?.professional },
+                    { k: "KHẨU NGỮ", v: (circumTask?.sayItBetter || scenarioTask?.sayItBetter)?.idiomatic },
                   ] as Array<{ k: string; v?: string }>
                 )
                   .filter((x) => x.v)
                   .map((x) => (
                     <div
                       key={x.k}
-                      className="flex items-start justify-between gap-2 p-2 rounded-xl bg-card border border-border/60"
+                      className="flex items-start justify-between gap-2 p-2 bg-card border-2 border-border"
                     >
                       <div className="min-w-0">
-                        <span className="text-[9px] font-bold text-muted-foreground block">{x.k}:</span>
-                        <span className="text-foreground text-xs leading-snug block">"{x.v}"</span>
+                        <span className="text-[9px] font-extrabold text-primary block uppercase">{x.k}:</span>
+                        <span className="text-foreground text-xs font-bold leading-snug block">&ldquo;{x.v}&rdquo;</span>
                       </div>
-                      <div className="flex items-center gap-0.5 shrink-0">
+                      <div className="flex items-center gap-1 shrink-0">
                         <button
+                          type="button"
                           onClick={() => handleCopy(x.v || "", `sib-${x.k}`)}
-                          className="text-muted-foreground hover:text-foreground p-1 rounded-sm"
+                          className="text-muted-foreground hover:text-foreground p-1 bg-secondary border border-border cursor-pointer"
                           title="Sao chép"
                         >
-                          {copiedId === `sib-${x.k}` ? <Check className="size-3 text-emerald-500" /> : <Copy className="size-3" />}
+                          {copiedId === `sib-${x.k}` ? (
+                            <Check className="size-3 text-[#00A854]" />
+                          ) : (
+                            <Copy className="size-3" />
+                          )}
                         </button>
                         <button
+                          type="button"
                           onClick={() => handlePlayAudio(x.v || "")}
-                          className="text-muted-foreground hover:text-primary p-1 rounded-sm"
+                          className="text-muted-foreground hover:text-primary p-1 bg-secondary border border-border cursor-pointer"
                           title="Nghe mẫu"
                         >
                           <Volume2 className="size-3" />
@@ -335,18 +369,18 @@ export function SurvivalContextCard({
           )}
 
           {/* 4-Tier Ladder */}
-          <div className="rounded-2xl border border-border/60 bg-muted/20 p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-foreground">
-                <Sparkles className="size-3.5 text-amber-500" />
-                <span>Nấc thang hỗ trợ (T1 - T4):</span>
+          <div className="bg-background border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] p-3 space-y-2">
+            <div className="flex items-center justify-between border-b border-dashed border-border pb-1.5">
+              <div className="flex items-center gap-1.5 text-[10px] font-mono font-extrabold uppercase tracking-wider text-foreground">
+                <Sparkles className="size-3.5 text-primary stroke-[2.5]" />
+                <span>NẤC THANG HỖ TRỢ (T1 → T4):</span>
               </div>
               <button
                 type="button"
                 onClick={() => setIsHintsExpanded(!isHintsExpanded)}
-                className="text-[11px] font-semibold text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer transition-colors"
+                className="text-[10px] font-mono font-extrabold uppercase text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer transition-colors"
               >
-                <span>{isHintsExpanded ? "Thu gọn" : "Mở rộng"}</span>
+                <span>{isHintsExpanded ? "[THU GỌN]" : "[MỞ RỘNG]"}</span>
                 <ChevronDown
                   className={`size-3 transition-transform ${
                     isHintsExpanded ? "rotate-180" : ""
@@ -356,61 +390,90 @@ export function SurvivalContextCard({
             </div>
 
             {isHintsExpanded && (
-              <div className="space-y-1.5 pt-1">
+              <div className="space-y-2 pt-0.5">
                 {activeHints
                   .filter((h) => h.tier > 0)
                   .map((h) => {
-                    const isSelected = currentHintTier === h.tier;
+                    const tierBadgeStyles = [
+                      "bg-foreground text-background border-border", // T1: Deep Ink
+                      "bg-primary text-primary-foreground border-border", // T2: Signal Orange
+                      "bg-accent text-accent-foreground border-border", // T3: Volt Lime
+                      "bg-[#00E676] text-[#0D0E0D] border-border", // T4: Emerald
+                    ];
+                    const badgeClass = tierBadgeStyles[h.tier - 1] || tierBadgeStyles[0];
+                    const isUnlocked = h.tier <= currentHintTier;
                     const cleanText = cleanSurvivalPrefix(h.content);
+                    const penaltyPct = Math.round(
+                      (h.penaltyWeight ?? [0, 0.1, 0.25, 0.5, 0.85][h.tier] ?? 0) * 100
+                    );
+
+                    if (!isUnlocked) {
+                      return (
+                        <button
+                          key={h.tier}
+                          type="button"
+                          onClick={() => onSelectHintTier(h.tier)}
+                          className="w-full text-left p-2.5 border-2 border-dashed border-border bg-card hover:bg-accent hover:text-accent-foreground transition-all flex items-center justify-between gap-2 cursor-pointer group"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`px-1.5 py-0.5 text-[10px] font-mono font-extrabold border ${badgeClass}`}
+                            >
+                              T{h.tier}
+                            </span>
+                            <span className="font-mono font-bold text-xs text-foreground">
+                              {h.title}
+                            </span>
+                            <span className="text-[9px] font-mono font-extrabold text-muted-foreground">
+                              -{penaltyPct}%
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-mono font-extrabold text-muted-foreground group-hover:text-accent-foreground flex items-center gap-1 uppercase">
+                            <Lock className="size-3" />
+                            <span>BẤM ĐỂ MỞ T{h.tier}</span>
+                          </span>
+                        </button>
+                      );
+                    }
 
                     return (
                       <div
                         key={h.tier}
                         onClick={() => onSelectHintTier(h.tier)}
-                        className={`p-2.5 rounded-xl border text-xs transition-all cursor-pointer space-y-1 ${
-                          isSelected
-                            ? "bg-amber-500/10 border-amber-500/40 shadow-xs"
-                            : "bg-card border-border/60 hover:border-border"
-                        }`}
+                        className="p-2.5 bg-card border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] space-y-1 cursor-pointer"
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5">
-                            <Badge
-                              className={`text-[9px] px-1.5 py-0 h-4 font-mono font-bold ${
-                                isSelected
-                                  ? "bg-amber-600 text-white"
-                                  : "bg-muted text-muted-foreground"
-                              }`}
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`px-1.5 py-0.5 text-[10px] font-mono font-extrabold border ${badgeClass}`}
                             >
                               T{h.tier}
-                            </Badge>
-                            <span
-                              className={`font-semibold text-[11px] ${
-                                isSelected ? "text-amber-700 dark:text-amber-400 font-bold" : "text-foreground"
-                              }`}
-                            >
+                            </span>
+                            <span className="font-mono font-extrabold uppercase text-xs text-foreground">
                               {h.title}
                             </span>
-                            <span className="text-[9px] font-mono text-muted-foreground">
-                              -{Math.round((h.penaltyWeight ?? [0, 0.1, 0.25, 0.5, 0.85][h.tier] ?? 0) * 100)}%
+                            <span className="text-[9px] font-mono font-extrabold text-muted-foreground">
+                              -{penaltyPct}%
                             </span>
                           </div>
 
                           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                             <button
+                              type="button"
                               onClick={() => handleCopy(cleanText, `hint-${h.tier}`)}
-                              className="text-muted-foreground hover:text-foreground p-1 rounded-sm transition-colors"
+                              className="text-muted-foreground hover:text-foreground p-1 bg-secondary border border-border cursor-pointer transition-colors"
                               title="Sao chép nội dung gợi ý"
                             >
                               {copiedId === `hint-${h.tier}` ? (
-                                <Check className="size-3 text-emerald-500" />
+                                <Check className="size-3 text-[#00A854]" />
                               ) : (
                                 <Copy className="size-3" />
                               )}
                             </button>
                             <button
+                              type="button"
                               onClick={() => handlePlayAudio(cleanText)}
-                              className="text-muted-foreground hover:text-primary p-1 rounded-sm transition-colors"
+                              className="text-muted-foreground hover:text-primary p-1 bg-secondary border border-border cursor-pointer transition-colors"
                               title="Nghe âm thanh"
                             >
                               <Volume2 className="size-3" />
@@ -418,7 +481,7 @@ export function SurvivalContextCard({
                           </div>
                         </div>
 
-                        <p className="text-xs text-muted-foreground font-mono leading-relaxed pl-6">
+                        <p className="text-xs text-foreground font-mono font-bold leading-relaxed pl-0.5 select-text cursor-text">
                           {cleanText}
                         </p>
                       </div>
@@ -427,6 +490,17 @@ export function SurvivalContextCard({
               </div>
             )}
           </div>
+        </div>
+
+        {/* Footer info */}
+        <div className="pt-2 border-t-2 border-border flex items-center justify-between text-[10px] text-muted-foreground shrink-0 font-mono font-extrabold uppercase">
+          <span className="flex items-center gap-1.5">
+            <ShieldCheck className="size-3.5 text-primary" />
+            <span>BẤM PHÍM [H] ĐỂ MỞ TỪNG NẤC GỢI Ý</span>
+          </span>
+          <span className="px-1.5 py-0.5 bg-secondary text-foreground border border-border">
+            TIER T{currentHintTier}/4
+          </span>
         </div>
       </CardContent>
     </Card>

@@ -70,11 +70,14 @@ describe("Offline 103k Dictionary Lookup & Formatting", () => {
       expect(data["grumpy"][1]).toBe("tính từ");
     });
 
-    it("verifies a.json contains 'annoyed' and 'alarm'", () => {
+    it("verifies a.json contains 'annoyed' and 'alarm' with authentic IPA", () => {
       const aPath = path.join(process.cwd(), "public", "dictionary", "en-vi", "a.json");
       const data = JSON.parse(fs.readFileSync(aPath, "utf-8"));
       expect(data["annoyed"]).toBeDefined();
       expect(data["alarm"]).toBeDefined();
+      // Ensure IPA field is no longer empty string
+      expect(data["alarm"][2]).toMatch(/^\/.*\/$/);
+      expect(data["annoyed"][2]).toMatch(/^\/.*\/$/);
     });
 
     it("verifies synchronous Oxford 5000 lookup works instantly for core words", () => {
@@ -83,6 +86,52 @@ describe("Offline 103k Dictionary Lookup & Formatting", () => {
       expect(match?.word).toBe("peaceful");
       expect(match?.cefrLevel).toBe("B1");
       expect(match?.meaningVi).toBeTruthy();
+    });
+  });
+
+  describe("Authentic Dictionary IPA Resolution Across Project", () => {
+    it("resolves accurate dictionary IPA for complex and spoken vocabulary", async () => {
+      const { getWordIpa } = await import("@/lib/foundation/shadowing/ipa-dictionary");
+      
+      expect(getWordIpa("schedule")).toBe("ˈskedʒuːl");
+      expect(getWordIpa("entrepreneur")).toBe("ˌɑːntrəprəˈnɜːr");
+      expect(getWordIpa("technology")).toBe("tekˈnɑːlədʒi");
+      expect(getWordIpa("difficult")).toBe("ˈdɪfɪkəlt");
+      expect(getWordIpa("formal")).toBe("ˈfɔːməl");
+      expect(getWordIpa("algorithm")).toBe("ˈælgɜːrˌɪðəm");
+    });
+
+    it("correctly tokenizes sentence with accurate authentic IPA for each word", async () => {
+      const { getSentenceWordsWithIpa } = await import("@/lib/foundation/shadowing/ipa-dictionary");
+      const sentence = "Technology creates new opportunities for every entrepreneur.";
+      const tokens = getSentenceWordsWithIpa(sentence);
+
+      const techToken = tokens.find((t) => t.cleanWord === "technology");
+      const oppToken = tokens.find((t) => t.cleanWord === "opportunities");
+      const entToken = tokens.find((t) => t.cleanWord === "entrepreneur");
+
+      expect(techToken).toBeDefined();
+      expect(techToken?.ipa).toBe("tekˈnɑːlədʒi");
+      expect(oppToken).toBeDefined();
+      expect(oppToken?.ipa.length).toBeGreaterThan(0);
+      expect(entToken).toBeDefined();
+      expect(entToken?.ipa).toBe("ˌɑːntrəprəˈnɜːr");
+    });
+
+    it("verifies dict-lookup API route returns genuine dictionary IPA", async () => {
+      const { GET } = await import("@/app/api/foundation/vocabulary/dict-lookup/route");
+      const fakeReq = {
+        url: "http://localhost:3000/api/foundation/vocabulary/dict-lookup?word=technology",
+      } as any;
+
+      const res = await GET(fakeReq);
+      expect(res.status).toBe(200);
+      const data = await res.json();
+
+      expect(data.success).toBe(true);
+      expect(data.found).toBe(true);
+      expect(data.word).toBe("technology");
+      expect(data.ipa).toMatch(/^\/t[eɛ]kˈnɑː?lədʒi\/$/);
     });
   });
 });

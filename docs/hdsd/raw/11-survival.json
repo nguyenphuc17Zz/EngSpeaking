@@ -1,0 +1,454 @@
+{
+ "url": "http://localhost:3000/survival",
+ "title": "EngSpeak — Nghệ Thuật Phản Xạ Khẩu Ngữ Tiếng Anh",
+ "els": [
+  {
+   "tag": "A",
+   "text": "EngSpeak",
+   "x": 16,
+   "y": 14,
+   "w": 129,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Thu gọn menu",
+   "x": 215,
+   "y": 20,
+   "w": 24,
+   "h": 24
+  },
+  {
+   "tag": "A",
+   "text": "Tổng quan",
+   "x": 8,
+   "y": 101,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Sentence Builder",
+   "x": 8,
+   "y": 174,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "VN → EN Speaking",
+   "x": 8,
+   "y": 210,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Spoken Repair Lab",
+   "x": 8,
+   "y": 246,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Response Latency",
+   "x": 8,
+   "y": 282,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Chunk Automaticity",
+   "x": 8,
+   "y": 318,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Survival Speaking",
+   "x": 8,
+   "y": 354,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Spoken Vocabulary",
+   "x": 8,
+   "y": 390,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Shadowing Studio",
+   "x": 8,
+   "y": 426,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Phòng luyện nói Live",
+   "x": 8,
+   "y": 499,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Hội thoại AI",
+   "x": 8,
+   "y": 535,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Thử thách nâng cao",
+   "x": 8,
+   "y": 571,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Cài đặt & API Keys",
+   "x": 8,
+   "y": 644,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Hướng dẫn học",
+   "x": 8,
+   "y": 860,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Phòng luyện nói",
+   "x": 640,
+   "y": 14,
+   "w": 150,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Phòng luyện nói",
+   "x": 640,
+   "y": 14,
+   "w": 150,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Gemini:\ngemini-3.5-flash-lite",
+   "x": 798,
+   "y": 14,
+   "w": 274,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "1x",
+   "x": 1080,
+   "y": 14,
+   "w": 60,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "?",
+   "x": 1148,
+   "y": 14,
+   "w": 64,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Chuyển đổi giao diện Sáng / Tối",
+   "x": 1220,
+   "y": 14,
+   "w": 36,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 291,
+   "y": 107,
+   "w": 32,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Ngẫu nhiên đa dạng (Infinite Surprise)",
+   "x": 452,
+   "y": 110,
+   "w": 247,
+   "h": 26
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Gemini:\ngemini-3.5-flash-lite",
+   "x": 706,
+   "y": 105,
+   "w": 274,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Circumlocution",
+   "x": 993,
+   "y": 111,
+   "w": 110,
+   "h": 24
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Scenarios",
+   "x": 1103,
+   "y": 111,
+   "w": 78,
+   "h": 24
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Tiếp [R]",
+   "x": 1196,
+   "y": 107,
+   "w": 87,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Kết thúc",
+   "x": 1419,
+   "y": 107,
+   "w": 91,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Tạo mới bằng AI",
+   "x": 322,
+   "y": 289,
+   "w": 108,
+   "h": 24
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Tiếp theo",
+   "x": 436,
+   "y": 289,
+   "w": 77,
+   "h": 24
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 541,
+   "y": 417,
+   "w": 28,
+   "h": 28
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 550,
+   "y": 700,
+   "w": 18,
+   "h": 18
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 550,
+   "y": 748,
+   "w": 18,
+   "h": 18
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 550,
+   "y": 796,
+   "w": 18,
+   "h": 18
+  },
+  {
+   "tag": "BUTTON",
+   "text": "T0",
+   "x": 823,
+   "y": 204,
+   "w": 28,
+   "h": 18
+  },
+  {
+   "tag": "BUTTON",
+   "text": "T1",
+   "x": 855,
+   "y": 204,
+   "w": 28,
+   "h": 18
+  },
+  {
+   "tag": "BUTTON",
+   "text": "T2",
+   "x": 887,
+   "y": 204,
+   "w": 28,
+   "h": 18
+  },
+  {
+   "tag": "BUTTON",
+   "text": "T3",
+   "x": 919,
+   "y": 204,
+   "w": 28,
+   "h": 18
+  },
+  {
+   "tag": "BUTTON",
+   "text": "T4",
+   "x": 951,
+   "y": 204,
+   "w": 28,
+   "h": 18
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 913,
+   "y": 467,
+   "w": 24,
+   "h": 24
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 941,
+   "y": 467,
+   "w": 24,
+   "h": 24
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Thu gọn",
+   "x": 907,
+   "y": 580,
+   "w": 58,
+   "h": 16
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 910,
+   "y": 619,
+   "w": 20,
+   "h": 20
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 934,
+   "y": 619,
+   "w": 20,
+   "h": 20
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 910,
+   "y": 710,
+   "w": 20,
+   "h": 20
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 934,
+   "y": 710,
+   "w": 20,
+   "h": 20
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 910,
+   "y": 820,
+   "w": 20,
+   "h": 20
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 934,
+   "y": 820,
+   "w": 20,
+   "h": 20
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 910,
+   "y": 931,
+   "w": 20,
+   "h": 20
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 934,
+   "y": 931,
+   "w": 20,
+   "h": 20
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1150,
+   "y": 222,
+   "w": 27,
+   "h": 15
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Bắt đầu nói",
+   "x": 1091,
+   "y": 437,
+   "w": 64,
+   "h": 64
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Nhập phím (Dự phòng)",
+   "x": 1028,
+   "y": 761,
+   "w": 157,
+   "h": 28
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Open Next.js Dev Tools",
+   "x": 22,
+   "y": 846,
+   "w": 32,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1181,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  }
+ ]
+}

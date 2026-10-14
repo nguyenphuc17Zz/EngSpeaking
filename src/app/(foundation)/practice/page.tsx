@@ -128,6 +128,7 @@ function PracticeInner() {
   const [showCompletedModal, setShowCompletedModal] = useState(false);
 
   const startTimeRef = useRef<number>(0);
+  const promptDisplayedAtRef = useRef<number>(Date.now());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const generate = useCallback(
@@ -235,6 +236,7 @@ function PracticeInner() {
   }, []);
 
   useEffect(() => {
+    promptDisplayedAtRef.current = Date.now();
     if (
       currentExercise?.type === "timed_speaking" ||
       currentExercise?.type === "micro_monologue"
@@ -301,7 +303,7 @@ function PracticeInner() {
       tr = speech.fullTranscript.trim() || speech.transcript.trim() || textInput.trim();
     }
 
-    const ttfw = tr ? (dur ? Math.min(dur, 3000) : Date.now() - startTimeRef.current) : undefined;
+    const ttfw = tr ? Math.max(300, startTimeRef.current - promptDisplayedAtRef.current) : undefined;
     setTranscript(tr);
     setDurationMs(dur);
     setTtfwMs(ttfw);

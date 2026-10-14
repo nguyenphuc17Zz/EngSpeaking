@@ -57,6 +57,26 @@ function formatPlaybackTime(sec: number): string {
   return `${m}:${s < 10 ? "0" : ""}${s}`;
 }
 
+function SessionTimer({ startTime }: { startTime: number }) {
+  const [elapsedSec, setElapsedSec] = useState(() =>
+    Math.max(0, Math.floor((Date.now() - startTime) / 1000))
+  );
+
+  useEffect(() => {
+    setElapsedSec(Math.max(0, Math.floor((Date.now() - startTime) / 1000)));
+    const id = setInterval(() => {
+      setElapsedSec(Math.max(0, Math.floor((Date.now() - startTime) / 1000)));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [startTime]);
+
+  return (
+    <span className="text-xs font-mono font-bold text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-lg border border-border/60">
+      {formatPlaybackTime(elapsedSec)}
+    </span>
+  );
+}
+
 export function ConversationSessionView({ sessionId }: ConversationSessionViewProps) {
   const router = useRouter();
   const {
@@ -65,6 +85,7 @@ export function ConversationSessionView({ sessionId }: ConversationSessionViewPr
     isThinking,
     setThinking,
     addTurn,
+    updateTurnPedagogy,
     setWorld,
     setTurns,
     sessionConfig,
@@ -100,7 +121,6 @@ export function ConversationSessionView({ sessionId }: ConversationSessionViewPr
   const [showCompletedModal, setShowCompletedModal] = useState(false);
   const [worldId, setWorldId] = useState<string | null>(sessionId || null);
   const [isLoadingWorld, setIsLoadingWorld] = useState(false);
-  const [elapsedSec, setElapsedSec] = useState(0);
   const [pendingSpokenText, setPendingSpokenText] = useState<string | null>(null);
   const [pendingDurationMs, setPendingDurationMs] = useState<number>(2500);
   const [recordingDurationMs, setRecordingDurationMs] = useState(0);
@@ -141,15 +161,6 @@ export function ConversationSessionView({ sessionId }: ConversationSessionViewPr
     turnsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [turns, isThinking]);
 
-  // Timer tick
-  useEffect(() => {
-    startTimeRef.current = Date.now();
-    const id = setInterval(() => {
-      setElapsedSec(Math.floor((Date.now() - startTimeRef.current) / 1000));
-    }, 1000);
-    return () => clearInterval(id);
-  }, []);
-
   // ─── World Restore / Cold-start Handler (SQLite Backend) ─────────────
   useEffect(() => {
     const effectiveId = sessionId || (typeof window !== "undefined" ? localStorage.getItem("conversation_world_id") : null);
@@ -157,7 +168,7 @@ export function ConversationSessionView({ sessionId }: ConversationSessionViewPr
     setWorldId(effectiveId);
 
     // If store already has this exact world loaded, keep it
-    if (world && world.scenario) return;
+    if (world && world.scenario && (!effectiveId || world.scenario.id === effectiveId)) return;
 
     setIsLoadingWorld(true);
     fetch(`/api/conversation/worlds?id=${effectiveId}`)
@@ -390,13 +401,14 @@ export function ConversationSessionView({ sessionId }: ConversationSessionViewPr
           toast.success("🎉 MỤC TIÊU ẨN ĐÃ MỞ KHÓA!", aiResponse.unlockedObjective.description);
         }
 
-        // Update user turn with pedagogical feedback
-        userTurn.pedagogy = {
+        // Update user turn with full pedagogical feedback
+        const mergedPedagogy: TurnPedagogy = {
           ...userTurn.pedagogy,
-          grammarIssue: ped?.grammarIssue || null,
-          grammarFix: ped?.grammarFix || null,
+          ...ped,
+          grammarIssue: ped?.grammarIssue ?? null,
+          grammarFix: ped?.grammarFix ?? null,
           nativeReformulation: ped?.nativeReformulation || trimmed,
-          turnScore: ped?.turnScore || 85,
+          turnScore: ped?.turnScore ?? 85,
           coachTipVi: ped?.coachTipVi,
           speechRateWpm: turnWpm,
           lexicalDiversityTtr: turnTtr,
@@ -404,10 +416,17 @@ export function ConversationSessionView({ sessionId }: ConversationSessionViewPr
           fluencyScore: ped?.fluencyScore,
           retrievalScore: ped?.retrievalScore,
         };
-        setLastTurnFeedback(userTurn);
+        userTurn.pedagogy = mergedPedagogy;
+        updateTurnPedagogy(userTurn.id, mergedPedagogy);
+        setLastTurnFeedback({ ...userTurn, pedagogy: mergedPedagogy });
+        setTextInput("");
 
-        // Update World State (Trust, Patience, Facts)
-        if (world && aiResponse?.worldUpdate) {
+        // Update World State from API response
+        if (data.worldState) {
+          setWorld(data.worldState);
+        } else if (data.nextWorldState) {
+          setWorld(data.nextWorldState);
+        } else if (world && aiResponse?.worldUpdate) {
           const updatedChar = {
             ...world.activeCharacter,
             trust: Math.max(0, Math.min(100, (world.activeCharacter.trust || 60) + (aiResponse.worldUpdate.trustDelta || 0))),
@@ -445,7 +464,7 @@ export function ConversationSessionView({ sessionId }: ConversationSessionViewPr
           latencies: [...prev.latencies, latencyMs],
           wpms: [...prev.wpms, turnWpm],
           ttrs: [...prev.ttrs, turnTtr],
-          errorsCount: prev.errorsCount + (ped?.grammarIssue ? 1 : 0),
+          errorsCount: prev.errorsCount + ((ped?.errors?.length ?? 0) > 0 || ped?.grammarIssue ? 1 : 0),
         }));
 
         // Reset hint tier for next turn
@@ -469,6 +488,7 @@ export function ConversationSessionView({ sessionId }: ConversationSessionViewPr
       hintTier,
       attemptCount,
       addTurn,
+      updateTurnPedagogy,
       turns,
       settings.conversation.provider,
       settings.conversation.model,
@@ -495,14 +515,20 @@ export function ConversationSessionView({ sessionId }: ConversationSessionViewPr
     if (lastTurnFeedback?.pedagogy?.nativeReformulation) {
       incrementAttempt(true);
       setTextInput(lastTurnFeedback.pedagogy.nativeReformulation);
+      setLastTurnFeedback(null);
       toast.info("Đã nạp câu bản xứ", "Nhấn Micro để nói lại câu chuẩn xác hơn.");
     }
   }, [lastTurnFeedback, incrementAttempt]);
 
-  const handlePracticeVariant = useCallback(() => {
+  const handlePracticeVariant = useCallback((variantText?: string) => {
     incrementAttempt(false);
     setLastTurnFeedback(null);
-    toast.info("Luyện biến thể", "Hãy thử diễn đạt lại ý vừa rồi bằng một cách nói khác!");
+    if (variantText) {
+      toast.info("Đã chọn câu bản xứ", `Mẫu: "${variantText}". Hãy nói câu này vào micro!`);
+      setTextInput(variantText);
+    } else {
+      toast.info("Luyện biến thể", "Hãy thử diễn đạt lại ý vừa rồi bằng một cách nói khác!");
+    }
   }, [incrementAttempt]);
 
   const handleRefreshHints = useCallback(async () => {
@@ -536,6 +562,55 @@ export function ConversationSessionView({ sessionId }: ConversationSessionViewPr
     setShowCompletedModal(true);
   }, [finishSessionManually]);
 
+  // Global keyboard shortcuts ([Space], [H], [T])
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable)) {
+        return;
+      }
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (sessionStatus === "speaking" || isAiSpeakingRef.current) {
+          handleBargeIn();
+        } else if (unifiedSTTRef.current.isListening || sessionStatus === "recording") {
+          void handleStopRecord();
+        } else if (pendingSpokenText) {
+          handleReRecord();
+        } else if (lastTurnFeedback) {
+          setLastTurnFeedback(null);
+          void handleStartSpeaking();
+        } else if (!isProcessing) {
+          void handleStartSpeaking();
+        }
+      } else if (e.code === "KeyH" && !isProcessing) {
+        e.preventDefault();
+        setHintTier(((hintTier + 1) % 5) as 0 | 1 | 2 | 3 | 4);
+      } else if (e.code === "KeyT") {
+        e.preventDefault();
+        const lastAiTurn = [...turns].reverse().find((t) => t.role === "assistant");
+        if (lastAiTurn?.text) {
+          void speak(lastAiTurn.text);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    sessionStatus,
+    pendingSpokenText,
+    lastTurnFeedback,
+    isProcessing,
+    hintTier,
+    setHintTier,
+    turns,
+    handleBargeIn,
+    handleStopRecord,
+    handleReRecord,
+    handleStartSpeaking,
+    speak,
+  ]);
+
   // Derived metrics
   const trustPercent = world?.activeCharacter?.trust ?? 60;
   const patiencePercent = world?.activeCharacter?.patience ?? 70;
@@ -553,7 +628,7 @@ export function ConversationSessionView({ sessionId }: ConversationSessionViewPr
     ? Math.round(sessionStats.ttrs.reduce((a, b) => a + b, 0) / sessionStats.ttrs.length)
     : 68;
   const cefrEstimate = avgScore >= 88 ? "C1" : avgScore >= 75 ? "B2" : "B1";
-  const durationMin = Math.max(1, Math.round(elapsedSec / 60));
+  const durationMin = Math.max(1, Math.round((Date.now() - (sessionStartedAt || startTimeRef.current)) / 60000));
 
   if (isLoadingWorld) {
     return (
@@ -599,9 +674,7 @@ export function ConversationSessionView({ sessionId }: ConversationSessionViewPr
         <div className="flex items-center gap-2 shrink-0">
           <GlobalAiSelector />
 
-          <span className="text-xs font-mono font-bold text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-lg border border-border/60">
-            {formatPlaybackTime(elapsedSec)}
-          </span>
+          <SessionTimer startTime={sessionStartedAt || startTimeRef.current} />
 
           <Button
             variant="outline"
@@ -734,7 +807,50 @@ export function ConversationSessionView({ sessionId }: ConversationSessionViewPr
           </div>
 
           {/* Interactive Speech Input & Instant Pedagogical Feedback */}
-          <div className="shrink-0">
+          <div className="shrink-0 space-y-1.5">
+            {textInput && !lastTurnFeedback && (
+              <div className="px-3 py-2 rounded-2xl bg-primary/10 border border-primary/30 flex items-center justify-between gap-2 text-xs animate-in fade-in duration-150">
+                <div className="min-w-0 flex-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary block">
+                    Mẫu câu đang luyện (Hãy đọc to vào Micro):
+                  </span>
+                  <p className="font-mono font-bold text-foreground truncate" title={textInput}>
+                    "{textInput}"
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => tts.speak(sanitizeTextForTTS(textInput), { lang: "en-US", rate: 0.95 })}
+                    className="h-7 px-2 rounded-lg text-[11px] font-semibold text-primary hover:bg-primary/20"
+                    title="Nghe mẫu"
+                  >
+                    <Volume2 className="size-3.5" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => executeTurn(textInput, 2500)}
+                    disabled={isProcessing}
+                    className="h-7 px-2.5 rounded-lg text-[11px] font-bold border-primary/40 text-primary hover:bg-primary/15"
+                  >
+                    Gửi mẫu này
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setTextInput("")}
+                    className="h-7 px-1.5 rounded-lg text-[11px] text-muted-foreground hover:text-foreground"
+                  >
+                    ✕
+                  </Button>
+                </div>
+              </div>
+            )}
             {lastTurnFeedback ? (
               <TurnFeedbackCard
                 turn={lastTurnFeedback}
@@ -753,7 +869,7 @@ export function ConversationSessionView({ sessionId }: ConversationSessionViewPr
                     : "idle"
                 }
                 isListening={unifiedSTT.isListening}
-                liveTranscript={unifiedSTT.fullTranscript}
+                liveTranscript={unifiedSTT.fullTranscript || textInput}
                 durationMs={recordingDurationMs || unifiedSTT.audioRecorder.durationMs}
                 autoStartMic={autoStartMic}
                 onToggleAutoStartMic={setAutoStartMic}
@@ -762,7 +878,10 @@ export function ConversationSessionView({ sessionId }: ConversationSessionViewPr
                 onSubmitTextFallback={(text) => executeTurn(text, 2500)}
                 onOpenHints={() => setHintTier(((hintTier + 1) % 5) as 0 | 1 | 2 | 3 | 4)}
                 isEvaluating={isProcessing || unifiedSTT.isTranscribing}
-                onResetLiveTranscript={() => unifiedSTT.resetTranscript()}
+                onResetLiveTranscript={() => {
+                  unifiedSTT.resetTranscript();
+                  setTextInput("");
+                }}
                 pendingText={pendingSpokenText}
                 onConfirmSubmit={handleConfirmSubmit}
                 onReRecord={handleReRecord}
@@ -781,6 +900,7 @@ export function ConversationSessionView({ sessionId }: ConversationSessionViewPr
               onSelectHintTier={(t) => setHintTier(t as 0 | 1 | 2 | 3 | 4)}
               onSelectHint={(text) => {
                 setTextInput(text);
+                setLastTurnFeedback(null);
                 toast.success("Đã nạp mẫu câu!", text);
               }}
             />
@@ -796,6 +916,8 @@ export function ConversationSessionView({ sessionId }: ConversationSessionViewPr
           <span>[Backspace]: Xoá nói lại</span>
           <span>•</span>
           <span>[H]: Gợi ý ({hintTier}/4)</span>
+          <span>•</span>
+          <span>[T]: Nghe lại AI</span>
           {pendingSpokenText && !isProcessing && (
             <>
               <span>•</span>

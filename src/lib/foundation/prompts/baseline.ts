@@ -1,16 +1,18 @@
 // Baseline diagnostic prompt §7-8
+import { buildCreativeAngleDirective } from "@/lib/ai/prompts/diversity-engine";
+
 export const BASELINE_SYSTEM = `You generate baseline speaking tasks for English learners with good knowledge but weak production.
 
-Create 7 tasks (as user chose full) covering: self introduction, daily routine, past activity, preferences, simple explanation, simple opinion, follow-up expansion.
-
-Each task: concise prompt (1 sentence), skill tag, expected ~10-15 sec.
+Create 7 tasks covering: self introduction, daily routine, past activity, preferences, simple explanation, simple opinion, follow-up expansion.
+Each task: concise, fresh, non-cliché prompt (1 sentence), skill tag, expected ~10-15 sec.
 
 Return ONLY valid JSON: {"tasks":[{"id":"t1","prompt":"Tell me...","skill":"sentence_retrieval","topic":"self"}, ...]}`;
 
 export function buildBaselineUserPrompt(opts?: { speechBank?: string[] }): string {
   const lines: string[] = [];
   lines.push(`Generate 7 baseline tasks as JSON.`);
-  if (opts?.speechBank?.length) lines.push(`Speech bank hints: ${opts.speechBank.slice(0,4).join(" | ")}`);
+  lines.push(buildCreativeAngleDirective());
+  if (opts?.speechBank?.length) lines.push(`Speech bank hints: ${opts.speechBank.slice(0, 4).join(" | ")}`);
   lines.push(`Ensure variety: 1 self-intro, 1 daily routine, 1 past, 1 preference, 1 explanation, 1 opinion, 1 expansion/followup. Difficulty progression easy→medium.`);
   return lines.join("\n");
 }

@@ -4,7 +4,9 @@
 import { generateTextWithRouting } from "@/lib/ai";
 import { latencyEvaluationSchema } from "@/lib/validation/latency-schemas";
 import { LATENCY_EVALUATOR_SYSTEM, buildLatencyEvaluatorUserPrompt } from "@/lib/ai/prompts/latency-prompts";
-import { detectBufferChunk } from "./fast-pass.service";
+import { compactLatencyTaskForEval } from "@/lib/ai/prompts/diversity-engine";
+import { detectBufferChunk, computeFastPassLatencyMatch } from "./fast-pass.service";
+import { cleanAiJson } from "@/lib/foundation/shared/json-parser";
 import type {
   LatencyTask,
   LatencyEvaluation,
@@ -20,6 +22,7 @@ export interface EvaluateLatencyParams {
   speechOnsetMs?: number;
   provider?: string;
   model?: string;
+  forceAi?: boolean;
 }
 
 function cleanText(t: string): string {
@@ -149,20 +152,11 @@ function computeDeterministicLatencyEvaluation(
 }
 
 function cleanJson(text: string): unknown {
-  const trimmed = text.trim();
-  const withoutFence = trimmed
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "");
+  const cleaned = cleanAiJson(text);
+  if (!cleaned) return null;
   try {
-    return JSON.parse(withoutFence);
+    return JSON.parse(cleaned);
   } catch {
-    const m = withoutFence.match(/\{[\s\S]*\}/);
-    if (m) {
-      try {
-        return JSON.parse(m[0]);
-      } catch {}
-    }
     return null;
   }
 }
@@ -172,23 +166,37 @@ export async function evaluateLatencyAttempt(
 ): Promise<LatencyEvaluation> {
   const provider = params.provider || "gemini";
   const model = params.model || "auto";
+  const speechDurationMs = params.speechDurationMs ?? 2500;
+  const targetLatencyMs = params.task.targetLatencyMs ?? 3000;
 
   if (provider === "mock") {
     return computeDeterministicLatencyEvaluation(
       params.task,
       params.userTranscript,
       params.responseLatencyMs,
-      params.speechDurationMs,
+      speechDurationMs,
       params.speechOnsetMs
     );
   }
 
+  // 1. 0ms / 0-Token Deterministic Fast-Pass for clear high-confidence matches
+  const fastPass = computeFastPassLatencyMatch(params.task, params.userTranscript, {
+    responseLatencyMs: params.responseLatencyMs,
+    speechDurationMs,
+    speechOnsetMs: params.speechOnsetMs,
+    targetLatencyMs,
+  });
+  if (!params.forceAi && fastPass.canFastPass && fastPass.evaluation.accuracyScore >= 80 && fastPass.evaluation.isSuccessful) {
+    return fastPass.evaluation;
+  }
+
+  // 2. Compact LLM Evaluation for nuanced semantic checking
   const userPrompt = buildLatencyEvaluatorUserPrompt({
-    taskJson: JSON.stringify(params.task),
+    taskJson: compactLatencyTaskForEval(params.task),
     userTranscript: params.userTranscript,
     responseLatencyMs: params.responseLatencyMs,
-    speechDurationMs: params.speechDurationMs ?? 2500,
-    targetLatencyMs: params.task.targetLatencyMs ?? 3000,
+    speechDurationMs,
+    targetLatencyMs,
   });
 
   try {
@@ -199,14 +207,46 @@ export async function evaluateLatencyAttempt(
         messages: [{ role: "user", content: userPrompt }],
         systemInstruction: LATENCY_EVALUATOR_SYSTEM,
         temperature: 0.2,
-        maxOutputTokens: 650,
+        maxOutputTokens: 450,
       },
     });
 
     const parsed = cleanJson(res.text);
-    if (!parsed) throw new Error("Could not parse JSON from Latency Evaluator");
+    if (!parsed || typeof parsed !== "object") throw new Error("Could not parse JSON from Latency Evaluator");
 
-    const validated = latencyEvaluationSchema.safeParse(parsed);
+    // Hydrate deterministic timing, hesitation, and 4-quadrant fields if omitted by compact LLM response
+    const raw = parsed as Record<string, unknown>;
+    const baseEval = fastPass.evaluation;
+    const accuracyScore = typeof raw.accuracyScore === "number" ? raw.accuracyScore : baseEval.accuracyScore;
+    const isFast = baseEval.responseLatencyMs <= targetLatencyMs * 1.15;
+    const isSuccessful = typeof raw.isSuccessful === "boolean" ? raw.isSuccessful : accuracyScore >= 70;
+    const computedQuadrant: LatencyQuadrant =
+      isFast && isSuccessful
+        ? "fast_correct"
+        : !isFast && isSuccessful
+        ? "slow_correct"
+        : isFast && !isSuccessful
+        ? "fast_incorrect"
+        : "slow_incorrect";
+
+    const hydrated: Record<string, unknown> = {
+      ...baseEval,
+      ...raw,
+      isFastPass: false,
+      responseLatencyMs: typeof raw.responseLatencyMs === "number" ? raw.responseLatencyMs : params.responseLatencyMs,
+      speechDurationMs: typeof raw.speechDurationMs === "number" ? raw.speechDurationMs : speechDurationMs,
+      targetLatencyMs: typeof raw.targetLatencyMs === "number" ? raw.targetLatencyMs : targetLatencyMs,
+      latencyRatio: typeof raw.latencyRatio === "number" ? raw.latencyRatio : baseEval.latencyRatio,
+      quadrant: raw.quadrant || computedQuadrant,
+      latencyStatus: raw.latencyStatus || baseEval.latencyStatus,
+      hesitation: raw.hesitation && typeof raw.hesitation === "object" ? raw.hesitation : baseEval.hesitation,
+      userTranscript: typeof raw.userTranscript === "string" ? raw.userTranscript : params.userTranscript,
+      cleanTranscript: typeof raw.cleanTranscript === "string" ? raw.cleanTranscript : baseEval.cleanTranscript,
+      betterResponse: typeof raw.betterResponse === "string" ? raw.betterResponse : baseEval.betterResponse,
+      praisePoints: Array.isArray(raw.praisePoints) ? raw.praisePoints : baseEval.praisePoints,
+    };
+
+    const validated = latencyEvaluationSchema.safeParse(hydrated);
     if (!validated.success) {
       if (process.env.NODE_ENV !== "production") {
         console.warn("[LatencyEvaluator] Schema error:", validated.error);
@@ -225,7 +265,7 @@ export async function evaluateLatencyAttempt(
         params.task,
         params.userTranscript,
         params.responseLatencyMs,
-        params.speechDurationMs,
+        speechDurationMs,
         params.speechOnsetMs
       );
     }

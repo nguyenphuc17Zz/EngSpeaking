@@ -17,7 +17,8 @@ export function getSqliteDb(): DatabaseSync {
  * Saves or updates a task in the SQLite database.
  */
 export function saveSqliteBankTask(
-  record: ContentBankRecord
+  record: ContentBankRecord,
+  options?: { skipIncrementOnConflict?: boolean }
 ): ContentBankRecord {
   const db = getSqliteDb();
 
@@ -30,6 +31,13 @@ export function saveSqliteBankTask(
     | undefined;
 
   if (existing) {
+    if (options?.skipIncrementOnConflict) {
+      return {
+        ...record,
+        id: existing.id,
+        usage_count: existing.usage_count,
+      };
+    }
     const updateStmt = db.prepare(
       "UPDATE content_banks SET usage_count = usage_count + 1, updated_at = ? WHERE id = ?"
     );

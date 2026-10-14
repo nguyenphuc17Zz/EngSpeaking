@@ -15,25 +15,51 @@ export function buildAIContext(task: AITask, sourceData: Record<string, unknown>
   const strategy = policy.contextStrategy;
   // Priority: current task > user response > objective > recent turns > scenario state > learner constraints > facts > older history §17
   const priorityKeys = ["currentTask", "currentUserResponse", "taskObjective", "recentTurns", "activeScenarioState", "activeLearnerConstraints", "importantFacts", "olderHistory"];
+  const allPrioritySet = new Set(priorityKeys);
   let packed: Record<string, unknown> = {};
-  if (strategy === "full") packed = sourceData;
-  else if (strategy === "compact") {
-    // Keep only priority keys that exist and are relevant
+  if (strategy === "full") {
+    packed = { ...sourceData };
+  } else if (strategy === "compact") {
+    // Keep priority keys that exist and are relevant, plus preserve unrecognized task-specific keys
     for (const k of priorityKeys.slice(0, 5)) if (k in sourceData) packed[k] = sourceData[k];
-    // Truncate olderHistory
+    for (const [k, v] of Object.entries(sourceData)) {
+      if (!allPrioritySet.has(k) && v !== undefined) {
+        packed[k] = v;
+      }
+    }
+    // Truncate recentTurns
     if ("recentTurns" in packed && Array.isArray(packed.recentTurns) && (packed.recentTurns as unknown[]).length > 15) {
       packed.recentTurns = (packed.recentTurns as unknown[]).slice(-15);
     }
   } else if (strategy === "recent") {
-    packed.recentTurns = sourceData.recentTurns;
-    packed.currentUserResponse = sourceData.currentUserResponse;
-    packed.taskObjective = sourceData.taskObjective;
+    if ("recentTurns" in sourceData && sourceData.recentTurns !== undefined) packed.recentTurns = sourceData.recentTurns;
+    if ("currentUserResponse" in sourceData && sourceData.currentUserResponse !== undefined) packed.currentUserResponse = sourceData.currentUserResponse;
+    if ("taskObjective" in sourceData && sourceData.taskObjective !== undefined) packed.taskObjective = sourceData.taskObjective;
+    for (const [k, v] of Object.entries(sourceData)) {
+      if (!allPrioritySet.has(k) && v !== undefined) {
+        packed[k] = v;
+      }
+    }
   } else if (strategy === "summary") {
-    packed.summary = sourceData.summary || sourceData.conversationSummary;
-    packed.activeFacts = sourceData.activeFacts;
-    packed.activeThreads = sourceData.activeThreads;
-    packed.currentScenarioState = sourceData.currentScenarioState;
-  } else packed = sourceData;
+    const summaryKnownKeys = new Set([...priorityKeys, "summary", "conversationSummary", "activeFacts", "activeThreads", "currentScenarioState"]);
+    if (sourceData.summary !== undefined || sourceData.conversationSummary !== undefined) {
+      packed.summary = sourceData.summary || sourceData.conversationSummary;
+    }
+    if (sourceData.activeFacts !== undefined) packed.activeFacts = sourceData.activeFacts;
+    if (sourceData.activeThreads !== undefined) packed.activeThreads = sourceData.activeThreads;
+    if (sourceData.currentScenarioState !== undefined) packed.currentScenarioState = sourceData.currentScenarioState;
+    for (const [k, v] of Object.entries(sourceData)) {
+      if (!summaryKnownKeys.has(k) && v !== undefined) {
+        packed[k] = v;
+      }
+    }
+  } else {
+    packed = { ...sourceData };
+  }
+
+  if (Object.keys(packed).length === 0 && Object.keys(sourceData).length > 0) {
+    packed = { ...sourceData };
+  }
 
   // Enforce token budget via simple truncation (estimate 1 token ~ 4 chars)
   if (maxInputTokens) {

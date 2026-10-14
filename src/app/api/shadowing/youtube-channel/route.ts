@@ -57,11 +57,27 @@ export interface ScrapedVideoItem {
   duration?: string;
 }
 
-function parseVideosFromYtObject(obj: any, defaultChannel = ""): ScrapedVideoItem[] {
+function parseVideosFromYtObject(
+  obj: any,
+  defaultChannel = "",
+  onContinuationToken?: (token: string) => void
+): ScrapedVideoItem[] {
   const results: ScrapedVideoItem[] = [];
+  let foundToken = false;
 
   const walk = (node: any) => {
     if (!node || typeof node !== "object") return;
+
+    if (
+      !foundToken &&
+      onContinuationToken &&
+      node.continuationCommand &&
+      typeof node.continuationCommand.token === "string" &&
+      node.continuationCommand.token.length > 0
+    ) {
+      foundToken = true;
+      onContinuationToken(node.continuationCommand.token);
+    }
 
     // 1. Modern lockupViewModel (YouTube 2024-2025)
     if (node.lockupViewModel && node.lockupViewModel.contentId) {
@@ -264,16 +280,16 @@ export async function POST(req: NextRequest) {
               handle ||
               "YouTube Channel";
 
-            const page1Videos = parseVideosFromYtObject(data, sourceChannel);
+            let continuationToken: string | null = null;
+            const page1Videos = parseVideosFromYtObject(data, sourceChannel, (token) => {
+              continuationToken = token;
+            });
             const videoMap = new Map<string, ScrapedVideoItem>();
             page1Videos.forEach((v) => videoMap.set(v.youtubeId, v));
 
             // Check for continuation token to fetch Page 2 (reaching 50-60 videos)
-            const strData = JSON.stringify(data);
-            const tokenMatch = strData.match(/"continuationCommand":\{"token":"([^"]+)"/);
-
-            if (tokenMatch && tokenMatch[1]) {
-              const browseData = await fetchInnertubeContinuation(tokenMatch[1]);
+            if (continuationToken) {
+              const browseData = await fetchInnertubeContinuation(continuationToken);
               if (browseData) {
                 const page2Videos = parseVideosFromYtObject(browseData, sourceChannel);
                 page2Videos.forEach((v) => {
@@ -325,15 +341,16 @@ export async function POST(req: NextRequest) {
               data.metadata?.playlistMetadataRenderer?.title ||
               "YouTube Playlist";
 
-            const plVideos = parseVideosFromYtObject(data, plTitle);
+            let continuationToken: string | null = null;
+            const plVideos = parseVideosFromYtObject(data, plTitle, (token) => {
+              continuationToken = token;
+            });
             const plMap = new Map<string, ScrapedVideoItem>();
             plVideos.forEach((v) => plMap.set(v.youtubeId, v));
 
             // Try continuation for long playlists if present
-            const strData = JSON.stringify(data);
-            const tokenMatch = strData.match(/"continuationCommand":\{"token":"([^"]+)"/);
-            if (tokenMatch && tokenMatch[1]) {
-              const browseData = await fetchInnertubeContinuation(tokenMatch[1]);
+            if (continuationToken) {
+              const browseData = await fetchInnertubeContinuation(continuationToken);
               if (browseData) {
                 const nextVideos = parseVideosFromYtObject(browseData, plTitle);
                 nextVideos.forEach((v) => {

@@ -1,13 +1,8 @@
 import { NextResponse } from "next/server";
-import { healthRepo, getAppDb } from "@/lib/db/sqlite-db";
+import { healthRepo } from "@/lib/db/sqlite-db";
 
 export async function DELETE() {
   try {
-    const db = getAppDb();
-    db.prepare("DELETE FROM conversation_turns").run();
-    db.prepare("DELETE FROM sessions").run();
-    db.prepare("DELETE FROM foundation_attempts").run();
-    db.prepare("DELETE FROM foundation_sessions").run();
     healthRepo.resetUserData();
     return NextResponse.json({ ok: true, message: "Đã xóa toàn bộ dữ liệu SQLite cục bộ" });
   } catch (e) {

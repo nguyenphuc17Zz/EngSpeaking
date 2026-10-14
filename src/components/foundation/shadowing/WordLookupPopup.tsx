@@ -217,11 +217,13 @@ export function WordLookupPopup({
   // Helper for highlighting the target word in the example sentence
   const renderHighlightedSentence = (sentence: string, targetWord: string) => {
     if (!sentence) return null;
-    const cleanTarget = targetWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const regex = new RegExp(`(\\b${cleanTarget}\\b)`, "gi");
+    const cleanTarget = targetWord.trim();
+    if (!cleanTarget) return <span>{sentence}</span>;
+    const escapedTarget = cleanTarget.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(`(\\b${escapedTarget}\\b)`, "gi");
     const parts = sentence.split(regex);
     return parts.map((part, i) =>
-      regex.test(part) ? (
+      part.toLowerCase() === cleanTarget.toLowerCase() ? (
         <span key={i} className="font-bold text-primary underline decoration-primary/40 underline-offset-2">
           {part}
         </span>

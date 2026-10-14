@@ -33,6 +33,7 @@ interface SessionSummaryModalProps {
   summary: SentenceBuilderSessionSummary | null;
   skillMastery: SentenceBuilderSkillMastery;
   onRestart: () => void;
+  onDismiss?: () => void;
 }
 
 export function SessionSummaryModal({
@@ -40,6 +41,7 @@ export function SessionSummaryModal({
   summary,
   skillMastery,
   onRestart,
+  onDismiss,
 }: SessionSummaryModalProps) {
   useEffect(() => {
     if (isOpen && summary) {
@@ -51,7 +53,7 @@ export function SessionSummaryModal({
   if (!summary) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={() => {}}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) (onDismiss ?? onRestart)(); }}>
       <DialogContent className="sm:max-w-lg rounded-3xl p-6 md:p-8 bg-card border border-border/80 shadow-2xl space-y-6">
         {/* Header with Trophy Icon */}
         <div className="flex flex-col items-center text-center space-y-2">

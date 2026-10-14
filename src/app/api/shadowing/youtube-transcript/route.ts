@@ -150,6 +150,8 @@ interface InnertubeResult {
   publishedAt?: string;
   duration?: string;
   segments: YouTubeTranscriptSegment[];
+  errorCode?: "MEMBERS_ONLY" | "LOGIN_REQUIRED" | "UNPLAYABLE" | "NO_CAPTIONS";
+  errorReason?: string;
 }
 
 /**
@@ -189,6 +191,39 @@ async function fetchCaptionsViaInnertube(videoId: string): Promise<InnertubeResu
     const videoTitle = data?.videoDetails?.title;
     const channelName = data?.videoDetails?.author;
     const lengthSeconds = parseInt(data?.videoDetails?.lengthSeconds || "0", 10);
+
+    const playability = data?.playabilityStatus;
+    if (playability && playability.status && playability.status !== "OK") {
+      const reason = playability.reason || "";
+      if (/メンバー|member|supporter|kazoku|hội viên|trả phí/i.test(reason)) {
+        return {
+          title: videoTitle,
+          channel: channelName,
+          segments: [],
+          errorCode: "MEMBERS_ONLY",
+          errorReason:
+            "Video này là video dành riêng cho Hội viên trả phí (Members-only) của kênh YouTube. YouTube không cung cấp phụ đề công khai cho video này.",
+        };
+      }
+      if (playability.status === "LOGIN_REQUIRED") {
+        return {
+          title: videoTitle,
+          channel: channelName,
+          segments: [],
+          errorCode: "LOGIN_REQUIRED",
+          errorReason: "Video này yêu cầu đăng nhập hoặc bị giới hạn độ tuổi trên YouTube.",
+        };
+      }
+      if (playability.status === "UNPLAYABLE") {
+        return {
+          title: videoTitle,
+          channel: channelName,
+          segments: [],
+          errorCode: "UNPLAYABLE",
+          errorReason: reason || "Video này hiện không thể phát trên YouTube.",
+        };
+      }
+    }
     const captionTracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
     if (!Array.isArray(captionTracks) || captionTracks.length === 0) return null;
 
@@ -222,16 +257,11 @@ async function fetchCaptionsViaInnertube(videoId: string): Promise<InnertubeResu
     let publishDate: string | undefined;
     if (pageRes.status === "fulfilled" && pageRes.value.ok) {
       const html = await pageRes.value.text();
-      const playerMatch = html.match(/ytInitialPlayerResponse\s*=\s*({.+?});/);
-      if (playerMatch?.[1]) {
-        try {
-          const playerData = JSON.parse(playerMatch[1]);
-          publishDate =
-            playerData?.microformat?.playerMicroformatRenderer?.publishDate ||
-            playerData?.microformat?.playerMicroformatRenderer?.uploadDate;
-        } catch {
-          // ignore
-        }
+      const playerData = extractAssignedJsonObject(html, "ytInitialPlayerResponse");
+      if (playerData) {
+        publishDate =
+          playerData?.microformat?.playerMicroformatRenderer?.publishDate ||
+          playerData?.microformat?.playerMicroformatRenderer?.uploadDate;
       }
     }
 
@@ -247,6 +277,56 @@ async function fetchCaptionsViaInnertube(videoId: string): Promise<InnertubeResu
   }
 }
 
+/**
+ * Extracts a balanced-brace JSON object assigned to `varName` (e.g. `ytInitialPlayerResponse = {...};`)
+ * while respecting JSON string literals and escaped quotes so semicolons/braces inside strings never truncate.
+ */
+function extractAssignedJsonObject(html: string, varName: string): any | null {
+  const markerIdx = html.indexOf(varName);
+  if (markerIdx === -1) return null;
+
+  const eqIdx = html.indexOf("=", markerIdx + varName.length);
+  if (eqIdx === -1) return null;
+
+  const braceStart = html.indexOf("{", eqIdx + 1);
+  if (braceStart === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let isEscaped = false;
+
+  for (let i = braceStart; i < html.length; i++) {
+    const ch = html[i];
+    if (inString) {
+      if (isEscaped) {
+        isEscaped = false;
+      } else if (ch === "\\") {
+        isEscaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+    } else if (ch === "{") {
+      depth++;
+    } else if (ch === "}") {
+      depth--;
+      if (depth === 0) {
+        const jsonSlice = html.slice(braceStart, i + 1);
+        try {
+          return JSON.parse(jsonSlice);
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+
+  return null;
+}
 
 /**
  * Web Page Scraping fallback for captionTracks
@@ -263,10 +343,9 @@ async function fetchCaptionsViaWebPage(videoId: string): Promise<InnertubeResult
     if (!pageRes.ok) return null;
     const html = await pageRes.text();
 
-    const match = html.match(/ytInitialPlayerResponse\s*=\s*({.+?});/);
-    if (!match || !match[1]) return null;
+    const data = extractAssignedJsonObject(html, "ytInitialPlayerResponse");
+    if (!data) return null;
 
-    const data = JSON.parse(match[1]);
     const videoTitle = data?.videoDetails?.title;
     const channelName = data?.videoDetails?.author;
     const captionTracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
@@ -378,6 +457,21 @@ export async function POST(req: NextRequest) {
     // Step 1: Try Innertube Android Client (most reliable)
     let result = await fetchCaptionsViaInnertube(videoId);
 
+    // If it's a specific block from YouTube (members-only, login-required, etc.), return immediately
+    if (result && (!result.segments || result.segments.length === 0) && result.errorCode) {
+      return NextResponse.json(
+        {
+          error: result.errorReason,
+          code: result.errorCode,
+          videoId,
+          title: result.title,
+          channel: result.channel,
+          canUseCustomScript: true,
+        },
+        { status: result.errorCode === "MEMBERS_ONLY" ? 403 : 404 }
+      );
+    }
+
     // Step 2: Fallback to Web Page extraction
     if (!result || result.segments.length === 0) {
       result = await fetchCaptionsViaWebPage(videoId);
@@ -405,6 +499,7 @@ export async function POST(req: NextRequest) {
       {
         error:
           "Video này không có phụ đề tiếng Anh (Closed Captions) công khai trên YouTube. Bạn có thể bấm '✍️ Dán bài nói (Custom Script)' để tự dán nội dung và luyện tập ngay với video này.",
+        code: "NO_CAPTIONS",
         canUseCustomScript: true,
       },
       { status: 404 }
@@ -500,44 +595,34 @@ export async function GET(req: NextRequest) {
       const html = await pageRes.value.text();
 
       // Try ytInitialPlayerResponse first (most reliable)
-      const playerMatch = html.match(/ytInitialPlayerResponse\s*=\s*({.+?});/);
-      if (playerMatch?.[1]) {
-        try {
-          const playerData = JSON.parse(playerMatch[1]);
-          publishDate =
-            playerData?.microformat?.playerMicroformatRenderer?.publishDate ||
-            playerData?.microformat?.playerMicroformatRenderer?.uploadDate ||
-            null;
+      const playerData = extractAssignedJsonObject(html, "ytInitialPlayerResponse");
+      if (playerData) {
+        publishDate =
+          playerData?.microformat?.playerMicroformatRenderer?.publishDate ||
+          playerData?.microformat?.playerMicroformatRenderer?.uploadDate ||
+          null;
 
-          // Also fill in title/channel if Innertube missed them
-          if (!title) title = playerData?.videoDetails?.title || null;
-          if (!channel) channel = playerData?.videoDetails?.author || null;
-          if (!lengthSeconds) {
-            lengthSeconds = parseInt(playerData?.videoDetails?.lengthSeconds || "0", 10);
-          }
-        } catch {
-          // ignore JSON parse error
+        // Also fill in title/channel if Innertube missed them
+        if (!title) title = playerData?.videoDetails?.title || null;
+        if (!channel) channel = playerData?.videoDetails?.author || null;
+        if (!lengthSeconds) {
+          lengthSeconds = parseInt(playerData?.videoDetails?.lengthSeconds || "0", 10);
         }
       }
 
       // Fallback: try ytInitialData for publishDate as dateText
       if (!publishDate) {
-        const initialDataMatch = html.match(/ytInitialData\s*=\s*({.+?});\s*<\/script>/);
-        if (initialDataMatch?.[1]) {
-          try {
-            const initialData = JSON.parse(initialDataMatch[1]);
-            // dateText is in "Ngày 12 tháng 3 năm 2022" or "Mar 12, 2022" format
-            const dateText =
-              initialData?.contents?.twoColumnWatchNextResults?.results?.results
-                ?.contents?.[0]?.videoPrimaryInfoRenderer?.dateText?.simpleText;
-            if (dateText) {
-              const parsed = new Date(dateText);
-              if (!isNaN(parsed.getTime())) {
-                publishDate = parsed.toISOString();
-              }
+        const initialData = extractAssignedJsonObject(html, "ytInitialData");
+        if (initialData) {
+          // dateText is in "Ngày 12 tháng 3 năm 2022" or "Mar 12, 2022" format
+          const dateText =
+            initialData?.contents?.twoColumnWatchNextResults?.results?.results
+              ?.contents?.[0]?.videoPrimaryInfoRenderer?.dateText?.simpleText;
+          if (dateText) {
+            const parsed = new Date(dateText);
+            if (!isNaN(parsed.getTime())) {
+              publishDate = parsed.toISOString();
             }
-          } catch {
-            // ignore
           }
         }
       }

@@ -7,21 +7,14 @@ function cleanWord(w: string): string {
   return w.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()?"'’]/g, "").trim();
 }
 
+import { cleanAiJson } from "@/lib/foundation/shared/json-parser";
+
 function cleanJson(text: string): unknown {
-  const trimmed = text.trim();
-  const withoutFence = trimmed
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "");
+  const cleaned = cleanAiJson(text);
+  if (!cleaned) return null;
   try {
-    return JSON.parse(withoutFence);
+    return JSON.parse(cleaned);
   } catch {
-    const m = withoutFence.match(/\{[\s\S]*\}/);
-    if (m) {
-      try {
-        return JSON.parse(m[0]);
-      } catch {}
-    }
     return null;
   }
 }
@@ -137,43 +130,6 @@ export async function POST(req: NextRequest) {
       userDurationSec
     );
 
-    // 2. Call AI if requested
-    if (useAI) {
-      try {
-        const prompt = PROMPTS.buildSpeechEvaluatorUserPrompt({
-          targetSentence,
-          targetIpa,
-          targetDurationSec,
-          userTranscript,
-          userDurationSec,
-          shadowingMode,
-          playbackSpeed,
-        });
-
-        const aiRes = await generateTextWithRouting({
-          provider: provider || "gemini",
-          model: model || "auto",
-          input: {
-            messages: [{ role: "user", content: prompt }],
-            systemInstruction: PROMPTS.SPEECH_EVALUATOR_SYSTEM,
-            temperature: 0.2,
-            maxOutputTokens: 1200,
-          },
-        });
-
-        const parsed = cleanJson(aiRes.text) as MultiDimensionalSpeechEvaluation | null;
-        if (parsed && typeof parsed.overall_score === "number") {
-          return NextResponse.json({ success: true, provider: aiRes.provider, result: parsed });
-        }
-      } catch (aiErr) {
-        return NextResponse.json(
-          { error: "Lỗi đánh giá AI: " + (aiErr instanceof Error ? aiErr.message : String(aiErr)) },
-          { status: 502 }
-        );
-      }
-    }
-
-    // 3. Return pure authentic algorithmic calculation
     const realResult: MultiDimensionalSpeechEvaluation = {
       overall_score: baseline.overallScore,
       accuracy_score: baseline.accuracyScore,
@@ -211,9 +167,84 @@ export async function POST(req: NextRequest) {
       practice_tip: "Thử lặp lại câu này theo chế độ Shadowing bám sát nhịp thở.",
     };
 
+    // Fast-Pass (0ms / 0-token) when pronunciation & pacing are already accurate
+    const canFastPass = baseline.accuracyScore >= 90 && baseline.pacingScore >= 82;
+
+    if (useAI && !canFastPass) {
+      try {
+        const prompt = PROMPTS.buildSpeechEvaluatorUserPrompt({
+          targetSentence,
+          targetIpa,
+          targetDurationSec,
+          userTranscript,
+          userDurationSec,
+          shadowingMode,
+          playbackSpeed,
+        });
+
+        const aiRes = await generateTextWithRouting({
+          provider: provider || "gemini",
+          model: model || "auto",
+          input: {
+            messages: [{ role: "user", content: prompt }],
+            systemInstruction: PROMPTS.SPEECH_EVALUATOR_SYSTEM,
+            temperature: 0.2,
+            maxOutputTokens: 450,
+          },
+        });
+
+        const parsed = cleanJson(aiRes.text) as Partial<MultiDimensionalSpeechEvaluation> | null;
+        if (parsed && typeof parsed === "object") {
+          const connectedScore =
+            typeof parsed.connected_speech_score === "number"
+              ? parsed.connected_speech_score
+              : baseline.connectedScore;
+          const intonationScore =
+            typeof parsed.intonation_score === "number"
+              ? parsed.intonation_score
+              : baseline.intonationScore;
+          const overallScore =
+            typeof parsed.overall_score === "number"
+              ? parsed.overall_score
+              : Math.round(
+                  baseline.accuracyScore * 0.4 +
+                    baseline.pacingScore * 0.25 +
+                    connectedScore * 0.2 +
+                    intonationScore * 0.15
+                );
+
+          return NextResponse.json({
+            success: true,
+            provider: aiRes.provider,
+            result: {
+              ...realResult,
+              ...parsed,
+              overall_score: overallScore,
+              accuracy_score: baseline.accuracyScore,
+              pacing_score: baseline.pacingScore,
+              connected_speech_score: connectedScore,
+              intonation_score: intonationScore,
+              metrics: parsed.metrics || realResult.metrics,
+              word_breakdown: Array.isArray(parsed.word_breakdown) && parsed.word_breakdown.length > 0 ? parsed.word_breakdown : realResult.word_breakdown,
+              connected_speech_feedback: Array.isArray(parsed.connected_speech_feedback) ? parsed.connected_speech_feedback : [],
+              strengths: Array.isArray(parsed.strengths) && parsed.strengths.length > 0 ? parsed.strengths : realResult.strengths,
+              top_improvements: Array.isArray(parsed.top_improvements) ? parsed.top_improvements : realResult.top_improvements,
+              mastery_level: overallScore >= 85 ? "mastered" : "practicing",
+              practice_tip: parsed.practice_tip || realResult.practice_tip,
+            },
+          });
+        }
+      } catch (aiErr) {
+        return NextResponse.json(
+          { error: "Lỗi đánh giá AI: " + (aiErr instanceof Error ? aiErr.message : String(aiErr)) },
+          { status: 502 }
+        );
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      provider: "algorithmic-engine",
+      provider: canFastPass && useAI ? "fast-pass-engine" : "algorithmic-engine",
       result: realResult,
     });
   } catch (error: unknown) {

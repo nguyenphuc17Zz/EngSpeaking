@@ -26,6 +26,11 @@ export default function BaselinePage() {
   const settings = useSettingsStore();
   const startTimeRef = useRef<number>(0);
   const speechStartRef = useRef<number>(0);
+  const promptDisplayedAtRef = useRef<number>(Date.now());
+
+  useEffect(() => {
+    promptDisplayedAtRef.current = Date.now();
+  }, [currentIdx, tasks.length]);
 
   const generate = useCallback(async () => {
     setGenerating(true);
@@ -85,7 +90,7 @@ export default function BaselinePage() {
       transcript = speech.fullTranscript.trim() || speech.transcript.trim() || textFallback.trim();
     }
 
-    const timeToFirstWordMs = transcript ? Date.now() - speechStartRef.current : undefined;
+    const timeToFirstWordMs = transcript ? Math.max(300, speechStartRef.current - promptDisplayedAtRef.current) : undefined;
     const updated = tasks.map((t, i) => i === currentIdx ? { ...t, transcript, durationMs, timeToFirstWordMs } : t);
     setTasks(updated);
     speech.resetTranscript();

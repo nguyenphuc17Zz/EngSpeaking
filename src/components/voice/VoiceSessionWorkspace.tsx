@@ -366,7 +366,11 @@ export function VoiceSessionWorkspace({ initialScenarioId }: VoiceSessionWorkspa
           currentActiveTwist = potentialTwist;
           setActiveTwist(potentialTwist);
           soundEffects.playAIReady();
-          toast.warning(`⚡ Biến cố: ${potentialTwist.titleVi}`, potentialTwist.promptAiVi);
+          toast.warning(
+            `⚡ Biến cố: ${potentialTwist.titleVi}`,
+            (potentialTwist as ConversationalTwist & { promptAiVi?: string }).promptAiVi ||
+              potentialTwist.descriptionEn
+          );
         }
       }
 
@@ -539,6 +543,23 @@ export function VoiceSessionWorkspace({ initialScenarioId }: VoiceSessionWorkspa
       }
     }
   }, [speechRec.transcript, speechRec.interimTranscript, speechRec.fullTranscript, handsFreeMode, status]);
+
+  // ─── Acoustic Volume Stream to Smart VAD (supports non-browser STT providers) ───
+  useEffect(() => {
+    if (recorder.volume > 0.08 && (status === "listening" || status === "recording")) {
+      setIsLifelineVisible(false);
+      if (handsFreeMode && smartVadRef.current) {
+        const vad = smartVadRef.current as SmartVadStateController & {
+          notifyUserSpeechDetected?: (isAiSpeaking?: boolean) => void;
+        };
+        if (typeof vad.notifyUserSpeechDetected === "function") {
+          vad.notifyUserSpeechDetected(isAiSpeakingRef.current);
+        } else {
+          vad.notifySpeechChunk(isAiSpeakingRef.current);
+        }
+      }
+    }
+  }, [recorder.volume, status, handsFreeMode]);
 
   // ─── Silence Hesitation Lifeline Tracker (>3.5s) ───────────────────────
   useEffect(() => {

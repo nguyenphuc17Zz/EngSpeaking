@@ -1,0 +1,470 @@
+{
+ "url": "http://localhost:3000/history",
+ "title": "EngSpeak — Nghệ Thuật Phản Xạ Khẩu Ngữ Tiếng Anh",
+ "els": [
+  {
+   "tag": "A",
+   "text": "EngSpeak",
+   "x": 16,
+   "y": 14,
+   "w": 129,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Thu gọn menu",
+   "x": 215,
+   "y": 20,
+   "w": 24,
+   "h": 24
+  },
+  {
+   "tag": "A",
+   "text": "Tổng quan",
+   "x": 8,
+   "y": 101,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Sentence Builder",
+   "x": 8,
+   "y": 174,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "VN → EN Speaking",
+   "x": 8,
+   "y": 210,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Spoken Repair Lab",
+   "x": 8,
+   "y": 246,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Response Latency",
+   "x": 8,
+   "y": 282,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Chunk Automaticity",
+   "x": 8,
+   "y": 318,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Survival Speaking",
+   "x": 8,
+   "y": 354,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Spoken Vocabulary",
+   "x": 8,
+   "y": 390,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Shadowing Studio",
+   "x": 8,
+   "y": 426,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Phòng luyện nói Live",
+   "x": 8,
+   "y": 499,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Hội thoại AI",
+   "x": 8,
+   "y": 535,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Thử thách nâng cao",
+   "x": 8,
+   "y": 571,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Cài đặt & API Keys",
+   "x": 8,
+   "y": 644,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Hướng dẫn học",
+   "x": 8,
+   "y": 860,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Phòng luyện nói",
+   "x": 640,
+   "y": 14,
+   "w": 150,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Phòng luyện nói",
+   "x": 640,
+   "y": 14,
+   "w": 150,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Gemini:\ngemini-3.5-flash-lite",
+   "x": 798,
+   "y": 14,
+   "w": 274,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "1x",
+   "x": 1080,
+   "y": 14,
+   "w": 60,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "?",
+   "x": 1148,
+   "y": 14,
+   "w": 64,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Chuyển đổi giao diện Sáng / Tối",
+   "x": 1220,
+   "y": 14,
+   "w": 36,
+   "h": 36
+  },
+  {
+   "tag": "A",
+   "text": "",
+   "x": 337,
+   "y": 101,
+   "w": 32,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 337,
+   "y": 101,
+   "w": 32,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 5\nactive\nID: fsess_1",
+   "x": 332,
+   "y": 265,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 5\nactive\nID: fsess_1",
+   "x": 332,
+   "y": 339,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 5\nactive\nID: fsess_1",
+   "x": 332,
+   "y": 412,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 486,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 560,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 634,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 707,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 781,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 855,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 928,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 1002,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 1076,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 1149,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 1223,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 1297,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 1371,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 1444,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 1518,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 1592,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 1665,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 1739,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 1813,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 1886,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 1960,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 2034,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 2108,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 2181,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 2255,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 2329,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "A",
+   "text": "SENTENCE RETRIEVAL • one sentence\nLevel 3\ncompleted\nID: fs_1",
+   "x": 332,
+   "y": 2402,
+   "w": 872,
+   "h": 66
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Open Next.js Dev Tools",
+   "x": 22,
+   "y": 846,
+   "w": 32,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1181,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1197,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1213,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  }
+ ]
+}

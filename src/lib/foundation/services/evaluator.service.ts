@@ -1,7 +1,9 @@
-// Evaluator service — compact context §55, anti-hallucination §58
+// Evaluator service — compact context §55, anti-hallucination §58 + 0ms Fast-Pass
 import { generateTextWithRouting } from "@/lib/ai";
 import { foundationEvaluationSchema } from "@/lib/validation/foundation-schemas";
 import { EVALUATOR_SYSTEM, buildEvaluatorUserPrompt } from "@/lib/foundation/prompts/evaluator";
+import { cleanAiJson } from "@/lib/foundation/shared/json-parser";
+import { computeLevenshteinSimilarity } from "@/lib/foundation/shared/text-similarity";
 import type { FoundationExercise, FoundationEvaluation } from "@/types/foundation";
 
 function mockEvaluation(exercise: FoundationExercise, transcript: string, opts: { durationMs?: number; timeToFirstWordMs?: number; hintsUsed?: number }): FoundationEvaluation {
@@ -46,10 +48,11 @@ function mockEvaluation(exercise: FoundationExercise, transcript: string, opts: 
 }
 
 function extractJson(text: string): unknown {
-  const t = text.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "");
-  try { return JSON.parse(t); } catch {
-    const m = t.match(/\{[\s\S]*\}/);
-    if (m) try { return JSON.parse(m[0]); } catch {}
+  const cleaned = cleanAiJson(text);
+  if (!cleaned) return null;
+  try {
+    return JSON.parse(cleaned);
+  } catch {
     return null;
   }
 }
@@ -62,10 +65,46 @@ export async function evaluateAttempt(
 ): Promise<FoundationEvaluation> {
   const provider = opts?.provider || "gemini";
   const model = opts?.model || "auto";
-  if (provider === "mock") return mockEvaluation(exercise, transcript, opts || {});
+  if (provider === "mock" || transcript.trim().length < 4) {
+    return mockEvaluation(exercise, transcript, opts || {});
+  }
+
+  const fillerCount = (transcript.match(/\b(um|uh|like|you know)\b/gi) || []).length;
+  const hintsUsed = opts?.hintsUsed || 0;
+  const ttfw = opts?.timeToFirstWordMs ?? 1500;
+
+  // 0ms Fast-Pass when targetPhrase or targetPattern matches cleanly
+  const targetRef = exercise.targetPhrase || exercise.targetPattern;
+  if (targetRef && fillerCount <= 1 && ttfw <= 3000) {
+    const sim = computeLevenshteinSimilarity(transcript, targetRef);
+    const includesTarget =
+      exercise.targetPhrase &&
+      transcript.toLowerCase().includes(exercise.targetPhrase.toLowerCase().replace(/\.+$/, "")) &&
+      transcript.trim().split(/\s+/).length >= 6;
+    if (sim >= 0.88 || includesTarget) {
+      const fastEv = mockEvaluation(exercise, transcript, opts || {});
+      fastEv.score.overall = Math.max(88, fastEv.score.overall);
+      fastEv.score.completion = 95;
+      fastEv.score.accuracy = 92;
+      fastEv.classification = hintsUsed === 0 ? "too_easy" : "appropriate";
+      fastEv.suggestedDifficultyDelta = hintsUsed === 0 ? 1 : 0;
+      return fastEv;
+    }
+  }
+
+  const compactExercise = {
+    skill: exercise.skill,
+    type: exercise.type,
+    difficulty: exercise.difficulty,
+    instruction: exercise.instruction,
+    prompt: exercise.prompt,
+    targetPhrase: exercise.targetPhrase,
+    targetPattern: exercise.targetPattern,
+    constraints: exercise.constraints,
+  };
 
   const userPrompt = buildEvaluatorUserPrompt({
-    exerciseJson: JSON.stringify(exercise),
+    exerciseJson: JSON.stringify(compactExercise),
     transcript,
     rawTranscript,
     durationMs: opts?.durationMs,
@@ -82,17 +121,33 @@ export async function evaluateAttempt(
         messages: [{ role: "user", content: userPrompt }],
         systemInstruction: EVALUATOR_SYSTEM,
         temperature: 0.3,
-        maxOutputTokens: 700,
+        maxOutputTokens: 420,
       },
     });
-    const parsed = extractJson(res.text);
-    if (!parsed) throw new Error("No JSON");
+    const parsed = extractJson(res.text) as Record<string, any> | null;
+    if (!parsed || typeof parsed !== "object") throw new Error("No JSON");
+
+    // Hydrate deterministic fields before Zod validation
+    if (parsed.score && typeof parsed.score === "object") {
+      parsed.score.fillerCount = parsed.score.fillerCount ?? fillerCount;
+      parsed.score.pauseBehavior = parsed.score.pauseBehavior || (fillerCount > 3 ? "excessive" : fillerCount > 0 ? "natural" : "none");
+      parsed.score.insufficientEvidence = parsed.score.insufficientEvidence ?? false;
+    }
+    const overall = parsed.score?.overall ?? 70;
+    const classification =
+      parsed.classification ||
+      (overall >= 85 && hintsUsed === 0 ? "too_easy" : overall <= 45 || hintsUsed >= 2 ? "too_hard" : "appropriate");
+    parsed.classification = classification;
+    parsed.suggestedDifficultyDelta =
+      parsed.suggestedDifficultyDelta ?? (classification === "too_easy" ? 1 : classification === "too_hard" ? -1 : 0);
+    parsed.hintsUsed = hintsUsed;
+    if (opts?.timeToFirstWordMs !== undefined) parsed.timeToFirstWordMs = opts.timeToFirstWordMs;
+    if (opts?.durationMs !== undefined) parsed.durationMs = opts.durationMs;
+
     const validated = foundationEvaluationSchema.safeParse(parsed);
     if (!validated.success) throw new Error("Schema invalid");
-    // Quality gate: ensure overall 0-100
     return validated.data;
   } catch (e) {
-    // Fallback to deterministic mock instead of failing UX §39
     if (process.env.NODE_ENV !== "production") console.warn("[evaluator] fallback mock", e);
     return mockEvaluation(exercise, transcript, opts || {});
   }

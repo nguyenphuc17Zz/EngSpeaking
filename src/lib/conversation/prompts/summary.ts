@@ -1,7 +1,6 @@
-export const SUMMARY_SYSTEM = `Summarize long conversation preserving key facts and threads. Return ONLY valid JSON matching schema.`;
+export const SUMMARY_SYSTEM = `Summarize conversation turns preserving key facts, threads, and character state. Return ONLY valid JSON:
+{"summary":"2-3 sentences","keyFacts":[{"fact":str}],"activeThreads":[str],"resolvedThreads":[str],"characterState":{"mood":str,"trust":0-100,"patience":0-100,"engagement":0-100}}`;
 
 export function buildSummaryUserPrompt(opts: { olderTurnsJson: string; existingSummaryJson?: string }): string {
-  const base = `Older turns (1-20): ${opts.olderTurnsJson}`;
-  const existing = opts.existingSummaryJson ? `\nExisting summary: ${opts.existingSummaryJson} — update, don't discard` : "";
-  return `${base}${existing}\nGenerate ConversationSummary JSON {summary: string (2-3 sentences), keyFacts: [{id,fact,createdAt}], activeThreads: [string], resolvedThreads: [string], characterState: {mood,trust,patience,engagement}}`;
+  return `Turns:\n${opts.olderTurnsJson}${opts.existingSummaryJson ? `\nExisting summary: ${opts.existingSummaryJson}` : ""}`;
 }

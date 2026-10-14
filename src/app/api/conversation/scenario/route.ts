@@ -29,14 +29,14 @@ export async function POST(req: Request) {
         const retry = await generateScenario({ ...(settings as import("@/types/conversation-world").ConversationSettings), topic: `${(settings as import("@/types/conversation-world").ConversationSettings).topic || "auto"} variation ${Date.now() % 1000}` }, { provider, model });
         const retryFp = scenarioFingerprint(retry);
         db.prepare(`
-          INSERT INTO conversation_worlds (id, mode, scenario_blueprint, settings, fingerprint, schema_version, created_at)
+          INSERT OR REPLACE INTO conversation_worlds (id, mode, scenario_blueprint, settings, fingerprint, schema_version, created_at)
           VALUES (?, ?, ?, ?, ?, 1, ?)
         `).run(retry.id, retry.mode, JSON.stringify(retry), JSON.stringify(settings), retryFp, new Date().toISOString());
         return NextResponse.json({ scenario: retry, worldId: retry.id, fingerprint: retryFp, duplicate: false });
       }
 
       db.prepare(`
-        INSERT INTO conversation_worlds (id, mode, scenario_blueprint, settings, fingerprint, schema_version, created_at)
+        INSERT OR REPLACE INTO conversation_worlds (id, mode, scenario_blueprint, settings, fingerprint, schema_version, created_at)
         VALUES (?, ?, ?, ?, ?, 1, ?)
       `).run(blueprint.id, blueprint.mode, JSON.stringify(blueprint), JSON.stringify(settings), fingerprint, new Date().toISOString());
     } catch {}

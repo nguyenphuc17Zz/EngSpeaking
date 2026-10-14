@@ -159,28 +159,28 @@ export function GlobalSpeedSelector({ className = "" }: Props) {
         variant="outline"
         size="sm"
         onClick={() => setOpen(!open)}
-        className={`rounded-full h-9 px-3 gap-1.5 font-medium transition-all shadow-2xs btn-spring cursor-pointer ${
+        className={`h-8 px-2.5 gap-1.5 font-mono font-bold transition-all cursor-pointer ${
           isNonDefault
-            ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20"
-            : "border-border/70 hover:bg-secondary/60 text-muted-foreground hover:text-foreground"
+            ? "bg-accent text-accent-foreground border-2 border-border"
+            : "bg-card text-foreground border-2 border-border"
         } ${className}`}
         title={`Tốc độ phát âm toàn hệ thống: ${ttsSpeed}x (Phím tắt: + tăng tốc / - giảm tốc)`}
         aria-label={`Tốc độ phát âm toàn hệ thống: ${ttsSpeed}x`}
         aria-expanded={open}
       >
-        <Gauge className={`size-3.5 ${isNonDefault ? "text-amber-500" : "text-primary"}`} />
-        <span className="font-mono text-xs font-bold">{ttsSpeed}x</span>
+        <Gauge className="size-3.5 text-primary" />
+        <span className="font-mono text-xs font-black">{ttsSpeed}x</span>
       </Button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-56 rounded-2xl border border-border/80 bg-popover/95 backdrop-blur-md shadow-xl p-1.5 z-50 animate-in fade-in-0 zoom-in-95 origin-top-right">
+        <div className="absolute right-0 top-full mt-2 w-56 rounded-none border-2 border-border bg-popover shadow-[4px_4px_0px_var(--industrial-shadow-color)] p-1.5 z-50 animate-in fade-in-0 zoom-in-95 origin-top-right">
           {/* Header Row */}
-          <div className="px-2 py-1 flex items-center justify-between border-b border-border/50 pb-1.5 mb-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+          <div className="px-2 py-1 flex items-center justify-between border-b-2 border-border pb-1.5 mb-1">
+            <span className="text-[10px] font-mono font-black uppercase tracking-wider text-foreground flex items-center gap-1">
               <Gauge className="size-3 text-primary" />
-              <span>Tốc độ phát âm</span>
+              <span>TTS PLAYBACK SPEED</span>
             </span>
-            <span className="text-[10px] font-mono text-primary font-bold">
+            <span className="text-[10px] font-mono text-primary font-black">
               {ttsSpeed}x
             </span>
           </div>

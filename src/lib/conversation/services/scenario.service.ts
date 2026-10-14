@@ -16,7 +16,7 @@ function difficultyStringToNumber(d: string | number | undefined, fallback = 5):
       return Math.max(2, Math.min(9, Math.round(overall / 10 + 1)));
     } catch { return fallback; }
   }
-  const map: Record<string, number> = { easy: 3, normal: 5, hard: 7, extreme: 9 };
+  const map: Record<string, number> = { easy: 3, normal: 5, hard: 7, extreme: 9, b1: 3, b2: 4 };
   return map[d] ?? fallback;
 }
 
@@ -109,6 +109,7 @@ export async function generateScenario(
       module: "conversation_scenario",
       level: settings.mode,
       difficulty: numDifficulty,
+      topic: settings.topic,
       forceSource: opts?.forceSource,
     });
 

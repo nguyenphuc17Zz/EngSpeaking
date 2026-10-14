@@ -5,14 +5,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Layers,
   Target,
   Clock,
   Volume2,
   Lightbulb,
   Copy,
   Check,
-  ArrowRight,
   Sparkles,
 } from "lucide-react";
 import type { SentenceBuilderTask } from "@/types/sentence-builder";
@@ -50,7 +48,6 @@ export function TaskCard({
   onPlayBaseSentence,
   isSpeakingBaseSentence = false,
   onPlayTerm,
-  onNextTask,
   isGeneratingNext = false,
   onRegenerateWithAI,
   isRegeneratingAI = false,
@@ -83,23 +80,23 @@ export function TaskCard({
     switch (level) {
       case "controlled":
         return {
-          label: "Controlled",
-          color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+          label: "LEVEL A // CONTROLLED",
+          color: "bg-accent text-accent-foreground border-border",
         };
       case "semi_controlled":
         return {
-          label: "Semi-Controlled",
-          color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
+          label: "LEVEL B // SEMI-FREE",
+          color: "bg-[#FFB800] text-[#0D0E0D] border-border",
         };
       case "free":
         return {
-          label: "Control-Free",
-          color: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30",
+          label: "LEVEL C // FREE REFLEX",
+          color: "bg-primary text-primary-foreground border-border",
         };
       default:
         return {
-          label: "Controlled",
-          color: "bg-primary/10 text-primary border-primary/30",
+          label: "LEVEL A // CONTROLLED",
+          color: "bg-accent text-accent-foreground border-border",
         };
     }
   };
@@ -107,109 +104,87 @@ export function TaskCard({
   const levelInfo = getLevelBadge(task.controlLevel);
 
   return (
-    <Card className="h-full flex flex-col justify-between rounded-3xl border border-border/80 bg-gradient-to-br from-card via-card to-primary/5 shadow-xs overflow-hidden">
-      <CardContent className="p-3.5 sm:p-4 flex flex-col h-full space-y-2.5 overflow-hidden">
-        {/* Top Meta Bar */}
-        <div className="flex items-center justify-between gap-2 border-b border-border/40 pb-2 shrink-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="size-2 rounded-full bg-primary animate-pulse" />
-            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-              1. Đề bài & Từ khóa
+    <Card className="h-full flex flex-col justify-between rounded-none border-2 border-border bg-card shadow-[4px_4px_0px_var(--industrial-shadow-color)] overflow-hidden">
+      <CardContent className="p-3.5 sm:p-4 flex flex-col h-full space-y-3 overflow-hidden">
+        {/* Top Meta Bar (JapSpeak BuilderTaskCard Style) */}
+        <div className="flex flex-wrap items-center justify-between gap-1.5 border-b-2 border-border pb-2 shrink-0">
+          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+            <span className="size-2.5 bg-primary border border-border shrink-0" />
+            <span className="text-[11px] font-mono font-extrabold uppercase tracking-wider text-foreground">
+              1. ĐỀ BÀI &amp; TỪ KHÓA
             </span>
-            <Badge variant="outline" className={`text-[10px] font-mono px-1.5 py-0 border ${levelInfo.color}`}>
+            <Badge
+              variant="outline"
+              className={`text-[9px] font-mono font-extrabold px-1.5 py-0 border ${levelInfo.color}`}
+            >
               {levelInfo.label}
             </Badge>
-            <Badge
-              variant="secondary"
-              className="text-[10px] font-medium max-w-[220px] truncate"
-              title={getTopicDisplay(task.topic).label}
-            >
-              {getTopicDisplay(task.topic).label}
-            </Badge>
+          </div>
 
-            {task.source === "ai" ? (
-              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 gap-1 font-normal">
-                <Sparkles className="size-2.5 text-emerald-500" />
-                AI Generated
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-blue-500/40 text-blue-600 dark:text-blue-400 bg-blue-500/10 gap-1 font-normal">
-                Từ ngân hàng
-              </Badge>
-            )}
-
+          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
             {onRegenerateWithAI && (
               <Button
                 type="button"
-                variant="ghost"
+                variant="outline"
                 size="xs"
                 onClick={onRegenerateWithAI}
                 disabled={isRegeneratingAI || isGeneratingNext}
-                className="h-5 px-1.5 text-[10px] gap-1 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted/80 cursor-pointer"
+                className="h-6 px-2 text-[10px] gap-1 text-foreground border-2 border-border bg-secondary hover:bg-accent hover:text-accent-foreground cursor-pointer font-mono font-extrabold shadow-[2px_2px_0px_var(--industrial-shadow-color)]"
                 title="Yêu cầu AI tạo câu hoàn toàn mới"
               >
-                <Sparkles className={`size-2.5 text-emerald-500 ${isRegeneratingAI ? "animate-spin" : ""}`} />
-                <span>{isRegeneratingAI ? "Đang tạo..." : "Tạo mới bằng AI"}</span>
+                <Sparkles
+                  className={`size-3 text-primary ${isRegeneratingAI ? "animate-spin" : ""}`}
+                />
+                <span>{isRegeneratingAI ? "ĐANG TẠO..." : "TẠO MỚI AI"}</span>
               </Button>
             )}
-          </div>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            {onNextTask && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onNextTask}
-                disabled={isGeneratingNext}
-                className="h-6 px-2 rounded-lg text-[10px] font-bold text-primary border-primary/30 hover:bg-primary/10 hover:border-primary gap-1 shrink-0 cursor-pointer shadow-2xs btn-spring"
-                title="Đổi sang bài tập tiếp theo [R]"
-              >
-                <span>Bài tiếp theo</span>
-                <ArrowRight className="size-2.5" />
-              </Button>
-            )}
-            <span className="text-[10px] font-mono text-muted-foreground">
+            <span className="px-1.5 py-0.5 bg-foreground text-background border border-border text-[10px] font-mono font-extrabold">
               #{currentTaskIndex + 1}/{totalTasks}
             </span>
           </div>
         </div>
 
-        {/* Scrollable Container with Zero-scroll ergonomics */}
-        <div className="flex-1 overflow-y-auto space-y-2.5 pr-0.5 min-h-0">
-          {/* Prompt Section */}
-          <div className="p-3 rounded-2xl bg-muted/25 border border-border/60 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1">
-                <Target className="size-3" />
+        {/* Scrollable Container */}
+        <div className="flex-1 overflow-y-auto space-y-3 pr-0.5 min-h-0">
+          {/* Prompt Section — Crisp #F6F4EC Paper Box with 2px Hard Border */}
+          <div className="p-3.5 bg-background border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] space-y-2">
+            <div className="flex items-center justify-between gap-2 border-b border-dashed border-border pb-1.5">
+              <span className="text-[10px] font-mono font-extrabold uppercase tracking-wider text-primary flex items-center gap-1">
+                <Target className="size-3 stroke-[2.5]" />
                 <span>{task.instruction}</span>
               </span>
-              <button
-                type="button"
-                onClick={() => handleCopy(task.promptVi, "prompt-vi")}
-                className="text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-muted/60 cursor-pointer transition-colors"
-                title="Sao chép đề bài tiếng Việt"
-              >
-                {copiedId === "prompt-vi" ? (
-                  <Check className="size-3 text-emerald-500" />
-                ) : (
-                  <Copy className="size-3" />
-                )}
-              </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-[9px] font-mono font-extrabold px-1.5 py-0.5 bg-secondary text-foreground border border-border uppercase">
+                  {task.source === "ai" ? "AI GEN" : "BANK 70/30"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleCopy(task.promptVi, "prompt-vi")}
+                  className="text-muted-foreground hover:text-foreground p-1 border border-transparent hover:border-border bg-card cursor-pointer transition-colors"
+                  title="Sao chép đề bài tiếng Việt"
+                >
+                  {copiedId === "prompt-vi" ? (
+                    <Check className="size-3 text-[#00A854]" />
+                  ) : (
+                    <Copy className="size-3" />
+                  )}
+                </button>
+              </div>
             </div>
 
-            <h2 className="font-serif text-lg sm:text-xl font-bold tracking-tight text-foreground leading-snug select-text cursor-text">
-              "{task.promptVi}"
+            <h2 className="font-serif text-lg sm:text-xl font-extrabold tracking-tight text-foreground leading-snug select-text cursor-text">
+              &ldquo;{task.promptVi}&rdquo;
             </h2>
           </div>
 
           {/* Base Sentence Display with Single-Play TTS Audio */}
           {task.baseSentence && (
-            <div className="p-2.5 rounded-2xl bg-card border border-border/70 text-xs flex items-center justify-between gap-2 shadow-2xs">
+            <div className="p-2.5 bg-background border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] text-xs flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 truncate">
-                <span className="font-semibold text-muted-foreground text-[10px] uppercase shrink-0">
-                  Câu gốc:
+                <span className="font-mono font-extrabold text-foreground bg-accent px-1.5 py-0.5 border border-border text-[9px] uppercase shrink-0">
+                  CÂU GỐC
                 </span>
-                <span className="font-mono text-primary font-bold truncate select-text cursor-text">
+                <span className="font-mono text-foreground font-bold truncate select-text cursor-text">
                   {task.baseSentence}
                 </span>
               </div>
@@ -217,11 +192,11 @@ export function TaskCard({
                 <button
                   type="button"
                   onClick={() => handleCopy(task.baseSentence || "", "base-sentence")}
-                  className="text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-muted/60 cursor-pointer transition-colors"
+                  className="text-muted-foreground hover:text-foreground p-1 bg-card border border-border cursor-pointer transition-colors"
                   title="Sao chép câu gốc"
                 >
                   {copiedId === "base-sentence" ? (
-                    <Check className="size-3 text-emerald-500" />
+                    <Check className="size-3 text-[#00A854]" />
                   ) : (
                     <Copy className="size-3" />
                   )}
@@ -229,50 +204,70 @@ export function TaskCard({
                 {onPlayBaseSentence && (
                   <Button
                     type="button"
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
                     disabled={hasListenedBaseSentence || isSpeakingBaseSentence}
                     onClick={onPlayBaseSentence}
-                    className="h-6 text-[10px] rounded-lg font-semibold gap-1 px-2 border border-border/60 hover:bg-primary/10 disabled:opacity-40"
-                    title={hasListenedBaseSentence ? "Đã nghe (1 lần)" : "Nghe phát âm câu gốc tiếng Anh"}
+                    className="h-6 text-[10px] font-mono font-extrabold gap-1 px-2 border-2 border-border bg-card hover:bg-accent disabled:opacity-40"
+                    title={
+                      hasListenedBaseSentence
+                        ? "Đã nghe (1 lần)"
+                        : "Nghe phát âm câu gốc tiếng Anh"
+                    }
                   >
-                    <Volume2 className={`size-3 ${isSpeakingBaseSentence ? "text-primary animate-pulse" : "text-foreground"}`} />
-                    <span>{hasListenedBaseSentence ? "Đã nghe" : isSpeakingBaseSentence ? "Đang đọc..." : "Nghe (1 lần)"}</span>
+                    <Volume2
+                      className={`size-3 ${
+                        isSpeakingBaseSentence ? "text-primary animate-pulse" : "text-foreground"
+                      }`}
+                    />
+                    <span>
+                      {hasListenedBaseSentence
+                        ? "ĐÃ NGHE"
+                        : isSpeakingBaseSentence
+                        ? "ĐANG ĐỌC..."
+                        : "NGHE (1 LẦN)"}
+                    </span>
                   </Button>
                 )}
               </div>
             </div>
           )}
 
-          {/* Suggested Vocabulary & Collocations Chips */}
+          {/* Suggested Vocabulary & Collocations — JapSpeak Split Hardware Chips */}
           {task.suggestedVocabulary && task.suggestedVocabulary.length > 0 && (
-            <div className="p-2.5 rounded-2xl bg-amber-500/5 border border-amber-500/20 space-y-1.5 shadow-2xs">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 flex items-center gap-1">
-                  <Lightbulb className="size-3 text-amber-500" />
-                  Từ vựng & Cụm từ gợi ý (Collocations):
+            <div className="p-3 bg-background border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] space-y-2">
+              <div className="flex items-center justify-between border-b border-dashed border-border pb-1">
+                <span className="text-[10px] font-mono font-extrabold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                  <Lightbulb className="size-3.5 text-primary stroke-[2.5]" />
+                  <span>TỪ VỰNG &amp; COLLOCATIONS GỢI Ý:</span>
                 </span>
-                <span className="text-[9px] text-muted-foreground font-mono">
-                  Bấm nghe phát âm
+                <span className="text-[9px] text-muted-foreground font-mono font-bold uppercase">
+                  [CLICK ĐỂ NGHE]
                 </span>
               </div>
 
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-2">
                 {task.suggestedVocabulary.map((vocab, idx) => (
                   <button
                     key={idx}
                     type="button"
                     onClick={() => handlePlayVocab(vocab.term)}
-                    className="group inline-flex items-center gap-1 px-2 py-1 rounded-xl bg-card border border-amber-500/30 hover:border-amber-500/60 hover:bg-amber-500/10 transition-all text-xs font-medium text-foreground shadow-2xs cursor-pointer btn-spring"
+                    className="group inline-flex items-stretch bg-card border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] hover:bg-accent hover:text-accent-foreground transition-all text-xs cursor-pointer active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
                     title={`Nghe phát âm "${vocab.term}"`}
                   >
-                    <Volume2 className="size-3 text-amber-500 opacity-70 group-hover:opacity-100 group-hover:scale-110 transition-all" />
-                    <span className="font-bold text-foreground">{vocab.term}</span>
-                    {vocab.meaningVi && (
-                      <span className="text-muted-foreground text-[10px]">
-                        ({vocab.meaningVi})
-                      </span>
-                    )}
+                    <span className="px-1.5 py-1 bg-secondary group-hover:bg-primary group-hover:text-primary-foreground border-r-2 border-border flex items-center justify-center transition-colors">
+                      <Volume2 className="size-3 stroke-[2.5]" />
+                    </span>
+                    <span className="px-2 py-1 flex items-center gap-1.5 font-mono">
+                      <strong className="font-extrabold text-foreground group-hover:text-accent-foreground">
+                        {vocab.term}
+                      </strong>
+                      {vocab.meaningVi && (
+                        <span className="text-muted-foreground group-hover:text-accent-foreground/80 text-[10px] font-sans font-semibold">
+                          ({vocab.meaningVi})
+                        </span>
+                      )}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -281,19 +276,23 @@ export function TaskCard({
         </div>
 
         {/* Bottom Prep Timer Bar */}
-        <div className="pt-1.5 border-t border-border/40 flex items-center justify-between text-[10px] text-muted-foreground shrink-0 font-mono">
+        <div className="pt-2 border-t-2 border-border flex items-center justify-between text-[10px] text-muted-foreground shrink-0 font-mono font-extrabold uppercase">
           {isCountingDown && prepCountdown !== null ? (
-            <div className="flex items-center gap-1 text-primary font-bold animate-pulse">
-              <Clock className="size-3" />
-              <span>Chuẩn bị nói: {prepCountdown}s...</span>
+            <div className="flex items-center gap-1.5 text-primary animate-pulse">
+              <Clock className="size-3.5" />
+              <span>CHUẨN BỊ NÓI: {prepCountdown}S...</span>
             </div>
           ) : (
-            <div className="flex items-center gap-1">
-              <Clock className="size-3" />
-              <span>Thời gian chuẩn bị: {task.prepTimeSec}s</span>
+            <div className="flex items-center gap-1.5">
+              <Clock className="size-3.5 text-foreground" />
+              <span>PREP SLA: {task.prepTimeSec}S</span>
+              <span className="text-border">•</span>
+              <span className="truncate max-w-[140px]">{getTopicDisplay(task.topic).label}</span>
             </div>
           )}
-          <span>Độ khó: {task.difficulty.overall}/10</span>
+          <span className="px-1.5 py-0.5 bg-secondary text-foreground border border-border">
+            LVL {task.difficulty.overall}/10
+          </span>
         </div>
       </CardContent>
     </Card>

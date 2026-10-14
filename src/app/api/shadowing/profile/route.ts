@@ -3,21 +3,14 @@ import { generateTextWithRouting } from "@/lib/ai";
 import { PROMPTS } from "@/lib/ai/prompts/shadowing-prompts";
 import type { AudioVideoProfile, NuancedTranslation, YouTubeTranscriptSegment } from "@/types/shadowing";
 
+import { cleanAiJson } from "@/lib/foundation/shared/json-parser";
+
 function cleanJson(text: string): unknown {
-  const trimmed = text.trim();
-  const withoutFence = trimmed
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "");
+  const cleaned = cleanAiJson(text);
+  if (!cleaned) return null;
   try {
-    return JSON.parse(withoutFence);
+    return JSON.parse(cleaned);
   } catch {
-    const m = withoutFence.match(/\{[\s\S]*\}/);
-    if (m) {
-      try {
-        return JSON.parse(m[0]);
-      } catch {}
-    }
     return null;
   }
 }
@@ -50,7 +43,7 @@ export async function POST(req: NextRequest) {
           messages: [{ role: "user", content: prompt }],
           systemInstruction: PROMPTS.TRANSLATOR_SYSTEM,
           temperature: 0.2,
-          maxOutputTokens: 600,
+          maxOutputTokens: 350,
         },
       });
 
@@ -82,7 +75,7 @@ export async function POST(req: NextRequest) {
         messages: [{ role: "user", content: prompt }],
         systemInstruction: PROMPTS.PROFILER_SYSTEM,
         temperature: 0.2,
-        maxOutputTokens: 1000,
+        maxOutputTokens: 450,
       },
     });
 

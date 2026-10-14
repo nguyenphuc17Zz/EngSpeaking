@@ -1,4 +1,7 @@
 // Prompt registry §20-23 — centralized, versioned
+import { RESPONSE_SYSTEM } from "@/lib/conversation/prompts/response-generator";
+import { SCENARIO_SYSTEM } from "@/lib/conversation/prompts/scenario-generator";
+
 export interface PromptMeta {
   name: string;
   version: string;
@@ -26,6 +29,6 @@ export function composePrompt(baseSystem: string, taskInstructions: string, cont
   return [baseSystem, taskInstructions, context ? `Context:\n${context}` : "", `User input:\n${userInput}`, outputReq ? `Output requirements:\n${outputReq}` : ""].filter(Boolean).join("\n\n");
 }
 
-// Register core prompts on init
-registerPrompt({ name: "conversation_response", version: "1.0.0", task: "conversation_response", template: "RESPONSE_SYSTEM", variables: ["worldState", "recentTurns"], outputSchema: { type: "object" } });
-registerPrompt({ name: "scenario_generation", version: "1.0.0", task: "scenario_generation", template: "SCENARIO_SYSTEM", variables: ["mode", "difficulty"], outputSchema: {} });
+// Register core prompts on init with actual optimized prompt templates
+registerPrompt({ name: "conversation_response", version: "2.0.0", task: "conversation_response", template: RESPONSE_SYSTEM, variables: ["worldState", "recentTurns"], outputSchema: { type: "object" } });
+registerPrompt({ name: "scenario_generation", version: "2.0.0", task: "scenario_generation", template: SCENARIO_SYSTEM, variables: ["mode", "difficulty"], outputSchema: {} });

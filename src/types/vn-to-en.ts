@@ -1,7 +1,7 @@
 // Vietnamese -> English Speaking Domain Types — Function 2
 // Spoken Retrieval Engine converting Vietnamese thoughts directly into spoken English
 
-export type VNToENRetrievalMode = "endless" | "direct" | "timed" | "rapid_fire";
+export type VNToENRetrievalMode = "endless" | "direct" | "timed" | "rapid_fire" | "native_idiomatic";
 
 export type VNPromptCategory =
   | "daily_life"

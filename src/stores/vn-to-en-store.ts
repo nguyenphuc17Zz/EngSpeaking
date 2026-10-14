@@ -80,6 +80,7 @@ const DEFAULT_CONFIGS: Record<VNToENRetrievalMode, VNToENSessionConfig> = {
   direct: { mode: "direct", targetCount: 8, autoStartMic: false, prepTimeSec: 2.5 },
   timed: { mode: "timed", targetCount: 10, autoStartMic: false, prepTimeSec: 2.0 },
   rapid_fire: { mode: "rapid_fire", targetCount: 12, autoStartMic: false, prepTimeSec: 1.0 },
+  native_idiomatic: { mode: "native_idiomatic", targetCount: 0, autoStartMic: false, prepTimeSec: 2.0 },
 };
 
 export const useVNToENStore = create<VNToENStoreState>()(
@@ -123,7 +124,7 @@ export const useVNToENStore = create<VNToENStoreState>()(
         const config = DEFAULT_CONFIGS[mode] || DEFAULT_CONFIGS.endless;
         set({
           sessionConfig: config,
-          autoStartMic: false,
+          autoStartMic: get().autoStartMic,
           sessionStartedAt: new Date().toISOString(),
           completedTasksCount: 0,
           currentTaskIndex: 0,
@@ -284,6 +285,7 @@ export const useVNToENStore = create<VNToENStoreState>()(
         set({
           lastEvaluation: evaluation,
           adaptiveState: updatedAdaptive,
+          completedTasksCount: sessionHistory.length + 1,
           sessionHistory: [
             ...sessionHistory,
             { task: currentTask, evaluation, attemptsCount: attemptCount },
@@ -455,6 +457,8 @@ export const useVNToENStore = create<VNToENStoreState>()(
       partialize: (s) => ({
         adaptiveState: s.adaptiveState,
         autoStartMic: s.autoStartMic,
+        selectedTopicId: s.selectedTopicId,
+        customTopicText: s.customTopicText,
       }),
     }
   )

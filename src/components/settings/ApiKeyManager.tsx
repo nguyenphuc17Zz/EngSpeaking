@@ -68,9 +68,10 @@ export function ApiKeyManager({ onKeyUpdated }: { onKeyUpdated?: () => void }) {
       }));
     } else {
       list = [
-        { value: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite (Mặc định)" },
-        { value: "gemini-3.7-flash", label: "Gemini 3.7 Flash" },
-        { value: "gemini-3.6-flash", label: "Gemini 3.6 Flash" },
+        { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (Mặc định)" },
+        { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite (Siêu tốc)" },
+        { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
+        { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
       ];
     }
 
@@ -258,11 +259,15 @@ export function ApiKeyManager({ onKeyUpdated }: { onKeyUpdated?: () => void }) {
 
   // Switch Active Primary Engine
   const handleSetActiveProvider = (provider: "gemini" | "groq") => {
+    const defaultModel =
+      provider === "gemini"
+        ? settings.preferredGeminiModel || "gemini-2.5-flash"
+        : settings.preferredGroqModel || "openai/gpt-oss-120b";
     settings.setActiveProvider(provider);
-    const model = provider === "gemini" ? settings.preferredGeminiModel : settings.preferredGroqModel;
+    settings.applyProviderToAll(provider, defaultModel);
     toast.success(
       `Đã chuyển Động cơ chính sang ${provider.toUpperCase()}!`,
-      `Tất cả các tác vụ (Sentence Builder, Hội thoại, Đánh giá) hiện đang dùng "${model}".`
+      `Tất cả các tác vụ (Sentence Builder, Hội thoại, Đánh giá) hiện đang dùng "${defaultModel}".`
     );
   };
 

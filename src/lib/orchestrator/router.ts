@@ -47,8 +47,14 @@ export function selectModel(
   }
 
   // 3. Auto: filter by availability §27
+  const isAudioTask =
+    task === "speech_to_text" ||
+    task === "text_to_speech" ||
+    req.requiredCapabilities.includes("speechToText") ||
+    req.requiredCapabilities.includes("textToSpeech");
   candidates = candidates.filter((m) => {
-    if (m.providerId === "browser" || m.providerId === "mock") return true;
+    if (m.providerId === "browser") return !isAudioTask;
+    if (m.providerId === "mock") return true;
     return isProviderConfigured(m.providerId);
   });
   if (candidates.length === 0) throw new VoiceEngineError({ code: VoiceErrorCode.PROVIDER_NOT_CONFIGURED, message: `No configured provider for ${task}` });
@@ -62,7 +68,14 @@ export function selectModel(
     const qualityScore = qualityMap[m.costClass || "unknown"] || 2; // higher cost often higher quality (simple proxy)
     const latencyScore = speedMap[m.speedClass || "balanced"] || 2;
     const costScore = 4 - (qualityMap[m.costClass || "unknown"] || 2) + 1; // cheaper higher
-    const reliabilityScore = m.providerId === "gemini" ? 3 : m.providerId === "groq" ? 3 : 2;
+    const reliabilityScore =
+      m.providerId === "gemini" ||
+      m.providerId === "groq" ||
+      m.providerId === "edge-tts" ||
+      m.providerId === "kokoro-tts" ||
+      m.providerId === "whisper-local"
+        ? 3
+        : 2;
     const score = qualityScore * policy.qualityWeight * 10 + latencyScore * policy.latencyWeight * 10 + costScore * policy.costWeight * 10 + reliabilityScore * policy.reliabilityWeight * 10;
     return { model: m, score };
   });

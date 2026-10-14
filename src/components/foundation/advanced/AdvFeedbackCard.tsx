@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, AlertTriangle, Sparkles, Volume2, RotateCcw, ArrowRight, Zap, Gauge } from "lucide-react";
 import type { AdvancedEvaluation } from "@/types/advanced";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
+import { sanitizeTextForTTS } from "@/lib/tts/browser";
 
 interface AdvFeedbackCardProps {
   evaluation: AdvancedEvaluation;
@@ -75,7 +76,7 @@ export function AdvFeedbackCard({ evaluation, onRetry, onContinue }: AdvFeedback
           <div className="p-3 rounded-2xl bg-primary/10 border border-primary/20 space-y-1">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1"><Sparkles className="size-3" /> Bản xứ:</span>
-              <Button type="button" variant="ghost" size="sm" onClick={() => tts.speak(evaluation.betterVersion)} className="size-6 p-0 text-primary cursor-pointer"><Volume2 className="size-3.5" /></Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => tts.speak(sanitizeTextForTTS(evaluation.betterVersion))} className="size-6 p-0 text-primary cursor-pointer"><Volume2 className="size-3.5" /></Button>
             </div>
             <p className="font-mono text-xs font-bold">“{evaluation.betterVersion}”</p>
           </div>

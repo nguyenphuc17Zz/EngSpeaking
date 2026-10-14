@@ -62,7 +62,9 @@ export type PragmaticStrategyType =
   | "concession_counter"      // Advanced: Buffer -> Concession -> Stance/Rebuttal -> Resolution
   | "problem_solution"       // Strategic: Buffer -> Problem diagnosis -> Core solution -> Projected impact
   | "hypothetical_projection" // Analytic: Buffer -> Conditional premise -> Mechanism -> Concrete outcome
-  | "cause_effect_chain";     // Dynamic: Buffer -> Initiating trigger -> Core consequence -> Elaboration
+  | "cause_effect_chain"     // Dynamic: Buffer -> Initiating trigger -> Core consequence -> Elaboration
+  | "casual_banter"          // Conversational: Reaction Buffer -> Personal Stance -> Phrasal Action -> Bounce-back Question
+  | "phrasal_storytelling";  // Spoken Narrative: Story Opener -> Complication with Phrasal Verbs -> Resolution -> Takeaway
 
 export interface ChunkChainBlock {
   blockType: "buffer" | "stance" | "reason" | "example";

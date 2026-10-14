@@ -4,13 +4,31 @@ import path from "path";
 import { formatConciseMeaning, formatPartOfSpeech } from "@/lib/foundation/vocabulary/lexicon-db.service";
 import { getWordIpa } from "@/lib/foundation/shadowing/ipa-dictionary";
 
-// Cache for loaded letter buckets to avoid repeated disk reads
+// Cache for loaded letter buckets to avoid repeated disk reads (capped at 8 entries)
+const MAX_LETTER_CACHE_ENTRIES = 8;
 const letterCache = new Map<string, Record<string, [string, string, string]>>();
+const ipaLetterCache = new Map<string, Record<string, string>>();
+
+function setBoundedMap<V>(map: Map<string, V>, key: string, value: V) {
+  if (map.has(key)) {
+    map.delete(key);
+  } else if (map.size >= MAX_LETTER_CACHE_ENTRIES) {
+    const oldestKey = map.keys().next().value;
+    if (oldestKey !== undefined) {
+      map.delete(oldestKey);
+    }
+  }
+  map.set(key, value);
+}
 
 function getLetterData(letter: string): Record<string, [string, string, string]> | null {
   const safeChar = /^[a-z]$/.test(letter) ? letter : "other";
   if (letterCache.has(safeChar)) {
-    return letterCache.get(safeChar)!;
+    const cached = letterCache.get(safeChar)!;
+    // Refresh LRU order
+    letterCache.delete(safeChar);
+    letterCache.set(safeChar, cached);
+    return cached;
   }
 
   const filePath = path.join(process.cwd(), "public", "dictionary", "en-vi", `${safeChar}.json`);
@@ -21,10 +39,34 @@ function getLetterData(letter: string): Record<string, [string, string, string]>
   try {
     const raw = fs.readFileSync(filePath, "utf-8");
     const data = JSON.parse(raw);
-    letterCache.set(safeChar, data);
+    setBoundedMap(letterCache, safeChar, data);
     return data;
   } catch (err) {
     console.error(`Failed to read dictionary file for letter ${safeChar}:`, err);
+    return null;
+  }
+}
+
+function getIpaLetterData(letter: string): Record<string, string> | null {
+  const safeChar = /^[a-z]$/.test(letter) ? letter : "other";
+  if (ipaLetterCache.has(safeChar)) {
+    const cached = ipaLetterCache.get(safeChar)!;
+    ipaLetterCache.delete(safeChar);
+    ipaLetterCache.set(safeChar, cached);
+    return cached;
+  }
+
+  const filePath = path.join(process.cwd(), "public", "dictionary", "ipa", "en-us", `${safeChar}.json`);
+  if (!fs.existsSync(filePath)) {
+    return null;
+  }
+
+  try {
+    const raw = fs.readFileSync(filePath, "utf-8");
+    const data = JSON.parse(raw);
+    setBoundedMap(ipaLetterCache, safeChar, data);
+    return data;
+  } catch {
     return null;
   }
 }
@@ -91,11 +133,17 @@ export async function GET(req: NextRequest) {
     const meaningVi = formatConciseMeaning(rawMeaning);
     const partOfSpeech = formatPartOfSpeech(rawPos);
 
-    // Resolve phonetic IPA: prefer dictionary if available, else derive phonetic approximation
+    // Resolve phonetic IPA: prefer dictionary if available, else derive from extended 126k lexicon
     let ipa = rawIpa?.trim();
     if (!ipa) {
-      const computed = getWordIpa(word) || getWordIpa(matchedWord);
-      ipa = computed ? `/${computed}/` : `/${word}/`;
+      const ipaBucket = getIpaLetterData(firstChar);
+      const directIpa = ipaBucket?.[word] || ipaBucket?.[matchedWord];
+      if (directIpa) {
+        ipa = `/${directIpa}/`;
+      } else {
+        const computed = getWordIpa(word) || getWordIpa(matchedWord);
+        ipa = computed ? `/${computed}/` : `/${word}/`;
+      }
     } else if (!ipa.startsWith("/")) {
       ipa = `/${ipa}/`;
     }
@@ -112,8 +160,10 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // If not found in 103k dictionary, still provide phonetic IPA
-  const fallbackIpa = getWordIpa(word);
+  // If not found in 103k dictionary, still provide authentic phonetic IPA
+  const ipaBucket = getIpaLetterData(firstChar);
+  const directIpa = ipaBucket?.[word];
+  const fallbackIpa = directIpa || getWordIpa(word);
   return NextResponse.json({
     success: true,
     found: false,

@@ -15,7 +15,9 @@ export function cacheGet(key: string): unknown | undefined {
 }
 
 export function cacheSet(key: string, value: unknown, ttlMs: number): void {
-  if (store.size >= MAX_SIZE) {
+  if (store.has(key)) {
+    store.delete(key);
+  } else if (store.size >= MAX_SIZE) {
     const first = store.keys().next().value as string | undefined;
     if (first) store.delete(first);
   }

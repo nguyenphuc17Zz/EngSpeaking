@@ -3,41 +3,9 @@
 
 import type { RetrySession, RepairEvaluationResult } from "@/types/retry-loop";
 import { computeTokenAlignment } from "./token-alignment";
+import { normalizeSpokenText } from "@/lib/foundation/shared/text-similarity";
 
-const CONTRACTION_MAP: Record<string, string> = {
-  "don't": "do not",
-  "doesn't": "does not",
-  "didn't": "did not",
-  "won't": "will not",
-  "can't": "cannot",
-  "couldn't": "could not",
-  "shouldn't": "should not",
-  "wouldn't": "would not",
-  "isn't": "is not",
-  "aren't": "are not",
-  "wasn't": "was not",
-  "weren't": "were not",
-  "i'm": "i am",
-  "you're": "you are",
-  "we're": "we are",
-  "they're": "they are",
-  "he's": "he is",
-  "she's": "she is",
-  "it's": "it is",
-  "wanna": "want to",
-  "gonna": "going to",
-  "gotta": "got to",
-};
-
-export function normalizeSpokenText(text: string): string {
-  let s = text.toLowerCase().trim();
-  s = s.replace(/[\u2018\u2019]/g, "'");
-  for (const [k, v] of Object.entries(CONTRACTION_MAP)) {
-    const re = new RegExp(`\\b${k}\\b`, "gi");
-    s = s.replace(re, v);
-  }
-  return s.replace(/[.,/#!$%^&*;:{}=\-_`~()?"']/g, " ").replace(/\s+/g, " ").trim();
-}
+export { normalizeSpokenText };
 
 /**
  * Detects Mid-Utterance Self-Correction (Perceptual Loop Theory):

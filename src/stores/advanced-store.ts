@@ -45,6 +45,7 @@ interface AdvancedStoreState {
   sessionHistory: Array<{ task: AdvancedTask; evaluation: AdvancedEvaluation; attemptsCount: number }>;
   isSessionCompleted: boolean;
   sessionSummary: AdvancedSessionSummary | null;
+  completedSessions: AdvancedSessionSummary[];
 
   hintTier: 0 | 1 | 2 | 3 | 4;
   attemptCount: number;
@@ -112,7 +113,10 @@ export const useAdvancedStore = create<AdvancedStoreState>()(
       selectedTopicId: "random",
       customTopicText: "",
       setTrackLevel: (track, level) => set({ selectedTrack: track, selectedLevel: level }),
-      setSelectedTopic: (topicId, customText = "") => set({ selectedTopicId: topicId, customTopicText: customText }),
+      setSelectedTopic: (topicId, customText = "") => {
+        set({ selectedTopicId: topicId, customTopicText: customText });
+        void get().fetchFirstTask();
+      },
 
       currentTask: null,
       isGenerating: false,
@@ -126,6 +130,7 @@ export const useAdvancedStore = create<AdvancedStoreState>()(
       sessionHistory: [],
       isSessionCompleted: false,
       sessionSummary: null,
+      completedSessions: [],
 
       hintTier: 0,
       attemptCount: 1,
@@ -194,6 +199,8 @@ export const useAdvancedStore = create<AdvancedStoreState>()(
               topic: effectiveTopic,
               prepTimeSec: adaptiveState.prepTimeSec,
               blitzLimitSec: adaptiveState.blitzLimitSec,
+              recentErrors: get().adaptiveState.recentErrors,
+              recentPrompts: get().adaptiveState.recentPrompts,
               provider,
               model,
               forceSource: opts?.forceSource,
@@ -234,6 +241,8 @@ export const useAdvancedStore = create<AdvancedStoreState>()(
               topic: effectiveTopic,
               prepTimeSec: adaptiveState.prepTimeSec,
               blitzLimitSec: adaptiveState.blitzLimitSec,
+              recentErrors: get().adaptiveState.recentErrors,
+              recentPrompts: get().adaptiveState.recentPrompts,
               provider,
               model,
               forceSource: "ai",
@@ -259,18 +268,25 @@ export const useAdvancedStore = create<AdvancedStoreState>()(
           updateFoundationProfileFromScore("controlled_speaking", evaluation.overallScore);
           updateFoundationProfileFromScore("sentence_retrieval", evaluation.retrievalScore);
         } catch {}
+        const nextHistory = [...sessionHistory, { task: currentTask, evaluation, attemptsCount: attemptCount }];
         set({
           lastEvaluation: evaluation,
           adaptiveState: updatedAdaptive,
           skillMastery: updatedMastery,
-          sessionHistory: [...sessionHistory, { task: currentTask, evaluation, attemptsCount: attemptCount }],
+          sessionHistory: nextHistory,
+          completedTasksCount: nextHistory.length,
         });
       },
 
       advanceToNextTask: () => {
         const { currentTaskIndex, sessionConfig, sessionHistory, sessionStartedAt } = get();
+        const completedCount = sessionHistory.length;
         const nextIndex = currentTaskIndex + 1;
-        if (sessionConfig.mode !== "endless" && sessionConfig.targetCount > 0 && nextIndex >= sessionConfig.targetCount) {
+        if (
+          sessionConfig.mode !== "endless" &&
+          sessionConfig.targetCount > 0 &&
+          completedCount >= sessionConfig.targetCount
+        ) {
           const firstOk = sessionHistory.filter((h) => h.attemptsCount === 1 && h.evaluation.isSuccessful).length;
           const count = Math.max(1, sessionHistory.length);
           const indep = sessionHistory.filter((h) => h.evaluation.hintTierUsed === 0 && h.evaluation.isSuccessful).length;
@@ -298,12 +314,17 @@ export const useAdvancedStore = create<AdvancedStoreState>()(
             recommendedNextAction: "Tiếp tục track tiếp theo hoặc lên level khi streak ≥3.",
             history: sessionHistory,
           };
-          set({ isSessionCompleted: true, sessionSummary: summary });
+          set((s) => ({
+            isSessionCompleted: true,
+            sessionSummary: summary,
+            completedTasksCount: completedCount,
+            completedSessions: [summary, ...(s.completedSessions || [])].slice(0, 30),
+          }));
           return;
         }
         set({
           currentTaskIndex: nextIndex,
-          completedTasksCount: sessionHistory.length,
+          completedTasksCount: completedCount,
           hintTier: 0,
           attemptCount: 1,
           lastEvaluation: null,
@@ -340,7 +361,12 @@ export const useAdvancedStore = create<AdvancedStoreState>()(
           recommendedNextAction: "Duy trì luyện tập mỗi ngày để giữ streak.",
           history: sessionHistory,
         };
-        set({ isSessionCompleted: true, sessionSummary: summary });
+        set((s) => ({
+          isSessionCompleted: true,
+          sessionSummary: summary,
+          completedTasksCount: sessionHistory.length,
+          completedSessions: [summary, ...(s.completedSessions || [])].slice(0, 30),
+        }));
       },
 
       setHintTier: (tier) => set({ hintTier: tier }),
@@ -375,6 +401,7 @@ export const useAdvancedStore = create<AdvancedStoreState>()(
         selectedLevel: s.selectedLevel,
         selectedTopicId: s.selectedTopicId,
         customTopicText: s.customTopicText,
+        completedSessions: s.completedSessions,
       }),
     }
   )

@@ -43,11 +43,16 @@ export function createProvider(providerId: string): AIProvider | null {
   return null;
 }
 
+import { recordTelemetry } from "@/lib/orchestrator/telemetry";
+
 export async function generateTextWithRouting(opts: {
   provider: string; // "auto" | id
   model: string; // "auto" | id
+  task?: string;
   input: Omit<TextGenerationInput, "model">;
 }): Promise<TextGenerationResult> {
+  const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const start = Date.now();
   let providerId = opts.provider;
   let modelId = opts.model;
   // Strict per user choice: "auto" resolves deterministically, but no fallback on failure §36
@@ -59,11 +64,59 @@ export async function generateTextWithRouting(opts: {
   const provider = createProvider(providerId);
   if (!provider) throw new VoiceEngineError({ code: VoiceErrorCode.PROVIDER_NOT_CONFIGURED, message: `Provider ${providerId} not configured`, provider: providerId });
   logger.providerSelected({ provider: providerId, model: modelId });
-  const result = await provider.generateText({ ...opts.input, model: modelId });
+
+  let result: TextGenerationResult;
+  try {
+    result = await provider.generateText({ ...opts.input, model: modelId });
+  } catch (err: unknown) {
+    recordTelemetry({
+      requestId,
+      task: opts.task || "conversation",
+      providerId,
+      modelId,
+      latencyMs: Date.now() - start,
+      cacheHit: false,
+      retryCount: 0,
+      status: "error",
+      errorCode: (err as { code?: string })?.code,
+      createdAt: new Date().toISOString(),
+    });
+    throw err;
+  }
+
   // Validate via Zod
   const { textGenerationResultSchema } = await import("@/lib/validation/schemas");
   const parsed = textGenerationResultSchema.safeParse(result);
-  if (!parsed.success) throw new VoiceEngineError({ code: VoiceErrorCode.INVALID_PROVIDER_RESPONSE, message: "Invalid AI response", raw: parsed.error });
+  if (!parsed.success) {
+    recordTelemetry({
+      requestId,
+      task: opts.task || "conversation",
+      providerId: result.provider || providerId,
+      modelId: result.model || modelId,
+      latencyMs: result.latencyMs ?? (Date.now() - start),
+      usage: result.usage,
+      cacheHit: false,
+      retryCount: 0,
+      status: "error",
+      errorCode: VoiceErrorCode.INVALID_PROVIDER_RESPONSE,
+      createdAt: new Date().toISOString(),
+    });
+    throw new VoiceEngineError({ code: VoiceErrorCode.INVALID_PROVIDER_RESPONSE, message: "Invalid AI response", raw: parsed.error });
+  }
+
+  recordTelemetry({
+    requestId,
+    task: opts.task || "conversation",
+    providerId: result.provider || providerId,
+    modelId: result.model || modelId,
+    latencyMs: result.latencyMs ?? (Date.now() - start),
+    usage: result.usage,
+    cacheHit: false,
+    retryCount: 0,
+    status: "success",
+    createdAt: new Date().toISOString(),
+  });
+
   return result;
 }
 
@@ -71,6 +124,7 @@ export async function generateOpeningPrompt(opts: { provider: string; model: str
   return generateTextWithRouting({
     provider: opts.provider,
     model: opts.model,
+    task: "conversation_opening",
     input: {
       messages: [{ role: "user", content: OPENING_PROMPT_INSTRUCTION }],
       systemInstruction: CONVERSATION_SYSTEM_PROMPT_V1,
@@ -82,11 +136,15 @@ export async function generateOpeningPrompt(opts: { provider: string; model: str
 
 function cleanJson(text: string): unknown {
   const trimmed = text.trim();
-  const withoutThink = trimmed.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  const withoutThink = trimmed
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/<think>[\s\S]*$/gi, "")
+    .trim();
   const withoutFence = withoutThink
     .replace(/^```json\s*/i, "")
     .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "");
+    .replace(/\s*```$/i, "")
+    .trim();
   try {
     return JSON.parse(withoutFence);
   } catch {
@@ -418,9 +476,11 @@ export async function generateInfiniteScenario(opts: {
   category?: string;
   level?: string;
 }): Promise<TacticalScenario> {
+  const { buildCreativeAngleDirective } = await import("@/lib/ai/prompts/diversity-engine");
+  const creativeAngle = buildCreativeAngleDirective();
   const userInstruction = opts.topic
-    ? `Topic or custom user prompt: "${opts.topic}". Category preference: ${opts.category || "any"}. Level: ${opts.level || "B1-B2"}.`
-    : `Generate an exciting, unexpected, highly practical scenario for category: ${opts.category || "workplace"}. Level: ${opts.level || "B1-B2"}.`;
+    ? `Topic or custom user prompt: "${opts.topic}". Category preference: ${opts.category || "any"}. Level: ${opts.level || "B1-B2"}.\n${creativeAngle}`
+    : `Generate an exciting, unexpected, highly practical scenario for category: ${opts.category || "workplace"}. Level: ${opts.level || "B1-B2"}.\n${creativeAngle}`;
 
   const rawRes = await generateTextWithRouting({
     provider: opts.provider,
@@ -429,7 +489,7 @@ export async function generateInfiniteScenario(opts: {
       messages: [{ role: "user", content: userInstruction }],
       systemInstruction: INFINITE_SCENARIO_SYSTEM_PROMPT,
       temperature: 0.8,
-      maxOutputTokens: 900,
+      maxOutputTokens: 750,
     },
   });
 

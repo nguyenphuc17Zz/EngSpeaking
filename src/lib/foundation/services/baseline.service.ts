@@ -39,15 +39,14 @@ function mockBaselineEval(all: Array<{ id: string; prompt: string; skill: string
   };
 }
 
+import { cleanAiJson } from "@/lib/foundation/shared/json-parser";
+
 function extractJson(text: string): unknown {
-  const t = text.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "");
-  try { return JSON.parse(t); } catch {
-    const m = t.match(/\{[\s\S]*\}/);
-    if (m) try { return JSON.parse(JSON.parse(JSON.stringify(m[0]))); } catch {
-      try { return JSON.parse(m[0]); } catch {}
-    }
-    const arrMatch = t.match(/\[[\s\S]*\]/);
-    if (arrMatch) try { return JSON.parse(arrMatch[0]); } catch {}
+  const cleaned = cleanAiJson(text);
+  if (!cleaned) return null;
+  try {
+    return JSON.parse(cleaned);
+  } catch {
     return null;
   }
 }
@@ -64,7 +63,7 @@ export async function generateBaselineTasks(opts?: { speechBank?: string[]; prov
         messages: [{ role: "user", content: buildBaselineUserPrompt({ speechBank: opts?.speechBank }) }],
         systemInstruction: BASELINE_SYSTEM,
         temperature: 0.6,
-        maxOutputTokens: 800,
+        maxOutputTokens: 450,
       },
     });
     const parsed = extractJson(res.text) as { tasks?: Array<{ id: string; prompt: string; skill: string; topic?: string }> } | null;
@@ -90,6 +89,10 @@ export async function evaluateBaseline(
   const model = opts?.model || "auto";
   if (provider === "mock") return mockBaselineEval(tasks);
 
+  const validTtfw = tasks.map((t) => t.timeToFirstWordMs).filter((v): v is number => typeof v === "number" && v > 0);
+  const avgTtfw = validTtfw.length > 0 ? validTtfw.reduce((a, b) => a + b, 0) / validTtfw.length : 1800;
+  const deterministicSpeed = avgTtfw <= 1500 ? 92 : avgTtfw <= 2500 ? 80 : avgTtfw <= 3800 ? 65 : 48;
+
   try {
     const res = await generateTextWithRouting({
       provider,
@@ -98,7 +101,7 @@ export async function evaluateBaseline(
         messages: [{ role: "user", content: buildBaselineEvalUserPrompt(tasks) }],
         systemInstruction: BASELINE_EVAL_SYSTEM,
         temperature: 0.3,
-        maxOutputTokens: 800,
+        maxOutputTokens: 450,
       },
     });
     const parsed = extractJson(res.text) as Record<string, unknown> | null;
@@ -106,7 +109,7 @@ export async function evaluateBaseline(
       const p = parsed as unknown as { responseSpeed: number; sentenceProduction: number; fluency: number; vocabularyRetrieval: number; grammarInSpeech: number; confidence: number; expansionAbility: number; recoveryAbility: number; overall: number; levelSuggestion: number; perTask?: Array<{ id: string; score: number; note?: string }> };
       const perTaskMap = new Map((p.perTask || []).map((x) => [x.id, x]));
       return {
-        responseSpeed: clamp(p.responseSpeed),
+        responseSpeed: clamp(p.responseSpeed ?? deterministicSpeed),
         sentenceProduction: clamp(p.sentenceProduction),
         fluency: clamp(p.fluency),
         vocabularyRetrieval: clamp(p.vocabularyRetrieval),

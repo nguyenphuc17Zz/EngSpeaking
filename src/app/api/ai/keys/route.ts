@@ -1,37 +1,11 @@
 import { NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
 import {
   getAllProviderStatuses,
   setProviderApiKey,
   removeProviderApiKey,
 } from "@/lib/config/server";
-import { GeminiProvider } from "@/lib/ai/providers/gemini";
-import { GroqProvider } from "@/lib/ai/providers/groq";
-
-function persistKeyToFile(envVar: string, keyVal?: string) {
-  try {
-    const envPath = path.resolve(process.cwd(), ".env.local");
-    let content = "";
-    if (fs.existsSync(envPath)) {
-      content = fs.readFileSync(envPath, "utf-8");
-    }
-
-    if (keyVal) {
-      const regex = new RegExp(`^${envVar}=.*$`, "m");
-      if (regex.test(content)) {
-        content = content.replace(regex, `${envVar}=${keyVal}`);
-      } else {
-        content = content.trim() ? `${content}\n${envVar}=${keyVal}\n` : `${envVar}=${keyVal}\n`;
-      }
-    } else {
-      const regex = new RegExp(`^${envVar}=.*$(\r?\n)?`, "m");
-      content = content.replace(regex, "");
-    }
-
-    fs.writeFileSync(envPath, content, "utf-8");
-  } catch {}
-}
+import { getModelsForProvider } from "@/lib/ai/models/catalog";
+import type { AIModel } from "@/types/ai";
 
 export async function GET() {
   const statuses = getAllProviderStatuses();
@@ -50,7 +24,7 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!apiKey || typeof apiKey !== "string" || !apiKey.trim()) {
+    if (!apiKey || typeof apiKey !== "string" || !apiKey.replace(/[\r\n]/g, "").trim()) {
       return NextResponse.json(
         { error: "Vui lòng nhập API Key hợp lệ" },
         { status: 400 }
@@ -58,19 +32,57 @@ export async function POST(req: Request) {
     }
 
     const lower = provider.toLowerCase();
-    const cleanKey = apiKey.trim();
+    const cleanKey = apiKey.replace(/[\r\n]/g, "").trim();
 
-    // Verify key against actual provider API
-    let models = [];
+    // Verify key against actual provider API and parse models in a single request
+    let models: AIModel[] = [];
     if (lower === "gemini") {
       try {
-        const probeRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models?key=${cleanKey}`
-        );
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 10000);
+        let probeRes: Response;
+        try {
+          probeRes = await fetch("https://generativelanguage.googleapis.com/v1beta/models", {
+            headers: { "x-goog-api-key": cleanKey },
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timer);
+        }
         if (!probeRes.ok) {
           const errData = await probeRes.json().catch(() => ({}));
           const errMsg = errData.error?.message || `Lỗi kết nối Gemini API (Mã: ${probeRes.status})`;
           return NextResponse.json({ error: errMsg }, { status: 400 });
+        }
+        const data = (await probeRes.json().catch(() => ({}))) as {
+          models?: Array<{
+            name: string;
+            displayName?: string;
+            inputTokenLimit?: number;
+            supportedGenerationMethods?: string[];
+          }>;
+        };
+        for (const m of data.models || []) {
+          if (!m.supportedGenerationMethods?.includes("generateContent")) continue;
+          const mid = (m.name || "").replace(/^models\//, "").trim();
+          if (!mid || mid.includes("embedding") || mid.includes("aqa") || mid.includes("imagen")) continue;
+          models.push({
+            id: mid,
+            providerId: "gemini",
+            displayName: m.displayName ? `${m.displayName} (${mid})` : mid,
+            capabilities: {
+              textGeneration: true,
+              speechToText: false,
+              textToSpeech: false,
+              streaming: true,
+              structuredOutput: true,
+            },
+            contextWindow: m.inputTokenLimit || 1_000_000,
+            active: true,
+          });
+        }
+        if (models.length === 0) {
+          models = getModelsForProvider("gemini");
         }
       } catch (e: unknown) {
         return NextResponse.json(
@@ -78,18 +90,45 @@ export async function POST(req: Request) {
           { status: 500 }
         );
       }
-      const gemini = new GeminiProvider(cleanKey);
-      models = await gemini.getModels();
-      persistKeyToFile("GEMINI_API_KEY", cleanKey);
     } else if (lower === "groq") {
       try {
-        const probeRes = await fetch("https://api.groq.com/openai/v1/models", {
-          headers: { Authorization: `Bearer ${cleanKey}` },
-        });
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000);
+        let probeRes: Response;
+        try {
+          probeRes = await fetch("https://api.groq.com/openai/v1/models", {
+            headers: { Authorization: `Bearer ${cleanKey}` },
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timer);
+        }
         if (!probeRes.ok) {
           const errData = await probeRes.json().catch(() => ({}));
           const errMsg = errData.error?.message || `Lỗi kết nối Groq API (Mã: ${probeRes.status})`;
           return NextResponse.json({ error: errMsg }, { status: 400 });
+        }
+        const data = (await probeRes.json().catch(() => ({}))) as {
+          data?: Array<{ id: string; active?: boolean; context_window?: number }>;
+        };
+        for (const m of data.data || []) {
+          if (m.active === false) continue;
+          const mid = (m.id || "").trim();
+          if (!mid) continue;
+          const isWhisper = mid.toLowerCase().includes("whisper");
+          models.push({
+            id: mid,
+            providerId: "groq",
+            displayName: mid,
+            capabilities: isWhisper
+              ? { textGeneration: false, speechToText: true, textToSpeech: false, streaming: false, structuredOutput: false }
+              : { textGeneration: true, speechToText: false, textToSpeech: false, streaming: true, structuredOutput: true },
+            contextWindow: m.context_window || 128_000,
+            active: true,
+          });
+        }
+        if (models.length === 0) {
+          models = getModelsForProvider("groq");
         }
       } catch (e: unknown) {
         return NextResponse.json(
@@ -97,9 +136,6 @@ export async function POST(req: Request) {
           { status: 500 }
         );
       }
-      const groq = new GroqProvider(cleanKey);
-      models = await groq.getModels();
-      persistKeyToFile("GROQ_API_KEY", cleanKey);
     } else {
       return NextResponse.json(
         { error: `Provider '${provider}' chưa được hỗ trợ lưu key` },
@@ -107,7 +143,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Save key to runtime
+    // Save key to runtime and persist to data/api-keys.json (does not trigger Next.js .env reload)
     setProviderApiKey(lower, cleanKey);
 
     return NextResponse.json({
@@ -136,9 +172,6 @@ export async function DELETE(req: Request) {
 
     const lower = provider.toLowerCase();
     removeProviderApiKey(lower);
-
-    if (lower === "gemini") persistKeyToFile("GEMINI_API_KEY", undefined);
-    if (lower === "groq") persistKeyToFile("GROQ_API_KEY", undefined);
 
     return NextResponse.json({
       success: true,

@@ -13,26 +13,29 @@ export function Waveform({ active, bars = 16, className, variant = "primary" }: 
   if (!active) return null;
 
   const colorClasses = {
-    primary: "bg-primary",
-    emerald: "bg-emerald-500",
-    amber: "bg-amber-500",
+    primary: "bg-[#FF5500]",
+    emerald: "bg-[#00FF66]",
+    amber: "bg-[#CCFF00]",
   };
 
   return (
     <div
       className={cn(
-        "flex items-center justify-center gap-1.5 h-10 px-4 py-2 rounded-full bg-card/70 border border-border/60 backdrop-blur-md shadow-xs",
+        "flex items-center justify-center gap-1 h-10 px-3 py-1.5 rounded-none bg-[#121210] border-2 border-border shadow-[3px_3px_0px_var(--industrial-shadow-color)]",
         className
       )}
       aria-hidden
     >
+      <span className="text-[9px] font-mono font-black text-[#CCFF00] mr-1.5 tracking-wider">
+        dB
+      </span>
       {Array.from({ length: bars }).map((_, i) => {
         const baseHeight = 8 + (Math.sin(i * 0.5) + 1) * 8;
         return (
           <span
             key={i}
             className={cn(
-              "w-1 rounded-full transition-all duration-150 animate-pulse",
+              "w-1.5 rounded-none transition-all duration-150 animate-pulse",
               colorClasses[variant]
             )}
             style={{

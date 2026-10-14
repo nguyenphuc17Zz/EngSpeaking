@@ -9,92 +9,24 @@ import type {
   SurvivalHesitationMetrics,
 } from "@/types/survival-speaking";
 import { analyzeAristotelianCircumlocution } from "./aristotelian-evaluator.engine";
+import {
+  normalizeSpokenText,
+  calculateLevenshteinDistance,
+  computeLevenshteinSimilarity,
+  calculateHesitationMetrics as computeSharedHesitationMetrics,
+} from "@/lib/foundation/shared/text-similarity";
 
-const CONTRACTION_MAP: Record<string, string> = {
-  "i'm": "i am",
-  im: "i am",
-  "you're": "you are",
-  youre: "you are",
-  "it's": "it is",
-  its: "it is",
-  "don't": "do not",
-  dont: "do not",
-  "can't": "cannot",
-  cant: "cannot",
-  "couldn't": "could not",
-  couldnt: "could not",
-  "didn't": "did not",
-  didnt: "did not",
-  gonna: "going to",
-  wanna: "want to",
-  gotta: "got to",
-  "let's": "let us",
-  lets: "let us",
-};
-
-export function normalizeSpokenText(text: string): string {
-  if (!text) return "";
-  const cleaned = text
-    .toLowerCase()
-    .replace(/[’‘`]/g, "'")
-    .replace(/[.,/#!$%^&*;:{}=\-_~()?"\\]/g, " ")
-    .trim();
-  const tokens = cleaned.split(/\s+/).filter(Boolean);
-  return tokens
-    .map((tok) => CONTRACTION_MAP[tok] || tok)
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-export function calculateLevenshteinDistance(a: string, b: string): number {
-  if (a === b) return 0;
-  if (a.length === 0) return b.length;
-  if (b.length === 0) return a.length;
-  const matrix: number[][] = [];
-  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
-  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
-  for (let i = 1; i <= b.length; i++) {
-    for (let j = 1; j <= a.length; j++) {
-      if (b.charAt(i - 1) === a.charAt(j - 1)) {
-        matrix[i][j] = matrix[i - 1][j - 1];
-      } else {
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1,
-          matrix[i][j - 1] + 1,
-          matrix[i - 1][j] + 1
-        );
-      }
-    }
-  }
-  return matrix[b.length][a.length];
-}
+export { normalizeSpokenText, calculateLevenshteinDistance };
 
 export function calculateStringSimilarity(a: string, b: string): number {
-  const normA = normalizeSpokenText(a);
-  const normB = normalizeSpokenText(b);
-  if (!normA && !normB) return 1.0;
-  if (!normA || !normB) return 0.0;
-  if (normA === normB) return 1.0;
-  const maxLen = Math.max(normA.length, normB.length);
-  const dist = calculateLevenshteinDistance(normA, normB);
-  return Math.max(0, 1 - dist / maxLen);
+  return computeLevenshteinSimilarity(a, b);
 }
 
 export function calculateHesitationMetrics(params: {
   userTranscript: string;
   speechDurationMs: number;
 }): SurvivalHesitationMetrics {
-  const norm = normalizeSpokenText(params.userTranscript);
-  const wordCount = norm.split(/\s+/).filter(Boolean).length;
-  const durationSec = Math.max(0.6, params.speechDurationMs / 1000);
-  const wpm = Math.round((wordCount / durationSec) * 60);
-  const idealDurationSec = wordCount / 2.2;
-  const pauseEstimatedSec = Math.max(0, Math.round((durationSec - idealDurationSec) * 10) / 10);
-  let hesitationLevel: SurvivalHesitationMetrics["hesitationLevel"] = "smooth";
-  if (wpm < 75 || pauseEstimatedSec > 2.0) hesitationLevel = "hesitant";
-  else if (wpm < 105 || pauseEstimatedSec > 1.0) hesitationLevel = "moderate";
-  return { wpm, durationMs: params.speechDurationMs, hesitationLevel, pauseEstimatedSec };
+  return computeSharedHesitationMetrics(params);
 }
 
 export function independenceFromTier(hintTier: number): number {

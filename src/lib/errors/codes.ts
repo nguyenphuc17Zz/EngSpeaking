@@ -58,7 +58,6 @@ function isRetryable(code: VoiceErrorCodeType): boolean {
   const retryable = [
     VoiceErrorCode.NETWORK_ERROR,
     VoiceErrorCode.TIMEOUT,
-    VoiceErrorCode.PROVIDER_NOT_CONFIGURED,
     VoiceErrorCode.QUOTA_ERROR,
   ] as string[];
   return retryable.includes(code);

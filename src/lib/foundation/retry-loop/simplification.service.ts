@@ -56,21 +56,14 @@ function computeDeterministicSimplification(params: SimplifySentenceParams): Sim
   };
 }
 
+import { cleanAiJson } from "@/lib/foundation/shared/json-parser";
+
 function cleanJson(text: string): unknown {
-  const trimmed = text.trim();
-  const withoutFence = trimmed
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "");
+  const cleaned = cleanAiJson(text);
+  if (!cleaned) return null;
   try {
-    return JSON.parse(withoutFence);
+    return JSON.parse(cleaned);
   } catch {
-    const m = withoutFence.match(/\{[\s\S]*\}/);
-    if (m) {
-      try {
-        return JSON.parse(m[0]);
-      } catch {}
-    }
     return null;
   }
 }
@@ -103,12 +96,7 @@ export async function simplifySentence(
   }
 
   // 2. Real-time AI Generation
-  const prompt = `Simplify this complex speaking sentence for a learner who is struggling after multiple retries:
-- Original Vietnamese: "${params.originalPromptVi}"
-- Original English: "${params.originalEnglish}"
-- Target Pattern: "${params.targetErrorPattern || "core_grammar"}"
-
-Create a clean, short (4-8 words) simplified pair. Return strict JSON.`;
+  const prompt = `VI: "${params.originalPromptVi}"\nEN: "${params.originalEnglish}"\nPattern: "${params.targetErrorPattern || "core_grammar"}"\nSimplify to 4-8 words. Return JSON.`;
 
   try {
     const res = await generateTextWithRouting({
@@ -118,7 +106,7 @@ Create a clean, short (4-8 words) simplified pair. Return strict JSON.`;
         messages: [{ role: "user", content: prompt }],
         systemInstruction: SIMPLIFICATION_SYSTEM,
         temperature: 0.3,
-        maxOutputTokens: 500,
+        maxOutputTokens: 220,
       },
     });
 

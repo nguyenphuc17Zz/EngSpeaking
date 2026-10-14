@@ -19,19 +19,19 @@ export function buildResponseUserPrompt(opts: {
 }): string {
   const lines: string[] = [];
   lines.push(`WorldState: ${opts.worldStateJson}`);
-  if (opts.summaryJson) lines.push(`ConversationSummary: ${opts.summaryJson}`);
-  lines.push(`Recent turns (last 15): ${opts.recentTurnsJson}`);
-  if (opts.activeEventJson) lines.push(`Active Event: ${opts.activeEventJson} — incorporate its effect naturally`);
-  if (opts.pragmaticActInfo) lines.push(`Learner Pragmatic Move: ${opts.pragmaticActInfo}`);
-  lines.push(`User just said: "${opts.userTranscript}"`);
-  lines.push(`Speech Duration: ${opts.speechDurationMs ?? 2500} ms | Hint Tier Used (0-4): ${opts.hintTierUsed ?? 0} | Attempt: ${opts.attemptNumber ?? 1}`);
+  if (opts.summaryJson) lines.push(`Summary: ${opts.summaryJson}`);
+  lines.push(`RecentTurns: ${opts.recentTurnsJson}`);
+  if (opts.activeEventJson) lines.push(`ActiveEvent: ${opts.activeEventJson} — weave its effect naturally`);
+  if (opts.pragmaticActInfo) lines.push(`PragmaticMove: ${opts.pragmaticActInfo}`);
+  lines.push(`LearnerSpoken: "${opts.userTranscript}" (duration=${opts.speechDurationMs ?? 2500}ms, hintTier=${opts.hintTierUsed ?? 0}, attempt=${opts.attemptNumber ?? 1})`);
   if (opts.pedagogicalConstraint) lines.push(opts.pedagogicalConstraint);
-  lines.push(`Task: Generate ConversationAIResponse JSON with:
-1. "responseText": 2-3 sentences max, natural, strictly in character, ending with one question.
-2. "stateUpdate": { "currentTopic": "...", "objectiveProgress": 0.1..1, "trustChange": -10..15, "patienceChange": -10..10, "defensivenessChange": -15..15, "newFacts": [{ "id": "f1", "fact": "...", "createdAt": "..." }] }
-3. "event": optional { "id": "e1", "type": "surprise", "effect": "..." }
-4. "pedagogy": { "grammarIssue": "Brief Vietnamese issue explanation or null", "grammarFix": "Corrected sentence or null", "nativeReformulation": "Natural native phrasing B2/C1", "turnScore": 85, "coachTipVi": "Encouraging tip", "meaningScore": 0-100, "fluencyScore": 0-100, "retrievalScore": 0-100, "independenceScore": 0-100 (100/90/75/50/15 by hint tier 0-4), "errors": [{"type": "grammar"|"vocabulary"|"pronunciation"|"fluency"|"omission"|"strategy", "severity": "minor"|"major", "userText": string, "correction": string, "explanation": string, "patternKey": string}] (max 2), "praisePoints": string[], "actionableFeedback": string, "sayItBetter": {"professional": string, "casual": string, "idiomatic": string}, "naturalAlternatives": [{"expression": string, "tone": string, "explanationVi": string}], "isSayItBetterNeeded": boolean, "hintTierUsed": number, "attemptNumber": number, "evaluationSource": "ai_llm", "isFastPass": false }
-5. "hints": { "tier1Keywords": [{ "term": "...", "meaning": "...", "penaltyWeight": 0.1 }], "tier2Starters": [{ "starter": "...", "meaning": "...", "penaltyWeight": 0.5 }], "tier3FullAnswer": { "en": "...", "vi": "...", "penaltyWeight": 0.85 } } to answer your follow-up question!`);
-  lines.push(`Return ONLY valid JSON.`);
+  lines.push(`Return ONLY valid ConversationAIResponse JSON:
+{
+  "responseText": "1-3 sentences max, strictly in character, ending with one natural question",
+  "stateUpdate": { "currentTopic"?: string, "objectiveProgress"?: 0.1..1, "trustChange"?: -10..15, "patienceChange"?: -10..10, "defensivenessChange"?: -15..15, "newFacts"?: [{ "id": "f1", "fact": string }] },
+  "pedagogy": { "grammarIssue": string|null, "grammarFix": string|null, "nativeReformulation": string, "turnScore": 0..100, "coachTipVi": string, "meaningScore": 0..100, "fluencyScore": 0..100, "retrievalScore": 0..100, "errors": [{"type": "grammar"|"vocabulary"|"pronunciation"|"fluency"|"omission"|"strategy", "severity": "minor"|"major", "userText": string, "correction": string, "explanation": string, "patternKey": string}], "praisePoints": [string], "actionableFeedback": string, "sayItBetter": {"professional": string, "casual": string, "idiomatic": string}, "naturalAlternatives": [{"expression": string, "tone": string, "explanationVi": string}], "isSayItBetterNeeded": boolean },
+  "hints": { "tier1Keywords": [{ "term": string, "meaning": string }], "tier2Starters": [{ "starter": string, "meaning": string }], "tier3FullAnswer": { "en": string, "vi": string } }
+}`);
   return lines.join("\n");
 }
+

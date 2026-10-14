@@ -116,10 +116,45 @@ export function computeShadowingScore(
   const rawAccuracy = Math.max(0, (maxLen - dist) / maxLen);
   const accuracy = Math.round(rawAccuracy * 100);
 
-  // Determine correct vs missed words
-  const spkSet = new Set(spkTokens);
-  const correctWords = refTokens.filter((w) => spkSet.has(w));
-  const missedWords = refTokens.filter((w) => !spkSet.has(w));
+  // Determine correct vs missed words using order-aware LCS / greedy forward window matching
+  // so word order and duplicate word occurrences are respected
+  const m = refTokens.length;
+  const n = spkTokens.length;
+  const lcsDp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = m - 1; i >= 0; i--) {
+    for (let j = n - 1; j >= 0; j--) {
+      if (refTokens[i] === spkTokens[j]) {
+        lcsDp[i][j] = 1 + lcsDp[i + 1][j + 1];
+      } else {
+        lcsDp[i][j] = Math.max(lcsDp[i + 1][j], lcsDp[i][j + 1]);
+      }
+    }
+  }
+  const matchedRefIndices = new Set<number>();
+  let ri = 0;
+  let sj = 0;
+  while (ri < m && sj < n) {
+    if (refTokens[ri] === spkTokens[sj]) {
+      matchedRefIndices.add(ri);
+      ri++;
+      sj++;
+    } else if (lcsDp[ri + 1][sj] >= lcsDp[ri][sj + 1]) {
+      ri++;
+    } else {
+      sj++;
+    }
+  }
+
+  const correctWords: string[] = [];
+  const missedWords: string[] = [];
+  for (let i = 0; i < refTokens.length; i++) {
+    if (matchedRefIndices.has(i)) {
+      correctWords.push(refTokens[i]);
+    } else {
+      missedWords.push(refTokens[i]);
+    }
+  }
+  const matchedWordSet = new Set(correctWords);
 
   // ─── FLUENCY (30% weight) ─────────────────────────────────────────────
   // Ratio of actual duration vs expected. Ideal: 0.8x – 1.5x of expected.
@@ -152,7 +187,7 @@ export function computeShadowingScore(
 
   let prosody = 70;
   if (stressArr.length > 0) {
-    const hitCount = stressArr.filter((w) => spkSet.has(w)).length;
+    const hitCount = stressArr.filter((w) => matchedWordSet.has(w)).length;
     const ratio = hitCount / stressArr.length;
     prosody = Math.round(
       // Boost a bit if got all stressed words; penalize if missed many

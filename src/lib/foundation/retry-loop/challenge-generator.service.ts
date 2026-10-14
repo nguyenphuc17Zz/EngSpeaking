@@ -10,6 +10,7 @@ import {
   getFallbackBankTask,
 } from "@/lib/foundation/services/content-bank.service";
 import { resolveTopicForPrompt } from "@/lib/foundation/sentence-builder/topics";
+import { cleanAiJson } from "@/lib/foundation/shared/json-parser";
 import { z } from "zod";
 
 export type RepairChallenge = z.infer<typeof repairChallengeSchema>;
@@ -26,32 +27,11 @@ export interface GenerateRepairChallengeParams {
 }
 
 function cleanJson(raw: string): unknown {
-  if (!raw) return null;
-  const withoutReasoning = raw
-    .replace(/<think>[\s\S]*?<\/think>/gi, "")
-    .replace(/<thought>[\s\S]*?<\/thought>/gi, "")
-    .trim();
-  const withoutFence = withoutReasoning
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/, "")
-    .trim();
+  const cleaned = cleanAiJson(raw);
+  if (!cleaned) return null;
   try {
-    return JSON.parse(withoutFence);
+    return JSON.parse(cleaned);
   } catch {
-    const firstBrace = withoutFence.indexOf("{");
-    const lastBrace = withoutFence.lastIndexOf("}");
-    if (firstBrace !== -1 && lastBrace > firstBrace) {
-      const candidate = withoutFence.slice(firstBrace, lastBrace + 1);
-      try {
-        return JSON.parse(candidate);
-      } catch {
-        const withoutTrailingCommas = candidate.replace(/,\s*([}\]])/g, "$1");
-        try {
-          return JSON.parse(withoutTrailingCommas);
-        } catch {}
-      }
-    }
     return null;
   }
 }
@@ -100,11 +80,11 @@ export async function generateRepairChallenge(
     return getDeterministicChallenge();
   }
 
-  // Resolve dynamic topic
-  const effectiveTopic = resolveTopicForPrompt(params.topic);
+  // Resolve dynamic topic avoiding recent patterns
+  const effectiveTopic = resolveTopicForPrompt(params.topic, undefined, params.recentPatterns);
 
-  // 1. Content Bank: Only sampled if explicitly requested via forceSource === "bank"
-  if (params.forceSource === "bank") {
+  // 1. Check Content Bank (Hybrid 70/30 Policy: 70% chance to fetch from Bank, skipped if forceSource === "ai")
+  if (params.forceSource !== "ai") {
     try {
       const cached = await sampleBankTask<RepairChallenge>({
         module: "retry_loop_repair",
@@ -136,8 +116,8 @@ export async function generateRepairChallenge(
       input: {
         messages: [{ role: "user", content: userPrompt }],
         systemInstruction: REPAIR_CHALLENGE_GENERATOR_SYSTEM,
-        temperature: 0.7,
-        maxOutputTokens: 1000,
+        temperature: 0.78,
+        maxOutputTokens: 700,
       },
     });
 

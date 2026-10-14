@@ -102,9 +102,9 @@ function extractJson(text: string): unknown {
   }
 }
 
-function buildRecentTurnsJson(turns: Array<{ role: string; text: string }>, summaryJson?: string): string {
-  // Keep last 15 turns (§69 choice 15 turns + facts/threads)
-  const recent = turns.slice(-15);
+function buildRecentTurnsJson(turns: Array<{ role: string; text: string }>, _summaryJson?: string): string {
+  // Keep last 8 turns for optimal context window & token efficiency
+  const recent = turns.slice(-8);
   return JSON.stringify(recent);
 }
 
@@ -141,37 +141,22 @@ export async function generateTurnResponse(
     return mocked;
   }
 
-  // Fast-pass 0ms: high-fidelity paraphrase of last AI question context needs no LLM eval
-  try {
-    const lastAi = [...recentTurns].reverse().find((t) => t.role === "assistant")?.text || "";
-    const fastPass = computeFastPassTurn(
-      transcript,
-      [lastAi, state.currentObjective, state.scenario.userGoal].filter(Boolean),
-      {
-        responseLatencyMs: 1800,
-        speechDurationMs,
-        hintTierUsed,
-        attemptNumber,
-      }
-    );
-    void fastPass;
-  } catch {}
-
   const pragmatic = classifyPragmaticSpeechAct(transcript);
   const affective = computeAffectiveDeltas(pragmatic.act, state.activeCharacter);
   const unlockedObjective = checkHiddenObjectiveUnlock(state, pragmatic.act);
   const contradictionWarning = detectFactContradictions(transcript, state.conversationFacts);
 
   const worldStateJson = JSON.stringify({
-    scenario: state.scenario,
+    setting: state.scenario.setting,
+    userGoal: state.scenario.userGoal,
+    aiGoal: state.scenario.aiGoal,
+    conflict: state.scenario.conflict,
     currentObjective: state.currentObjective,
     currentTopic: state.currentTopic,
     activeCharacter: state.activeCharacter,
-    facts: state.conversationFacts.slice(-8),
-    unresolvedThreads: state.unresolvedThreads.slice(-5),
+    facts: state.conversationFacts.slice(-6).map((f) => f.fact),
+    unresolvedThreads: state.unresolvedThreads.slice(-4),
     turnCount: state.turnCount,
-    surpriseLevel: state.surpriseLevel,
-    pressure: state.pressure,
   });
 
   const prompt = buildResponseUserPrompt({
@@ -202,13 +187,22 @@ export async function generateTurnResponse(
     if (!json) throw new Error("No JSON");
     const validated = conversationAIResponseSchema.safeParse(json);
     if (!validated.success) {
-      // Fallback: treat raw text as responseText
-      if (res.text.trim().length > 5) {
+      const jsonObj = json as Record<string, unknown>;
+      const extractedText =
+        typeof jsonObj?.responseText === "string" && jsonObj.responseText.trim().length > 0
+          ? jsonObj.responseText.trim()
+          : !res.text.trim().startsWith("{") && res.text.trim().length > 5
+          ? res.text.trim().slice(0, 600)
+          : "";
+      if (extractedText) {
         return {
-          responseText: res.text.trim().slice(0, 600),
+          responseText: extractedText,
           pragmaticAct: pragmatic.act,
           pragmaticFeedbackVi: pragmatic.feedbackVi,
           unlockedObjective: unlockedObjective || undefined,
+          pedagogy: typeof jsonObj?.pedagogy === "object" && jsonObj.pedagogy !== null
+            ? (jsonObj.pedagogy as ConversationAIResponse["pedagogy"])
+            : undefined,
           stateUpdate: {
             trustChange: affective.deltaTrust,
             patienceChange: affective.deltaPatience,

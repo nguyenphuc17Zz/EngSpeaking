@@ -12,8 +12,21 @@ const TASK_TO_CAPABILITY: Record<AITask, TaskCapability> = {
   synthesis: "textToSpeech",
 };
 
-// Preference order per spec: Gemini first, Groq second, then browser/mock
-const PROVIDER_PREFERENCE = ["gemini", "groq", "browser", "mock"];
+// Preference order per spec: Gemini first, Groq second, keyless server TTS/STT next, then browser/mock
+const PROVIDER_PREFERENCE = [
+  "gemini",
+  "groq",
+  "edge-tts",
+  "kokoro-tts",
+  "whisper-local",
+  "browser",
+  "mock",
+];
+
+function providerRank(providerId: string): number {
+  const idx = PROVIDER_PREFERENCE.indexOf(providerId.toLowerCase());
+  return idx === -1 ? PROVIDER_PREFERENCE.length : idx;
+}
 
 export interface ResolvedModel {
   providerId: string;
@@ -27,7 +40,7 @@ export function resolveAutoModel(
   const capability = TASK_TO_CAPABILITY[task];
   const candidates = CATALOG.filter((m) => m.active && (m.capabilities[capability] as boolean));
   // Sort by provider preference
-  candidates.sort((a, b) => PROVIDER_PREFERENCE.indexOf(a.providerId) - PROVIDER_PREFERENCE.indexOf(b.providerId));
+  candidates.sort((a, b) => providerRank(a.providerId) - providerRank(b.providerId));
 
   // If caller provides configuredProviders (client), filter
   let filtered = candidates;
@@ -57,7 +70,7 @@ export function resolveAutoModelServer(task: AITask, preferredProvider?: string)
     }
   }
 
-  candidates.sort((a, b) => PROVIDER_PREFERENCE.indexOf(a.providerId) - PROVIDER_PREFERENCE.indexOf(b.providerId));
+  candidates.sort((a, b) => providerRank(a.providerId) - providerRank(b.providerId));
   for (const m of candidates) {
     if (m.providerId === "browser" || m.providerId === "mock") continue; // server shouldn't pick browser
     if (isProviderConfigured(m.providerId)) return { providerId: m.providerId, modelId: m.id };

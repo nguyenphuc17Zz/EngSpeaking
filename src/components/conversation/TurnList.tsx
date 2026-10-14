@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import type { ConversationTurn } from "@/types/conversation";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +29,15 @@ export function TurnList({ turns }: TurnListProps) {
   const tts = useBrowserTTS();
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
+        audioPlayerRef.current = null;
+      }
+    };
+  }, []);
 
   const handlePlayTTS = (text: string) => {
     tts.speak(sanitizeTextForTTS(text), { lang: "en-US", rate: 0.95 });
@@ -286,11 +295,62 @@ export function TurnList({ turns }: TurnListProps) {
 
                   {/* Say It Better inline */}
                   {ped.sayItBetter && (
-                    <div className="p-2 rounded-xl bg-primary/5 border border-primary/20 text-[11px] space-y-1">
-                      <span className="font-bold text-primary flex items-center gap-1">
-                        <Sparkles className="size-3" /> Say It Better:
-                      </span>
-                      <p className="font-mono font-semibold">"{ped.sayItBetter.casual || ped.sayItBetter.professional}"</p>
+                    <div className="p-2 rounded-xl bg-primary/5 border border-primary/20 text-[11px] space-y-1.5">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="font-bold text-primary flex items-center gap-1">
+                          <Sparkles className="size-3" /> Say It Better (Khẩu ngữ bản xứ):
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        {ped.sayItBetter.casual && (
+                          <div className="flex items-center justify-between gap-2 bg-card/60 p-1.5 rounded-lg border border-border/40">
+                            <div className="min-w-0">
+                              <span className="text-[10px] text-muted-foreground font-semibold">Đời thường: </span>
+                              <span className="font-mono text-xs font-semibold">"{ped.sayItBetter.casual}"</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handlePlayTTS(ped.sayItBetter!.casual)}
+                              className="text-primary hover:opacity-80 p-1 shrink-0 rounded-full hover:bg-primary/10"
+                              title="Nghe câu này"
+                            >
+                              <Volume2 className="size-3" />
+                            </button>
+                          </div>
+                        )}
+                        {ped.sayItBetter.idiomatic && (
+                          <div className="flex items-center justify-between gap-2 bg-card/60 p-1.5 rounded-lg border border-border/40">
+                            <div className="min-w-0">
+                              <span className="text-[10px] text-indigo-500 font-semibold">Thành ngữ: </span>
+                              <span className="font-mono text-xs font-semibold">"{ped.sayItBetter.idiomatic}"</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handlePlayTTS(ped.sayItBetter!.idiomatic)}
+                              className="text-indigo-600 hover:opacity-80 p-1 shrink-0 rounded-full hover:bg-indigo-500/10"
+                              title="Nghe câu này"
+                            >
+                              <Volume2 className="size-3" />
+                            </button>
+                          </div>
+                        )}
+                        {ped.sayItBetter.professional && !ped.sayItBetter.casual && (
+                          <div className="flex items-center justify-between gap-2 bg-card/60 p-1.5 rounded-lg border border-border/40">
+                            <div className="min-w-0">
+                              <span className="text-[10px] text-muted-foreground font-semibold">Công sở: </span>
+                              <span className="font-mono text-xs font-semibold">"{ped.sayItBetter.professional}"</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handlePlayTTS(ped.sayItBetter!.professional)}
+                              className="text-primary hover:opacity-80 p-1 shrink-0 rounded-full hover:bg-primary/10"
+                              title="Nghe câu này"
+                            >
+                              <Volume2 className="size-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
 

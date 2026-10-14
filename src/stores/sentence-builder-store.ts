@@ -130,7 +130,7 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
 
         set({
           sessionConfig: config,
-          autoStartMic: false,
+          autoStartMic: get().autoStartMic,
           sessionStartedAt: new Date().toISOString(),
           completedTasksCount: 0,
           currentTaskIndex: 0,
@@ -286,6 +286,7 @@ export const useSentenceBuilderStore = create<SentenceBuilderStoreState>()(
           lastEvaluation: evaluation,
           adaptiveState: updatedAdaptive,
           skillMastery: updatedMastery,
+          completedTasksCount: sessionTasksHistory.length + 1,
           sessionTasksHistory: [
             ...sessionTasksHistory,
             { task: currentTask, evaluation, attemptsCount: attemptCount },

@@ -39,6 +39,7 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const freqDataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const maxVolumeRef = useRef(0);
   const recordingStartRef = useRef(0);
 
@@ -57,6 +58,13 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
         (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!AudioCtx) return;
 
+      try {
+        sourceNodeRef.current?.disconnect();
+        sourceNodeRef.current = null;
+        analyserRef.current?.disconnect();
+        analyserRef.current = null;
+      } catch {}
+
       if (!audioContextRef.current || audioContextRef.current.state === "closed") {
         audioContextRef.current = new AudioCtx();
       }
@@ -67,6 +75,7 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
       const analyser = audioContextRef.current.createAnalyser();
       analyser.fftSize = 256;
       analyser.smoothingTimeConstant = 0.4;
+      freqDataRef.current = new Uint8Array(analyser.frequencyBinCount);
       const source = audioContextRef.current.createMediaStreamSource(stream);
       source.connect(analyser);
 
@@ -83,6 +92,7 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
       sourceNodeRef.current = null;
       analyserRef.current?.disconnect();
       analyserRef.current = null;
+      freqDataRef.current = null;
       if (audioContextRef.current && audioContextRef.current.state !== "closed") {
         audioContextRef.current.close().catch(() => {});
         audioContextRef.current = null;
@@ -116,7 +126,11 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
 
     // 2. Real-time Volume & Silence Metering
     if (analyserRef.current && mountedRef.current) {
-      const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+      const binCount = analyserRef.current.frequencyBinCount;
+      if (!freqDataRef.current || freqDataRef.current.length !== binCount) {
+        freqDataRef.current = new Uint8Array(binCount);
+      }
+      const dataArray = freqDataRef.current;
       analyserRef.current.getByteFrequencyData(dataArray);
 
       let sum = 0;
@@ -183,7 +197,9 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
 
       setupAnalyser(stream);
 
-      const recorder = createAudioRecorder(stream);
+      const recorder = createAudioRecorder(stream, {
+        keepStreamAlive: Boolean(options?.keepWarm),
+      });
       recorderRef.current = recorder;
       await recorder.start();
 
@@ -219,11 +235,16 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
       setError(msg);
       throw new VoiceEngineError({ code: VoiceErrorCode.RECORDING_FAILED, message: msg });
     }
-  }, [isSupported, tick, clearTimer, setupAnalyser, cleanupAnalyser]);
+  }, [isSupported, tick, clearTimer, setupAnalyser, cleanupAnalyser, options?.keepWarm]);
 
   const stop = useCallback(async (): Promise<AudioRecording> => {
     clearTimer();
-    cleanupAnalyser();
+    if (!options?.keepWarm) {
+      cleanupAnalyser();
+    } else {
+      setVolume(0);
+      setIsTooQuiet(false);
+    }
     const r = recorderRef.current;
     if (!r) {
       if (!options?.keepWarm) {
@@ -258,7 +279,12 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
 
   const cancel = useCallback(() => {
     clearTimer();
-    cleanupAnalyser();
+    if (!options?.keepWarm) {
+      cleanupAnalyser();
+    } else {
+      setVolume(0);
+      setIsTooQuiet(false);
+    }
     try {
       recorderRef.current?.cancel();
     } catch {}

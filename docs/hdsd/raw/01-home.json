@@ -1,0 +1,470 @@
+{
+ "url": "http://localhost:3000/",
+ "title": "EngSpeak — Nghệ Thuật Phản Xạ Khẩu Ngữ Tiếng Anh",
+ "els": [
+  {
+   "tag": "A",
+   "text": "EngSpeak",
+   "x": 16,
+   "y": 14,
+   "w": 129,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Thu gọn menu",
+   "x": 215,
+   "y": 20,
+   "w": 24,
+   "h": 24
+  },
+  {
+   "tag": "A",
+   "text": "Tổng quan",
+   "x": 8,
+   "y": 101,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Sentence Builder",
+   "x": 8,
+   "y": 174,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "VN → EN Speaking",
+   "x": 8,
+   "y": 210,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Spoken Repair Lab",
+   "x": 8,
+   "y": 246,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Response Latency",
+   "x": 8,
+   "y": 282,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Chunk Automaticity",
+   "x": 8,
+   "y": 318,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Survival Speaking",
+   "x": 8,
+   "y": 354,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Spoken Vocabulary",
+   "x": 8,
+   "y": 390,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Shadowing Studio",
+   "x": 8,
+   "y": 426,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Phòng luyện nói Live",
+   "x": 8,
+   "y": 499,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Hội thoại AI",
+   "x": 8,
+   "y": 535,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Thử thách nâng cao",
+   "x": 8,
+   "y": 571,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Cài đặt & API Keys",
+   "x": 8,
+   "y": 644,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Hướng dẫn học",
+   "x": 8,
+   "y": 860,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Phòng luyện nói",
+   "x": 640,
+   "y": 14,
+   "w": 150,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Phòng luyện nói",
+   "x": 640,
+   "y": 14,
+   "w": 150,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Gemini:\ngemini-3.5-flash-lite",
+   "x": 798,
+   "y": 14,
+   "w": 274,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "1x",
+   "x": 1080,
+   "y": 14,
+   "w": 60,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "?",
+   "x": 1148,
+   "y": 14,
+   "w": 64,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Chuyển đổi giao diện Sáng / Tối",
+   "x": 1220,
+   "y": 14,
+   "w": 36,
+   "h": 36
+  },
+  {
+   "tag": "A",
+   "text": "Bắt đầu luyện nói ngay",
+   "x": 891,
+   "y": 101,
+   "w": 199,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Bắt đầu luyện nói ngay",
+   "x": 891,
+   "y": 101,
+   "w": 199,
+   "h": 36
+  },
+  {
+   "tag": "A",
+   "text": "Sentence Builder",
+   "x": 1098,
+   "y": 101,
+   "w": 145,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Sentence Builder",
+   "x": 1098,
+   "y": 101,
+   "w": 145,
+   "h": 36
+  },
+  {
+   "tag": "A",
+   "text": "SB Core\nSentence Builder\n\nRáp câu phản xạ 3 tầng: Khung ngữ ",
+   "x": 276,
+   "y": 300,
+   "w": 187,
+   "h": 165
+  },
+  {
+   "tag": "A",
+   "text": "Tư duy trực tiếp\nVN → EN Speaking\n\nTruy xuất trực tiếp từ ý ",
+   "x": 475,
+   "y": 300,
+   "w": 187,
+   "h": 165
+  },
+  {
+   "tag": "A",
+   "text": "Nhại âm nhịp điệu\nCorodomo Shadowing\n\nNhại âm song song đa t",
+   "x": 674,
+   "y": 300,
+   "w": 187,
+   "h": 165
+  },
+  {
+   "tag": "A",
+   "text": "Thoát kẹt bí từ\nSurvival Speaking\n\nPhản xạ tức thì khi bí từ",
+   "x": 874,
+   "y": 300,
+   "w": 187,
+   "h": 165
+  },
+  {
+   "tag": "A",
+   "text": "Sửa lỗi & Tốc độ\nRepair Lab & Latency\n\nSửa lỗi tức thì qua v",
+   "x": 1073,
+   "y": 300,
+   "w": 187,
+   "h": 165
+  },
+  {
+   "tag": "A",
+   "text": "Real-time AI\nPhòng Luyện Nói Live\n\nVòng lặp khẩu ngữ tự do t",
+   "x": 276,
+   "y": 523,
+   "w": 237,
+   "h": 174
+  },
+  {
+   "tag": "A",
+   "text": "11+ Kịch bản\nHội Thoại AI Nhập Vai\n\n11+ kịch bản thực tế đa ",
+   "x": 525,
+   "y": 523,
+   "w": 237,
+   "h": 174
+  },
+  {
+   "tag": "A",
+   "text": "3 Tracks × 3 Lv\nThử Thách Nâng Cao\n\n3 Tracks (Phản xạ · Lập ",
+   "x": 774,
+   "y": 523,
+   "w": 237,
+   "h": 174
+  },
+  {
+   "tag": "A",
+   "text": "Cài đặt & Âm thanh",
+   "x": 1093,
+   "y": 728,
+   "w": 150,
+   "h": 28
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Cài đặt & Âm thanh",
+   "x": 1093,
+   "y": 728,
+   "w": 150,
+   "h": 28
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Open Next.js Dev Tools",
+   "x": 22,
+   "y": 846,
+   "w": 32,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1181,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1197,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1213,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1229,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1239,
+   "y": 853,
+   "w": 8,
+   "h": 11
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1245,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1261,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1281,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  },
+  {
+   "tag": "A",
+   "text": "",
+   "x": 1070,
+   "y": 524,
+   "w": 68,
+   "h": 14
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1214,
+   "y": 521,
+   "w": 21,
+   "h": 21
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Standard",
+   "x": 1175,
+   "y": 561,
+   "w": 60,
+   "h": 19
+  },
+  {
+   "tag": "INPUT",
+   "text": "on",
+   "x": 1212,
+   "y": 593,
+   "w": 23,
+   "h": 15
+  },
+  {
+   "tag": "INPUT",
+   "text": "on",
+   "x": 1212,
+   "y": 623,
+   "w": 23,
+   "h": 15
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1070,
+   "y": 686,
+   "w": 19,
+   "h": 19
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1095,
+   "y": 686,
+   "w": 19,
+   "h": 19
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1119,
+   "y": 686,
+   "w": 19,
+   "h": 19
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1143,
+   "y": 686,
+   "w": 19,
+   "h": 19
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1167,
+   "y": 686,
+   "w": 19,
+   "h": 19
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1191,
+   "y": 686,
+   "w": 19,
+   "h": 19
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1216,
+   "y": 686,
+   "w": 19,
+   "h": 19
+  },
+  {
+   "tag": "INPUT",
+   "text": "on",
+   "x": 1070,
+   "y": 729,
+   "w": 13,
+   "h": 13
+  }
+ ]
+}

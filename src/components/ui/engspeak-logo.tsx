@@ -1,5 +1,4 @@
 import React from "react";
-import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 interface EngSpeakLogoProps {
@@ -10,25 +9,18 @@ interface EngSpeakLogoProps {
 
 export function EngSpeakLogo({
   className,
-  size = 36,
-  priority = true,
+  size = 34,
 }: EngSpeakLogoProps) {
   return (
     <div
       style={{ width: size, height: size }}
       className={cn(
-        "relative flex items-center justify-center shrink-0 rounded-xl overflow-hidden shadow-sm ring-1 ring-cyan-500/20 bg-slate-950 transition-all duration-300 group-hover:scale-105 group-hover:shadow-[0_0_16px_rgba(56,189,248,0.35)]",
+        "relative flex items-center justify-center shrink-0 rounded-none border-2 border-border bg-foreground text-background font-mono font-black text-xs tracking-tighter shadow-[2px_2px_0px_var(--primary)] transition-transform duration-150 group-hover:-translate-x-0.5 group-hover:-translate-y-0.5 select-none",
         className
       )}
     >
-      <Image
-        src="/icon.png"
-        alt="EngSpeak Logo"
-        width={size}
-        height={size}
-        priority={priority}
-        className="w-full h-full object-cover select-none"
-      />
+      <span>&gt;_</span>
+      <span className="absolute -bottom-0.5 -right-0.5 size-2 bg-primary border border-border" />
     </div>
   );
 }

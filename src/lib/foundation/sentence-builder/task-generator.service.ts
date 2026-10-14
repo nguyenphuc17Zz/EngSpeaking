@@ -6,6 +6,10 @@ import { sentenceBuilderTaskSchema } from "@/lib/validation/sentence-builder-sch
 import { TASK_GENERATOR_SYSTEM, buildTaskGeneratorUserPrompt } from "@/lib/ai/prompts/sentence-builder-prompts";
 import { sampleBankTask, saveBankTask, recordUserExposure } from "@/lib/foundation/services/content-bank.service";
 import { resolveTopicForPrompt } from "./topics";
+import {
+  hydrateStandardFiveTierHints,
+} from "@/lib/ai/prompts/diversity-engine";
+import { cleanAiJson } from "@/lib/foundation/shared/json-parser";
 import type {
   SentenceBuilderTask,
   SentenceBuilderControlLevel,
@@ -22,7 +26,6 @@ export interface GenerateTaskOptions {
   model?: string;
   pedagogicalConstraint?: string;
   forceSource?: "bank" | "ai" | "auto";
-  // Legacy optional fields ignored
   weakSkills?: string[];
   recentErrors?: string[];
   recentPrompts?: string[];
@@ -71,22 +74,11 @@ function getTestMockTask(options: GenerateTaskOptions): SentenceBuilderTask {
 }
 
 function cleanJson(text: string): unknown {
-  const trimmed = text.trim();
-  const withoutFence = trimmed
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "");
+  const cleaned = cleanAiJson(text);
+  if (!cleaned) return null;
   try {
-    return JSON.parse(withoutFence);
+    return JSON.parse(cleaned);
   } catch {
-    const m = withoutFence.match(/\{[\s\S]*\}/);
-    if (m) {
-      try {
-        return JSON.parse(m[0]);
-      } catch {
-        return null;
-      }
-    }
     return null;
   }
 }
@@ -103,8 +95,8 @@ export async function generateSentenceBuilderTask(
     return getTestMockTask({ ...options, controlLevel, targetDifficulty });
   }
 
-  // Resolve dynamic / infinite / custom topic
-  const effectiveTopic = resolveTopicForPrompt(options.topic);
+  // Resolve dynamic / infinite / custom topic avoiding recentPrompts
+  const effectiveTopic = resolveTopicForPrompt(options.topic, undefined, options.recentPrompts);
 
   // 1. Check Content Bank (Hybrid 70/30 Policy: 70% chance to fetch from Bank, skipped if forceSource === 'ai')
   if (options.forceSource !== "ai") {
@@ -128,6 +120,9 @@ export async function generateSentenceBuilderTask(
     taskType: options.taskType,
     targetDifficulty,
     topic: effectiveTopic,
+    weakSkills: options.weakSkills,
+    recentErrors: options.recentErrors,
+    recentPrompts: options.recentPrompts,
     pedagogicalConstraint: options.pedagogicalConstraint,
   });
 
@@ -141,8 +136,8 @@ export async function generateSentenceBuilderTask(
         input: {
           messages: [{ role: "user", content: userPrompt }],
           systemInstruction: TASK_GENERATOR_SYSTEM,
-          temperature: 0.7,
-          maxOutputTokens: 1000, // Sufficient tokens to ensure complete valid JSON output without cut-offs
+          temperature: 0.78,
+          maxOutputTokens: 750,
         },
       });
 
@@ -156,7 +151,7 @@ export async function generateSentenceBuilderTask(
         parsed.id = `sb_task_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
       }
 
-      // Robust sanitization for fast/lightweight LLMs (like gemini-3.5-flash-lite or groq)
+      // Robust sanitization for fast/lightweight LLMs
       if (parsed.sourceText === null) delete parsed.sourceText;
       if (parsed.baseSentence === null) delete parsed.baseSentence;
       if (parsed.transformationType === null) delete parsed.transformationType;
@@ -197,18 +192,18 @@ export async function generateSentenceBuilderTask(
         parsed.requiredElements = [];
       }
 
-      // Standard 5-tier hints auto-synthesis (saves 400+ tokens of AI output)
+      // Standard 5-tier hints deterministic hydration (saves ~220 tokens of AI output)
       if (!Array.isArray(parsed.hints) || parsed.hints.length === 0) {
         const fullSentence = intentStr || (parsed.expectedResponses as string[])?.[0] || "";
-        const words = fullSentence.split(" ").filter(Boolean);
         const starter = (parsed.scaffold as Record<string, unknown>)?.starter as string | undefined;
-        parsed.hints = [
-          { tier: 0, title: "Không gợi ý", content: "Tự phản xạ và nói ngay.", penaltyWeight: 0 },
-          { tier: 1, title: "Từ khoá", content: words.slice(0, 3).join(" "), penaltyWeight: 0.1 },
-          { tier: 2, title: "Khung câu", content: templateStr || (words[0] ? `Bắt đầu bằng: "${words[0]}"` : "Pattern..."), penaltyWeight: 0.25 },
-          { tier: 3, title: "Từ mở đầu", content: starter || (words.slice(0, 2).join(" ") + "..."), penaltyWeight: 0.5 },
-          { tier: 4, title: "Câu mẫu bản xứ", content: fullSentence, penaltyWeight: 0.85 },
-        ];
+        const grammarCue = typeof parsed.grammarCueVi === "string" ? parsed.grammarCueVi : templateStr;
+        parsed.hints = hydrateStandardFiveTierHints({
+          keywords: (parsed.requiredElements as string[]) || [],
+          grammarCueVi: grammarCue,
+          starterOrSkeleton: starter || templateStr,
+          fullModelAnswer: fullSentence,
+          tierTitles: ["Không gợi ý", "Từ khoá", "Khung câu", "Từ mở đầu", "Câu mẫu bản xứ"],
+        });
       }
 
       // Sanitize suggestedVocabulary

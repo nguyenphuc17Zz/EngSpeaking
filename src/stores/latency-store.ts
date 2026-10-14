@@ -329,11 +329,19 @@ export const useLatencyStore = create<LatencyStoreState>()(
           isSessionCompleted: false,
           sessionSummary: null,
           lastEvaluation: null,
+          completedTasksCount: 0,
+          currentTaskIndex: 0,
+          sessionHistory: [],
+          generationError: null,
         }),
     }),
     {
       name: "latency_training_store_v1",
-      partialize: (s) => ({ adaptiveState: s.adaptiveState }),
+      partialize: (s) => ({
+        adaptiveState: s.adaptiveState,
+        selectedTopicId: s.selectedTopicId,
+        customTopicText: s.customTopicText,
+      }),
     }
   )
 );

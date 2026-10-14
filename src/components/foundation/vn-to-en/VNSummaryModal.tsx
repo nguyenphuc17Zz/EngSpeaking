@@ -31,12 +31,14 @@ interface VNSummaryModalProps {
   isOpen: boolean;
   summary: VNToENSessionSummary | null;
   onRestart: () => void;
+  onDismiss?: () => void;
 }
 
 export function VNSummaryModal({
   isOpen,
   summary,
   onRestart,
+  onDismiss,
 }: VNSummaryModalProps) {
   useEffect(() => {
     if (isOpen && summary) {
@@ -48,7 +50,7 @@ export function VNSummaryModal({
   if (!summary) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={() => {}}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) (onDismiss ?? onRestart)(); }}>
       <DialogContent className="sm:max-w-lg rounded-3xl p-6 md:p-8 bg-card border border-border/80 shadow-2xl space-y-6">
         {/* Header */}
         <div className="flex flex-col items-center text-center space-y-2">

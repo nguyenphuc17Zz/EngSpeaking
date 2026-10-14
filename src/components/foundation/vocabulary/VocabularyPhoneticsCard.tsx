@@ -53,7 +53,8 @@ export function VocabularyPhoneticsCard({
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const syllableDataRef = useRef<SyllablesAudioData | null>(null);
-  const stopTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const syllableCacheRef = useRef<Map<string, SyllablesAudioData>>(new Map());
+  const rafIdRef = useRef<number | null>(null);
   const isSegmentPlayingRef = useRef(false);
 
   const globalSpeed = useSettingsStore((s) => s.ttsSpeed ?? 1.0);
@@ -71,35 +72,42 @@ export function VocabularyPhoneticsCard({
       audioRef.current.ontimeupdate = null;
       audioRef.current.onended = null;
     }
-    if (stopTimeoutRef.current) {
-      clearTimeout(stopTimeoutRef.current);
-      stopTimeoutRef.current = null;
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
     }
     isSegmentPlayingRef.current = false;
     setIsPlayingSequence(false);
     setPlayingSyllableIndex(null);
   }, []);
 
-  // Preload and cache syllable audio for current word
+  // Preload and cache syllable audio for current word (always fetched at speed=1.0)
   const fetchSyllablesAudio = useCallback(
-    async (word: string, count: number, speed: number = 1.0): Promise<SyllablesAudioData | null> => {
-      if (syllableDataRef.current && syllableDataRef.current.boundaries.length === count) {
-        return syllableDataRef.current;
+    async (word: string, count: number): Promise<SyllablesAudioData | null> => {
+      const cleanWord = word.trim().toLowerCase();
+      const cacheKey = `${cleanWord}_${count}`;
+      const cached = syllableCacheRef.current.get(cacheKey);
+      if (cached) {
+        syllableDataRef.current = cached;
+        if (!audioRef.current) {
+          audioRef.current = new Audio(cached.audioBase64);
+        } else if (audioRef.current.src !== cached.audioBase64) {
+          audioRef.current.src = cached.audioBase64;
+        }
+        return cached;
       }
       try {
         const res = await fetch(
-          `/api/ai/speak-syllables?word=${encodeURIComponent(word)}&count=${count}&speed=${speed}`
+          `/api/ai/speak-syllables?word=${encodeURIComponent(cleanWord)}&count=${count}&speed=1.0`
         );
         if (!res.ok) return null;
         const data: SyllablesAudioData = await res.json();
+        syllableCacheRef.current.set(cacheKey, data);
         syllableDataRef.current = data;
         if (!audioRef.current) {
           audioRef.current = new Audio(data.audioBase64);
         } else {
           audioRef.current.src = data.audioBase64;
-        }
-        if (audioRef.current) {
-          audioRef.current.playbackRate = speed;
         }
         return data;
       } catch {
@@ -109,12 +117,19 @@ export function VocabularyPhoneticsCard({
     []
   );
 
-  // Preload on word or speed change & reset state
+  // Preload on word change & reset state (do not re-fetch when globalSpeed changes)
   useEffect(() => {
     handleStopAll();
     syllableDataRef.current = null;
-    fetchSyllablesAudio(wordItem.word, phonemeAnalysis.totalSyllables, globalSpeed);
-  }, [wordItem.word, wordItem.id, phonemeAnalysis.totalSyllables, globalSpeed, fetchSyllablesAudio, handleStopAll]);
+    fetchSyllablesAudio(wordItem.word, phonemeAnalysis.totalSyllables);
+  }, [wordItem.word, wordItem.id, phonemeAnalysis.totalSyllables, fetchSyllablesAudio, handleStopAll]);
+
+  // Apply globalSpeed on client audio element without re-fetching from server
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = globalSpeed;
+    }
+  }, [globalSpeed]);
 
   // Clean up on unmount
   useEffect(() => {
@@ -123,8 +138,9 @@ export function VocabularyPhoneticsCard({
         audioRef.current.pause();
         audioRef.current = null;
       }
-      if (stopTimeoutRef.current) {
-        clearTimeout(stopTimeoutRef.current);
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
       }
     };
   }, []);
@@ -143,7 +159,7 @@ export function VocabularyPhoneticsCard({
 
       let data = syllableDataRef.current;
       if (!data) {
-        data = await fetchSyllablesAudio(wordItem.word, phonemeAnalysis.totalSyllables, globalSpeed);
+        data = await fetchSyllablesAudio(wordItem.word, phonemeAnalysis.totalSyllables);
       }
 
       const boundary = data?.boundaries?.[index];
@@ -152,6 +168,8 @@ export function VocabularyPhoneticsCard({
         if (!audio) {
           audio = new Audio(data.audioBase64);
           audioRef.current = audio;
+        } else if (audio.src !== data.audioBase64) {
+          audio.src = data.audioBase64;
         }
 
         isSegmentPlayingRef.current = true;
@@ -159,17 +177,29 @@ export function VocabularyPhoneticsCard({
         audio.currentTime = boundary.startSec;
         audio.playbackRate = globalSpeed;
 
-        const durationMs = Math.max(200, ((boundary.endSec - boundary.startSec) / globalSpeed) * 1000);
-
-        audio.play().catch(() => {});
-
-        stopTimeoutRef.current = setTimeout(() => {
-          if (isSegmentPlayingRef.current) {
-            audio.pause();
+        const monitorBoundary = () => {
+          if (!isSegmentPlayingRef.current || !audioRef.current) return;
+          const cur = audioRef.current.currentTime;
+          if (cur >= boundary.endSec || audioRef.current.ended) {
+            audioRef.current.pause();
             isSegmentPlayingRef.current = false;
             setPlayingSyllableIndex(null);
+            rafIdRef.current = null;
+            return;
           }
-        }, durationMs);
+          rafIdRef.current = requestAnimationFrame(monitorBoundary);
+        };
+
+        audio
+          .play()
+          .then(() => {
+            if (isSegmentPlayingRef.current) {
+              rafIdRef.current = requestAnimationFrame(monitorBoundary);
+            }
+          })
+          .catch(() => {
+            handleStopAll();
+          });
       } else {
         // Fallback to full word TTS
         tts.speak(wordItem.word);
@@ -188,7 +218,7 @@ export function VocabularyPhoneticsCard({
 
     let data = syllableDataRef.current;
     if (!data) {
-      data = await fetchSyllablesAudio(wordItem.word, phonemeAnalysis.totalSyllables, globalSpeed);
+      data = await fetchSyllablesAudio(wordItem.word, phonemeAnalysis.totalSyllables);
     }
 
     if (!data) {
@@ -200,6 +230,8 @@ export function VocabularyPhoneticsCard({
     if (!audio) {
       audio = new Audio(data.audioBase64);
       audioRef.current = audio;
+    } else if (audio.src !== data.audioBase64) {
+      audio.src = data.audioBase64;
     }
 
     setIsPlayingSequence(true);
@@ -227,7 +259,7 @@ export function VocabularyPhoneticsCard({
     audio.play().catch(() => {
       handleStopAll();
     });
-  }, [isPlayingSequence, handleStopAll, fetchSyllablesAudio, handlePlay, wordItem.word, phonemeAnalysis.totalSyllables]);
+  }, [isPlayingSequence, handleStopAll, fetchSyllablesAudio, handlePlay, wordItem.word, phonemeAnalysis.totalSyllables, globalSpeed]);
 
   return (
     <Card className="rounded-3xl border border-border/80 bg-gradient-to-br from-card via-card to-primary/5 shadow-xs overflow-hidden flex flex-col h-full">

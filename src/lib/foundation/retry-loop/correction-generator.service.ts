@@ -18,6 +18,16 @@ export interface GenerateCorrectionParams {
   model?: string;
 }
 
+function buildHintsForCorrection(errText: string, fixText: string, explanationVi: string, skeleton: string, better: string) {
+  return [
+    { tier: 0, title: "Không gợi ý", content: "Tự sửa và nói lại ngay." },
+    { tier: 1, title: "Chỉ điểm lỗi", content: `Lỗi: ${errText} → Cần sửa thành: ${fixText}.` },
+    { tier: 2, title: "Gợi ý cấu trúc", content: explanationVi || "Quy tắc ngữ pháp / cụm từ chuẩn." },
+    { tier: 3, title: "Khung câu", content: skeleton },
+    { tier: 4, title: "Câu mẫu hoàn chỉnh", content: better },
+  ];
+}
+
 function computeDeterministicCorrection(params: GenerateCorrectionParams): TargetedCorrection {
   const userSpoken = params.userTranscript.toLowerCase();
   const expected = params.expectedSentence;
@@ -26,22 +36,30 @@ function computeDeterministicCorrection(params: GenerateCorrectionParams): Targe
   if (errors.length > 0) {
     const err = errors[0];
     const isPast = err.userText.includes("go") && err.correction.includes("went");
+    const errText = err.userText || "lỗi khẩu ngữ";
+    const fixText = err.correction || expected;
+    const explanationVi = err.explanation || "Hãy sửa cụm từ này để câu chính xác hơn.";
+    const skeletonHint = expected.includes(fixText) ? expected.replace(fixText, "______") : expected;
     return {
       errorType: (err.type as any) || "grammar",
       priority: (err.type === "grammar" ? 2 : 3) as RepairPriority,
       patternKey: isPast ? "past_simple_verb" : `${err.type}_fix`,
       whatToFix: isPast ? "Thì Quá khứ đơn (Past Tense)" : `Sửa lỗi ${err.type}`,
-      userErroneousText: err.userText || "lỗi khẩu ngữ",
-      minimalCorrection: err.correction || expected,
-      explanationVi: err.explanation || "Hãy sửa cụm từ này để câu chính xác hơn.",
+      userErroneousText: errText,
+      minimalCorrection: fixText,
+      explanationVi,
       betterSentence: expected,
-      skeletonHint: expected.replace(err.correction, "______"),
+      skeletonHint,
       simplifiedSentence: expected.split(",")[0] || expected,
+      hints: buildHintsForCorrection(errText, fixText, explanationVi, skeletonHint, expected),
+      suggestedVocabulary: [],
     };
   }
 
   // Fallback pattern detection
   if (userSpoken.includes("i go") && expected.toLowerCase().includes("went")) {
+    const skeletonHint = expected.replace(/went/i, "______");
+    const explanationVi = "Diễn tả hành động trong quá khứ cần dùng động từ 'went'.";
     return {
       errorType: "grammar",
       priority: 2,
@@ -49,13 +67,16 @@ function computeDeterministicCorrection(params: GenerateCorrectionParams): Targe
       whatToFix: "Thì Quá khứ đơn (Past Simple)",
       userErroneousText: "go",
       minimalCorrection: "went",
-      explanationVi: "Diễn tả hành động trong quá khứ cần dùng động từ 'went'.",
+      explanationVi,
       betterSentence: expected,
-      skeletonHint: expected.replace(/went/i, "______"),
+      skeletonHint,
       simplifiedSentence: expected,
+      hints: buildHintsForCorrection("go", "went", explanationVi, skeletonHint, expected),
+      suggestedVocabulary: [],
     };
   }
 
+  const explanationVi = "Hãy nói lại toàn bộ câu theo cách diễn đạt tự nhiên.";
   return {
     errorType: "grammar",
     priority: 3,
@@ -63,28 +84,23 @@ function computeDeterministicCorrection(params: GenerateCorrectionParams): Targe
     whatToFix: "Cấu trúc câu hoàn chỉnh",
     userErroneousText: params.userTranscript,
     minimalCorrection: expected,
-    explanationVi: "Hãy nói lại toàn bộ câu theo cách diễn đạt tự nhiên.",
+    explanationVi,
     betterSentence: expected,
     skeletonHint: expected,
     simplifiedSentence: expected,
+    hints: buildHintsForCorrection(params.userTranscript, expected, explanationVi, expected, expected),
+    suggestedVocabulary: [],
   };
 }
 
+import { cleanAiJson } from "@/lib/foundation/shared/json-parser";
+
 function cleanJson(text: string): unknown {
-  const trimmed = text.trim();
-  const withoutFence = trimmed
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "");
+  const cleaned = cleanAiJson(text);
+  if (!cleaned) return null;
   try {
-    return JSON.parse(withoutFence);
+    return JSON.parse(cleaned);
   } catch {
-    const m = withoutFence.match(/\{[\s\S]*\}/);
-    if (m) {
-      try {
-        return JSON.parse(m[0]);
-      } catch {}
-    }
     return null;
   }
 }
@@ -95,7 +111,8 @@ export async function generateTargetedCorrection(
   const provider = params.provider || "gemini";
   const model = params.model || "auto";
 
-  if (provider === "mock") {
+  // 0ms / 0-token synthesis when mock OR when evaluator already detected explicit errors
+  if (provider === "mock" || (params.detectedErrors && params.detectedErrors.length > 0)) {
     return computeDeterministicCorrection(params);
   }
 
@@ -109,7 +126,7 @@ export async function generateTargetedCorrection(
         messages: [{ role: "user", content: userPrompt }],
         systemInstruction: CORRECTION_GENERATOR_SYSTEM,
         temperature: 0.2,
-        maxOutputTokens: 600,
+        maxOutputTokens: 350,
       },
     });
 

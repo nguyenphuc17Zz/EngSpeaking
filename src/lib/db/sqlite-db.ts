@@ -204,35 +204,66 @@ function initializeSchema(db: DatabaseSync) {
  */
 function migrateLegacyContentBanks(db: DatabaseSync) {
   const legacyDbPath = path.join(DATA_DIR, "content-banks.db");
-  if (!fs.existsSync(legacyDbPath)) return;
+  const renamedLegacyPath = `${legacyDbPath}.migrated`;
+  const markerPath = path.join(DATA_DIR, ".content-banks-migrated");
 
+  if (!fs.existsSync(legacyDbPath) && fs.existsSync(renamedLegacyPath)) {
+    try {
+      fs.renameSync(renamedLegacyPath, legacyDbPath);
+    } catch {}
+  }
+
+  if (!fs.existsSync(legacyDbPath) || fs.existsSync(markerPath)) return;
+
+  let legacyDb: DatabaseSync | null = null;
+  let migratedOk = false;
   try {
-    const legacyDb = new DatabaseSync(legacyDbPath);
+    legacyDb = new DatabaseSync(legacyDbPath);
     const rows = legacyDb.prepare("SELECT * FROM content_banks").all() as Array<Record<string, any>>;
     if (rows && rows.length > 0) {
       const insertStmt = db.prepare(`
         INSERT OR IGNORE INTO content_banks (id, module, category, level, difficulty, topic, content_hash, payload, quality_score, usage_count, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
-      for (const r of rows) {
-        insertStmt.run(
-          r.id,
-          r.module,
-          r.category || "general",
-          r.level || "all",
-          r.difficulty ?? 3,
-          r.topic || "general",
-          r.content_hash,
-          typeof r.payload === "string" ? r.payload : JSON.stringify(r.payload),
-          r.quality_score ?? 1.0,
-          r.usage_count ?? 1,
-          r.created_at || new Date().toISOString(),
-          r.updated_at || new Date().toISOString()
-        );
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        for (const r of rows) {
+          insertStmt.run(
+            r.id,
+            r.module,
+            r.category || "general",
+            r.level || "all",
+            r.difficulty ?? 3,
+            r.topic || "general",
+            r.content_hash,
+            typeof r.payload === "string" ? r.payload : JSON.stringify(r.payload),
+            r.quality_score ?? 1.0,
+            r.usage_count ?? 1,
+            r.created_at || new Date().toISOString(),
+            r.updated_at || new Date().toISOString()
+          );
+        }
+        db.exec("COMMIT");
+      } catch (txErr) {
+        try {
+          db.exec("ROLLBACK");
+        } catch {}
+        throw txErr;
       }
     }
+    migratedOk = true;
   } catch {
     // Ignore legacy migration if empty or lock
+  } finally {
+    try {
+      legacyDb?.close();
+    } catch {}
+  }
+
+  if (migratedOk) {
+    try {
+      fs.writeFileSync(markerPath, new Date().toISOString(), "utf-8");
+    } catch {}
   }
 }
 
@@ -529,7 +560,23 @@ export const healthRepo = {
 
   resetUserData(): void {
     const db = getAppDb();
-    db.prepare("DELETE FROM user_content_exposure").run();
-    db.prepare("DELETE FROM ai_telemetry").run();
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      db.prepare("DELETE FROM conversation_turns").run();
+      db.prepare("DELETE FROM sessions").run();
+      db.prepare("DELETE FROM foundation_attempts").run();
+      db.prepare("DELETE FROM foundation_sessions").run();
+      db.prepare("DELETE FROM foundation_baselines").run();
+      db.prepare("DELETE FROM conversation_worlds").run();
+      db.prepare("DELETE FROM advanced_training_sessions").run();
+      db.prepare("DELETE FROM user_content_exposures").run();
+      db.prepare("DELETE FROM ai_requests").run();
+      db.exec("COMMIT");
+    } catch (err) {
+      try {
+        db.exec("ROLLBACK");
+      } catch {}
+      throw err;
+    }
   },
 };

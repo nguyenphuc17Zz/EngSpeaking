@@ -4,6 +4,9 @@
 import { generateTextWithRouting } from "@/lib/ai";
 import { vnToENEvaluationSchema } from "@/lib/validation/vn-to-en-schemas";
 import { VN_TO_EN_EVALUATOR_SYSTEM, buildVNToENEvaluatorPrompt } from "@/lib/ai/prompts/vn-to-en-prompts";
+import { compactVNToENTaskForEval } from "@/lib/ai/prompts/diversity-engine";
+import { computeFastPassVNMatch } from "./fast-pass.service";
+import { cleanAiJson } from "@/lib/foundation/shared/json-parser";
 import type {
   VNToENTask,
   VNToENEvaluation,
@@ -21,6 +24,7 @@ export interface EvaluateVNAttemptParams {
   attemptNumber?: number;
   provider?: string;
   model?: string;
+  forceAi?: boolean;
 }
 
 function cleanText(t: string): string {
@@ -237,20 +241,11 @@ function computeDeterministicVNEvaluation(
 }
 
 function cleanJson(text: string): unknown {
-  const trimmed = text.trim();
-  const withoutFence = trimmed
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "");
+  const cleaned = cleanAiJson(text);
+  if (!cleaned) return null;
   try {
-    return JSON.parse(withoutFence);
+    return JSON.parse(cleaned);
   } catch {
-    const m = withoutFence.match(/\{[\s\S]*\}/);
-    if (m) {
-      try {
-        return JSON.parse(m[0]);
-      } catch {}
-    }
     return null;
   }
 }
@@ -260,23 +255,40 @@ export async function evaluateVNToENAttempt(
 ): Promise<VNToENEvaluation> {
   const provider = params.provider || "gemini";
   const model = params.model || "auto";
+  const latencyMs = params.responseLatencyMs ?? 2000;
+  const speechDurationMs = params.speechDurationMs ?? 2800;
+  const hintTierUsed = params.hintTierUsed ?? 0;
+  const attemptNumber = params.attemptNumber ?? 1;
+
+  // TIER 1: FAST-PASS MATCH (0ms / 0-token local evaluation)
+  if (!params.forceAi) {
+    const fastPass = computeFastPassVNMatch(params.task, params.userTranscript, {
+      responseLatencyMs: latencyMs,
+      speechDurationMs,
+      hintTierUsed,
+      attemptNumber,
+    });
+    if (fastPass.canFastPass && fastPass.evaluation) {
+      return fastPass.evaluation;
+    }
+  }
 
   if (provider === "mock") {
     return computeDeterministicVNEvaluation(params.task, params.userTranscript, {
-      responseLatencyMs: params.responseLatencyMs,
-      speechDurationMs: params.speechDurationMs,
-      hintTierUsed: params.hintTierUsed,
-      attemptNumber: params.attemptNumber,
+      responseLatencyMs: latencyMs,
+      speechDurationMs,
+      hintTierUsed,
+      attemptNumber,
     });
   }
 
   const userPrompt = buildVNToENEvaluatorPrompt({
-    taskJson: JSON.stringify(params.task),
+    taskJson: compactVNToENTaskForEval(params.task),
     userTranscript: params.userTranscript,
-    responseLatencyMs: params.responseLatencyMs ?? 2000,
-    speechDurationMs: params.speechDurationMs ?? 2800,
-    hintTierUsed: params.hintTierUsed ?? 0,
-    attemptNumber: params.attemptNumber ?? 1,
+    responseLatencyMs: latencyMs,
+    speechDurationMs,
+    hintTierUsed,
+    attemptNumber,
   });
 
   try {
@@ -287,12 +299,29 @@ export async function evaluateVNToENAttempt(
         messages: [{ role: "user", content: userPrompt }],
         systemInstruction: VN_TO_EN_EVALUATOR_SYSTEM,
         temperature: 0.2,
-        maxOutputTokens: 900,
+        maxOutputTokens: 600,
       },
     });
 
-    const parsed = cleanJson(res.text);
-    if (!parsed) throw new Error("Could not parse JSON from VNToEN Evaluator");
+    const parsed = cleanJson(res.text) as Record<string, unknown> | null;
+    if (!parsed || typeof parsed !== "object") throw new Error("Could not parse JSON from VNToEN Evaluator");
+
+    // Hydrate deterministic & echoed fields so LLM doesn't waste output tokens
+    const independenceScore =
+      hintTierUsed === 0 ? 100 : hintTierUsed === 1 ? 90 : hintTierUsed === 2 ? 75 : hintTierUsed === 3 ? 50 : 10;
+    if (typeof parsed.independenceScore !== "number") parsed.independenceScore = independenceScore;
+    if (typeof parsed.userTranscript !== "string") parsed.userTranscript = params.userTranscript;
+    if (typeof parsed.cleanTranscript !== "string") parsed.cleanTranscript = cleanText(params.userTranscript);
+    if (typeof parsed.responseLatencyMs !== "number") parsed.responseLatencyMs = latencyMs;
+    if (typeof parsed.speechDurationMs !== "number") parsed.speechDurationMs = speechDurationMs;
+    if (typeof parsed.hintTierUsed !== "number") parsed.hintTierUsed = hintTierUsed;
+    if (typeof parsed.attemptNumber !== "number") parsed.attemptNumber = attemptNumber;
+    if (!Array.isArray(parsed.errors)) parsed.errors = [];
+    if (!Array.isArray(parsed.praisePoints)) parsed.praisePoints = ["Đã nỗ lực phản xạ khẩu ngữ."];
+    if (!Array.isArray(parsed.naturalAlternatives)) parsed.naturalAlternatives = [];
+    if (typeof parsed.betterVersion !== "string" || !parsed.betterVersion) {
+      parsed.betterVersion = params.task.expectedResponses[0] || params.task.targetIntent || params.userTranscript;
+    }
 
     const validated = vnToENEvaluationSchema.safeParse(parsed);
     if (!validated.success) {
@@ -310,10 +339,10 @@ export async function evaluateVNToENAttempt(
   } catch (err) {
     if (provider === "mock") {
       return computeDeterministicVNEvaluation(params.task, params.userTranscript, {
-        responseLatencyMs: params.responseLatencyMs,
-        speechDurationMs: params.speechDurationMs,
-        hintTierUsed: params.hintTierUsed,
-        attemptNumber: params.attemptNumber,
+        responseLatencyMs: latencyMs,
+        speechDurationMs,
+        hintTierUsed,
+        attemptNumber,
       });
     }
     if (process.env.NODE_ENV !== "production") {

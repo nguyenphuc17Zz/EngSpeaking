@@ -28,12 +28,14 @@ interface RepairSummaryModalProps {
   isOpen: boolean;
   summary: RepairSessionSummary | null;
   onRestart: () => void;
+  onDismiss?: () => void;
 }
 
 export function RepairSummaryModal({
   isOpen,
   summary,
   onRestart,
+  onDismiss,
 }: RepairSummaryModalProps) {
   useEffect(() => {
     if (isOpen && summary) {
@@ -45,7 +47,7 @@ export function RepairSummaryModal({
   if (!summary) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={() => {}}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) (onDismiss ?? onRestart)(); }}>
       <DialogContent className="sm:max-w-lg rounded-3xl p-6 md:p-8 bg-card border border-border/80 shadow-2xl space-y-6">
         {/* Header */}
         <div className="flex flex-col items-center text-center space-y-2">

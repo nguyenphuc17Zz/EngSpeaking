@@ -91,15 +91,19 @@ export async function convertBlobTo16kHzWav(
 
   try {
     const audioCtx = new AudioCtx();
-    const arrayBuffer = await blob.arrayBuffer();
-    const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    let decodedBuffer: AudioBuffer;
+    try {
+      const arrayBuffer = await blob.arrayBuffer();
+      decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    } finally {
+      await audioCtx.close().catch(() => {});
+    }
 
     const targetSampleRate = 16000;
     const targetLength = Math.max(1, Math.round(decodedBuffer.duration * targetSampleRate));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const OfflineCtx = window.OfflineAudioContext || (window as any).webkitOfflineAudioContext;
     if (!OfflineCtx) {
-      await audioCtx.close().catch(() => {});
       return { blob, originalPeak: 1, amplifiedPeak: 1, appliedGainDb: 0, appliedGainFactor: 1 };
     }
 
@@ -110,7 +114,6 @@ export async function convertBlobTo16kHzWav(
     source.start(0);
 
     const resampledBuffer = await offlineCtx.startRendering();
-    await audioCtx.close().catch(() => {});
 
     const monoData = resampledBuffer.getChannelData(0);
 

@@ -14,9 +14,10 @@ interface AdvSummaryModalProps {
   isOpen: boolean;
   summary: AdvancedSessionSummary | null;
   onRestart: () => void;
+  onContinue?: () => void;
 }
 
-export function AdvSummaryModal({ isOpen, summary, onRestart }: AdvSummaryModalProps) {
+export function AdvSummaryModal({ isOpen, summary, onRestart, onContinue }: AdvSummaryModalProps) {
   useEffect(() => {
     if (isOpen && summary) {
       soundEffects.playSuccessFanfare();
@@ -27,7 +28,7 @@ export function AdvSummaryModal({ isOpen, summary, onRestart }: AdvSummaryModalP
   if (!summary) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={() => {}}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) (onContinue || onRestart)(); }}>
       <DialogContent className="sm:max-w-lg rounded-3xl p-6 bg-card border border-border/80 shadow-2xl space-y-5">
         <div className="flex flex-col items-center text-center space-y-2">
           <div className="size-14 rounded-3xl bg-gradient-to-tr from-primary to-indigo-600 text-primary-foreground flex items-center justify-center shadow-lg animate-bounce">

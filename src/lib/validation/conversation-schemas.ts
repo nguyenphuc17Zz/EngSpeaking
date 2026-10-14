@@ -27,7 +27,7 @@ export const scenarioBlueprintSchema = z.object({
   userGoal: z.string().min(1),
   aiGoal: z.string().min(1),
   difficulty: z.number().int().min(1).max(10),
-  difficultyLabel: z.enum(["easy","normal","hard","extreme","auto"]).optional(),
+  difficultyLabel: z.enum(["easy","normal","hard","extreme","auto","b1","b2"]).optional(),
   context: z.string().min(1),
   conflict: z.string().optional(),
   conflictIntensity: z.enum(["none","low","medium","high"]).optional(),
@@ -48,7 +48,7 @@ export const characterStateSchema = z.object({
 export const conversationFactSchema = z.object({
   id: z.string().min(1),
   fact: z.string().min(1),
-  createdAt: z.string().min(1),
+  createdAt: z.string().optional().default(() => new Date().toISOString()),
 });
 
 export const conversationWorldStateSchema = z.object({
@@ -159,7 +159,7 @@ export const conversationTurnRequestSchema = z.object({
 
 export const conversationSettingsSchema = z.object({
   mode: conversationModeSchema,
-  difficulty: z.enum(["easy","normal","hard","extreme","auto"]),
+  difficulty: z.enum(["easy", "normal", "hard", "extreme", "auto", "b1", "b2"]),
   duration: z.string().min(1),
   durationMinutes: z.number().int().positive().optional(),
   characterStyle: z.enum(["friendly","neutral","professional","serious","difficult","random","auto"]),

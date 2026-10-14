@@ -42,6 +42,7 @@ import {
   HeartPulse,
   GraduationCap,
   Shuffle,
+  Zap,
 } from "lucide-react";
 
 import {
@@ -132,6 +133,7 @@ export default function VNToENPage() {
 
   const durationTimerRef = useRef<NodeJS.Timeout | null>(null);
   const prepTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isSubmittingRef = useRef(false);
 
   // Zero-Lobby: Automatically initialize Endless Mode on first mount if no task
   useEffect(() => {
@@ -170,6 +172,19 @@ export default function VNToENPage() {
       return;
     }
     finishSessionManually();
+  };
+
+  // Switch between Standard and Native Idiomatic / Phrasal Verbs Mode
+  const handleToggleMode = () => {
+    const nextMode: VNToENRetrievalMode =
+      sessionConfig.mode === "native_idiomatic" ? "endless" : "native_idiomatic";
+    toast.info(
+      nextMode === "native_idiomatic" ? "Chế độ Khẩu ngữ & Phrasal Verbs ⚡" : "Chế độ Phản xạ chuẩn",
+      nextMode === "native_idiomatic"
+        ? "AI sẽ ưu tiên các tình huống đòi hỏi dùng Phrasal verbs và cách nói bản xứ đời thường!"
+        : "AI sẽ ưu tiên các câu phản xạ chuẩn ngữ nghĩa và giao tiếp tự nhiên."
+    );
+    initSession(nextMode);
   };
 
   // Preparation Countdown Timer routine when a new task is loaded
@@ -345,8 +360,13 @@ export default function VNToENPage() {
 
   // Confirm submit pending speech
   const handleConfirmSubmit = useCallback(async () => {
-    if (!pendingSpokenText) return;
-    await submitAttemptForEvaluation(pendingSpokenText, pendingDurationMs);
+    if (!pendingSpokenText || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
+    try {
+      await submitAttemptForEvaluation(pendingSpokenText, pendingDurationMs);
+    } finally {
+      isSubmittingRef.current = false;
+    }
   }, [pendingSpokenText, pendingDurationMs, submitAttemptForEvaluation]);
 
   // Re-record
@@ -442,15 +462,15 @@ export default function VNToENPage() {
         e.preventDefault();
         handleSkipOrNextTask();
       } else if (e.code === "Enter") {
-        if (pendingSpokenText && !isEvaluating) {
-          e.preventDefault();
-          handleConfirmSubmit();
-        } else if (lastEvaluation) {
+        if (lastEvaluation) {
           e.preventDefault();
           handleContinueTask();
         }
       } else if (e.code === "Escape") {
-        if (hintTier > 0) {
+        e.preventDefault();
+        if (isTopicModalOpen) {
+          setIsTopicModalOpen(false);
+        } else if (hintTier > 0) {
           setHintTier(0);
         } else {
           handleExitStudio();
@@ -466,6 +486,7 @@ export default function VNToENPage() {
     lastEvaluation,
     hintTier,
     pendingSpokenText,
+    isTopicModalOpen,
     handleConfirmSubmit,
     handleReRecord,
     handleStopRecord,
@@ -540,91 +561,101 @@ export default function VNToENPage() {
     );
   }
 
-  // 3. Immersive Studio View (Professional 3-Column Split Studio)
+  // 3. Immersive Studio View (Professional 3-Column Split Studio — JapSpeak CombatCapsuleHUD Style)
   return (
-    <div className="w-full h-full max-h-[calc(100vh-5.5rem)] flex flex-col justify-between overflow-hidden rounded-3xl border border-border/80 bg-card p-2.5 sm:p-3.5 shadow-xs animate-in fade-in-0 duration-200">
-      {/* Studio Header Bar */}
-      <header className="flex items-center justify-between border-b border-border/40 pb-2.5 shrink-0 gap-3">
-        {/* Left: Exit Studio & Inline Topic Selector */}
-        <div className="flex items-center gap-2.5">
-          <Button
-            variant="ghost"
-            size="sm"
+    <div className="w-full h-full max-h-[calc(100vh-5rem)] flex flex-col justify-between overflow-hidden rounded-none border-2 border-border bg-card p-2.5 sm:p-3.5 shadow-[4px_4px_0px_var(--industrial-shadow-color)] animate-in fade-in-0 duration-200">
+      {/* Studio Header Bar (JapSpeak CombatCapsuleHUD Style) */}
+      <header className="flex flex-wrap items-center justify-between gap-2.5 border-b-2 border-border pb-2.5 shrink-0">
+        {/* Left: Exit Studio + Lab Badge + Volt Lime Topic Selector + Mode Toggle */}
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
+          <button
+            type="button"
             onClick={handleExitStudio}
-            className="size-8 p-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
-            title="Thoát phiên luyện tập"
+            className="size-8 shrink-0 bg-foreground text-background hover:bg-primary hover:text-primary-foreground border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] flex items-center justify-center transition-colors cursor-pointer"
+            title="Thoát phiên luyện tập [ESC]"
           >
-            <X className="size-4" />
-          </Button>
+            <X className="size-4 stroke-[2.5]" />
+          </button>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs md:text-sm font-bold tracking-tight text-foreground">
-              VN → EN Speaking
+          <span className="px-2 py-1 bg-primary text-primary-foreground font-mono text-[10px] font-extrabold border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] uppercase tracking-wider shrink-0">
+            LAB-02 // DRILL #{String(currentTaskIndex + 1).padStart(2, "0")}
+          </span>
+
+          <span className="text-xs md:text-sm font-serif font-extrabold uppercase tracking-tight text-foreground hidden sm:inline">
+            Phản xạ Việt → Anh
+          </span>
+
+          <button
+            type="button"
+            onClick={() => setIsTopicModalOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-accent text-accent-foreground hover:bg-primary hover:text-primary-foreground border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] text-xs font-mono font-extrabold transition-all cursor-pointer group max-w-[200px] sm:max-w-[260px] truncate"
+            title="Bấm để đổi chủ đề luyện tập"
+          >
+            <Compass className="size-3.5 shrink-0 stroke-[2.5] group-hover:rotate-45 transition-transform" />
+            <span className="truncate">
+              {getTopicDisplay(currentTask?.topic || selectedTopicId).label}
             </span>
-            <button
-              type="button"
-              onClick={() => setIsTopicModalOpen(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 hover:bg-primary/20 border border-primary/30 text-foreground text-xs font-mono transition-all cursor-pointer group max-w-[200px] sm:max-w-[260px] truncate"
-              title="Bấm để đổi chủ đề luyện tập"
-            >
-              <Compass className="size-3 text-primary shrink-0 group-hover:rotate-45 transition-transform" />
-              <span className="truncate font-medium">{getTopicDisplay(currentTask?.topic || selectedTopicId).label}</span>
-              <ChevronDown className="size-3 text-muted-foreground shrink-0 ml-0.5" />
-            </button>
-            <GlobalAiSelector size="sm" />
-          </div>
+            <ChevronDown className="size-3.5 shrink-0 ml-0.5 stroke-[2.5]" />
+          </button>
+
+          <button
+            type="button"
+            onClick={handleToggleMode}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-none text-xs font-mono font-extrabold transition-all border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] cursor-pointer ${
+              sessionConfig.mode === "native_idiomatic"
+                ? "bg-primary text-primary-foreground"
+                : "bg-secondary text-foreground hover:bg-accent hover:text-accent-foreground"
+            }`}
+            title="Bấm để chuyển đổi giữa Phản xạ chuẩn và Khẩu ngữ & Phrasal Verbs"
+          >
+            <Zap className="size-3 shrink-0" />
+            <span className="hidden sm:inline">
+              {sessionConfig.mode === "native_idiomatic" ? "KHẨU NGỮ & PHRASAL ⚡" : "PHẢN XẠ CHUẨN"}
+            </span>
+            <span className="sm:hidden">
+              {sessionConfig.mode === "native_idiomatic" ? "KHẨU NGỮ" : "CHUẨN"}
+            </span>
+          </button>
         </div>
 
         {/* Center: Preparation Countdown Pulse Badge (if counting down) */}
         {isCountingDown && prepCountdown !== null ? (
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/15 text-primary border border-primary/30 text-xs font-mono font-bold animate-pulse">
+          <div className="flex items-center gap-1.5 px-3 py-1 bg-primary text-primary-foreground border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] text-xs font-mono font-extrabold animate-pulse">
             <Clock className="size-3.5" />
-            <span>Nói sau {prepCountdown}s...</span>
+            <span>NÓI SAU {prepCountdown}S...</span>
           </div>
         ) : null}
 
-        {/* Right: Next Task Button, Progress Indicator & Finish Button */}
-        <div className="flex items-center gap-2.5">
+        {/* Right: Next Task Button, Streak, Progress Indicator & Finish Button */}
+        <div className="flex items-center gap-2 shrink-0">
           {/* Next Task Action Button */}
           <Button
             variant="outline"
             size="sm"
             onClick={handleSkipOrNextTask}
             disabled={isGenerating || isEvaluating}
-            className="h-8 px-2.5 rounded-xl font-bold text-xs gap-1.5 border-primary/40 bg-primary/5 hover:bg-primary hover:text-primary-foreground text-primary transition-all shadow-2xs btn-spring"
+            className="h-8 px-2.5 font-mono font-extrabold text-xs gap-1.5 border-2 border-border bg-secondary hover:bg-accent hover:text-accent-foreground text-foreground shadow-[2px_2px_0px_var(--industrial-shadow-color)] transition-all"
             title="Đổi sang câu tiếp theo (Phím R)"
           >
-            <Sparkles className={`size-3.5 ${isGenerating ? "animate-spin" : ""}`} />
-            <span>Câu tiếp theo</span>
-            <span className="text-[9px] font-mono opacity-60 hidden sm:inline">[R]</span>
+            <Sparkles className={`size-3.5 text-primary ${isGenerating ? "animate-spin" : ""}`} />
+            <span>BÀI TIẾP</span>
+            <kbd className="hidden sm:inline-flex">R</kbd>
           </Button>
 
           {adaptiveState.rapidStreak > 1 && (
-            <div className="hidden sm:flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[11px] font-mono font-bold">
-              <Flame className="size-3" />
-              <span>Streak {adaptiveState.rapidStreak}</span>
+            <div className="hidden sm:flex items-center gap-1 px-2 py-1 bg-[#FFB800] text-[#0D0E0D] border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] text-[10px] font-mono font-extrabold uppercase">
+              <Flame className="size-3 fill-current" />
+              <span>STREAK {adaptiveState.rapidStreak}</span>
             </div>
           )}
 
           {/* Progress Indicator */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono font-bold text-foreground">
-              {sessionConfig.mode === "endless"
-                ? `Câu #${currentTaskIndex + 1}`
-                : `Câu ${currentTaskIndex + 1}/${sessionConfig.targetCount}`}
+          <div className="hidden md:flex items-center gap-1.5 px-2 py-1 bg-secondary border-2 border-border font-mono text-[10px] font-extrabold text-foreground">
+            <span>
+              {sessionConfig.mode === "endless" || sessionConfig.mode === "native_idiomatic"
+                ? `DONE: ${completedTasksCount}`
+                : `${currentTaskIndex + 1}/${sessionConfig.targetCount}`}
             </span>
-            {sessionConfig.mode === "endless" ? (
-              <Badge variant="outline" className="text-[10px] font-mono border-primary/30 text-primary">
-                Đã xong {completedTasksCount}
-              </Badge>
-            ) : (
-              <div className="w-16 sm:w-24">
-                <Progress
-                  value={((currentTaskIndex + 1) / (sessionConfig.targetCount || 1)) * 100}
-                  className="h-1.5 rounded-full"
-                />
-              </div>
-            )}
           </div>
 
           {/* Finish & View Results Button */}
@@ -633,12 +664,11 @@ export default function VNToENPage() {
             size="sm"
             onClick={handleFinishSession}
             disabled={isGenerating || isEvaluating}
-            className="h-8 px-2.5 rounded-xl font-bold text-xs gap-1.5 border-amber-500/40 bg-amber-500/10 hover:bg-amber-500 hover:text-white text-amber-600 dark:text-amber-400 transition-all shadow-2xs btn-spring"
+            className="h-8 px-2.5 font-mono font-extrabold text-xs gap-1.5 border-2 border-border bg-foreground text-background hover:bg-primary hover:text-primary-foreground shadow-[2px_2px_0px_var(--industrial-shadow-color)] transition-all"
             title="Kết thúc buổi tập và xem báo cáo tổng kết"
           >
-            <Trophy className="size-3.5" />
-            <span className="hidden sm:inline">Kết thúc & Xem kết quả</span>
-            <span className="sm:hidden">Nghỉ tập</span>
+            <Trophy className="size-3.5 text-accent" />
+            <span className="hidden sm:inline">KẾT THÚC</span>
           </Button>
         </div>
       </header>
@@ -714,31 +744,42 @@ export default function VNToENPage() {
         </div>
       </main>
 
-      {/* Bottom Footer Dock */}
-      <footer className="flex items-center justify-between border-t border-border/40 pt-1.5 shrink-0 text-[11px] font-mono text-muted-foreground">
-        <div className="flex items-center gap-3">
-          <span>[Space]: {lastEvaluation ? "Nói lại" : pendingSpokenText ? "Thu âm lại" : "Thu âm/Dừng"}</span>
-          <span>•</span>
-          <span>[Backspace]: Xoá nói lại</span>
-          <span>•</span>
-          <span>[H]: Gợi ý ({hintTier}/4)</span>
-          <span>•</span>
-          <span>[R]: Câu tiếp theo</span>
+      {/* Bottom Footer Dock (JapSpeak Mechanical Keycaps Style) */}
+      <footer className="flex flex-wrap items-center justify-between gap-2 border-t-2 border-border pt-2 shrink-0 text-[10px] font-mono font-extrabold text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="flex items-center gap-1">
+            <kbd>SPACE</kbd>
+            <span>{lastEvaluation ? "NÓI LẠI" : pendingSpokenText ? "THU LẠI" : "THU ÂM/DỪNG"}</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <kbd>BKSP</kbd>
+            <span>XOÁ NÓI LẠI</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <kbd>H</kbd>
+            <span>GỢI Ý (T{hintTier}/4)</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <kbd>R</kbd>
+            <span>ĐỔI BÀI</span>
+          </span>
           {pendingSpokenText && !isEvaluating && (
-            <>
-              <span>•</span>
-              <span className="text-primary font-bold">[Enter]: Nộp bài chấm điểm</span>
-            </>
+            <span className="flex items-center gap-1 text-primary">
+              <kbd>ENTER</kbd>
+              <span>NỘP BÀI</span>
+            </span>
           )}
           {lastEvaluation && (
-            <>
-              <span>•</span>
-              <span className="text-primary font-bold">[Enter]: Tiếp tục câu mới</span>
-            </>
+            <span className="flex items-center gap-1 text-primary">
+              <kbd>ENTER</kbd>
+              <span>BÀI MỚI</span>
+            </span>
           )}
         </div>
         <div className="flex items-center gap-2">
-          <span>Tự lập: {lastEvaluation?.independenceScore ?? 100}%</span>
+          <span className="px-2 py-0.5 bg-secondary text-foreground border border-border">
+            TỰ LẬP: {lastEvaluation?.independenceScore ?? 100}%
+          </span>
         </div>
       </footer>
 

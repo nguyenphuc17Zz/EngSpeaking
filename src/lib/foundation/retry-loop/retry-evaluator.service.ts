@@ -90,21 +90,16 @@ function computeDeterministicRepairEvaluation(
   };
 }
 
+import { cleanAiJson } from "@/lib/foundation/shared/json-parser";
+import { compactRepairCorrectionForEval } from "@/lib/ai/prompts/diversity-engine";
+import { computeFastPassRepair } from "./fast-pass-repair.service";
+
 function cleanJson(text: string): unknown {
-  const trimmed = text.trim();
-  const withoutFence = trimmed
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "");
+  const cleaned = cleanAiJson(text);
+  if (!cleaned) return null;
   try {
-    return JSON.parse(withoutFence);
+    return JSON.parse(cleaned);
   } catch {
-    const m = withoutFence.match(/\{[\s\S]*\}/);
-    if (m) {
-      try {
-        return JSON.parse(m[0]);
-      } catch {}
-    }
     return null;
   }
 }
@@ -114,17 +109,44 @@ export async function evaluateRepairAttempt(
 ): Promise<RepairEvaluationResult> {
   const provider = params.provider || "gemini";
   const model = params.model || "auto";
+  const attemptNumber = params.attemptNumber ?? 1;
+
+  // TIER 1: FAST-PASS REPAIR MATCH (0ms / 0-token local evaluation)
+  const fastPass = computeFastPassRepair(
+    {
+      sessionId: "fast_pass",
+      originalTaskId: "fast_pass_task",
+      sourceContext: "retry_lab",
+      originalPrompt: "",
+      originalTranscript: params.originalTranscript,
+      targetCorrection: params.targetCorrection,
+      state: "retry_evaluating",
+      currentAttemptNumber: attemptNumber,
+      modelExposureCount: 0,
+      attempts: [],
+      isResolved: false,
+      isSelfCorrected: false,
+      isSimplified: false,
+      totalRepairLatencyMs: 0,
+      createdAt: new Date().toISOString(),
+    },
+    params.userRetryTranscript,
+    { attemptNumber }
+  );
+  if (fastPass.canFastPass && fastPass.result) {
+    return fastPass.result;
+  }
 
   if (provider === "mock") {
     return computeDeterministicRepairEvaluation(params);
   }
 
   const userPrompt = buildRepairEvaluatorUserPrompt({
-    targetCorrection: JSON.stringify(params.targetCorrection),
+    targetCorrection: compactRepairCorrectionForEval(params.targetCorrection),
     originalTranscript: params.originalTranscript,
     userRetryTranscript: params.userRetryTranscript,
     expectedSentence: params.expectedSentence,
-    attemptNumber: params.attemptNumber ?? 1,
+    attemptNumber,
   });
 
   try {
@@ -135,7 +157,7 @@ export async function evaluateRepairAttempt(
         messages: [{ role: "user", content: userPrompt }],
         systemInstruction: REPAIR_EVALUATOR_SYSTEM,
         temperature: 0.2,
-        maxOutputTokens: 600,
+        maxOutputTokens: 450,
       },
     });
 

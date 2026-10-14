@@ -47,8 +47,7 @@ export async function getWhisperTranscriber(modelId = DEFAULT_WHISPER_MODEL): Pr
   }
 
   if (initializingPromises.has(modelKey)) {
-    await initializingPromises.get(modelKey);
-    return transcriberInstances.get(modelKey);
+    return initializingPromises.get(modelKey);
   }
 
   const initPromise = (async () => {
@@ -61,6 +60,7 @@ export async function getWhisperTranscriber(modelId = DEFAULT_WHISPER_MODEL): Pr
       const instance = await pipeline("automatic-speech-recognition", modelKey, {
         dtype: "q8",
         device: "cpu",
+        cache_dir: localModelsDir,
       });
 
       transcriberInstances.set(modelKey, instance);

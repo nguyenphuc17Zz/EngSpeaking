@@ -52,7 +52,7 @@ export default function SettingsPage() {
   const [previewText, setPreviewText] = useState(
     "Hello! I am your AI speaking tutor. Nice to practice English with you today!"
   );
-  const [previewSpeed, setPreviewSpeed] = useState(1.0);
+  const [previewSpeed, setPreviewSpeed] = useState(settings.ttsSpeed || 1.0);
   const speechTest = useSpeechRecognition("en-US");
   const audioRecorder = useAudioRecorder();
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -262,7 +262,7 @@ export default function SettingsPage() {
                 className="h-8 px-3 rounded-xl text-xs font-semibold gap-1.5 shrink-0 border-border/80 hover:bg-muted/50"
               >
                 <ArrowRightLeft className="size-3 text-terracotta" />
-                <span>Đổi sang {isGeminiActive ? "Groq (Llama 3.3)" : "Gemini (3.7 Flash)"}</span>
+                <span>Đổi sang {isGeminiActive ? "Groq (Llama 3.3)" : "Gemini (2.5 Flash)"}</span>
               </Button>
             </div>
           </div>
@@ -463,7 +463,10 @@ export default function SettingsPage() {
                     <button
                       key={s}
                       type="button"
-                      onClick={() => setPreviewSpeed(s)}
+                      onClick={() => {
+                        setPreviewSpeed(s);
+                        settings.setTtsSpeed(s);
+                      }}
                       className={cn(
                         "h-6 px-2 text-[11px] rounded-lg font-mono font-semibold transition-all cursor-pointer",
                         previewSpeed === s
@@ -621,13 +624,13 @@ export default function SettingsPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    settings.applyProviderToAll("gemini", "gemini-3.7-flash");
-                    toast.success("Đã đồng bộ toàn bộ tác vụ", "Tất cả bài tập hiện sử dụng Gemini 3.7 Flash.");
+                    settings.applyProviderToAll("gemini", "gemini-2.5-flash");
+                    toast.success("Đã đồng bộ toàn bộ tác vụ", "Tất cả bài tập hiện sử dụng Gemini 2.5 Flash.");
                   }}
                   className="h-7 px-2.5 rounded-lg text-xs gap-1 border-border/80"
                 >
                   <Sparkles className="size-3 text-terracotta" />
-                  <span>Gán hết Gemini 3.7</span>
+                  <span>Gán hết Gemini 2.5</span>
                 </Button>
                 <Button
                   variant="outline"

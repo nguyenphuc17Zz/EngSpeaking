@@ -1,0 +1,470 @@
+{
+ "url": "http://localhost:3000/settings",
+ "title": "EngSpeak — Nghệ Thuật Phản Xạ Khẩu Ngữ Tiếng Anh",
+ "els": [
+  {
+   "tag": "A",
+   "text": "EngSpeak",
+   "x": 16,
+   "y": 14,
+   "w": 129,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Thu gọn menu",
+   "x": 215,
+   "y": 20,
+   "w": 24,
+   "h": 24
+  },
+  {
+   "tag": "A",
+   "text": "Tổng quan",
+   "x": 8,
+   "y": 101,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Sentence Builder",
+   "x": 8,
+   "y": 174,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "VN → EN Speaking",
+   "x": 8,
+   "y": 210,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Spoken Repair Lab",
+   "x": 8,
+   "y": 246,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Response Latency",
+   "x": 8,
+   "y": 282,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Chunk Automaticity",
+   "x": 8,
+   "y": 318,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Survival Speaking",
+   "x": 8,
+   "y": 354,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Spoken Vocabulary",
+   "x": 8,
+   "y": 390,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Shadowing Studio",
+   "x": 8,
+   "y": 426,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Phòng luyện nói Live",
+   "x": 8,
+   "y": 499,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Hội thoại AI",
+   "x": 8,
+   "y": 535,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Thử thách nâng cao",
+   "x": 8,
+   "y": 571,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Cài đặt & API Keys",
+   "x": 8,
+   "y": 644,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Hướng dẫn học",
+   "x": 8,
+   "y": 860,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Phòng luyện nói",
+   "x": 640,
+   "y": 14,
+   "w": 150,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Phòng luyện nói",
+   "x": 640,
+   "y": 14,
+   "w": 150,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Gemini:\ngemini-3.5-flash-lite",
+   "x": 798,
+   "y": 14,
+   "w": 274,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "1x",
+   "x": 1080,
+   "y": 14,
+   "w": 60,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "?",
+   "x": 1148,
+   "y": 14,
+   "w": 64,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Chuyển đổi giao diện Sáng / Tối",
+   "x": 1220,
+   "y": 14,
+   "w": 36,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "AI & Khóa API",
+   "x": 795,
+   "y": 110,
+   "w": 124,
+   "h": 30
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Âm thanh & Mic",
+   "x": 923,
+   "y": 111,
+   "w": 133,
+   "h": 28
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Nâng cao & Debug",
+   "x": 1060,
+   "y": 111,
+   "w": 151,
+   "h": 28
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Đổi sang Groq (Llama 3.3)",
+   "x": 1007,
+   "y": 207,
+   "w": 192,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Làm mới Models",
+   "x": 1061,
+   "y": 317,
+   "w": 135,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Kiểm tra Key",
+   "x": 594,
+   "y": 494,
+   "w": 106,
+   "h": 24
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 706,
+   "y": 494,
+   "w": 24,
+   "h": 24
+  },
+  {
+   "tag": "INPUT",
+   "text": "AIzaSy...",
+   "x": 357,
+   "y": 567,
+   "w": 384,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 707,
+   "y": 569,
+   "w": 28,
+   "h": 28
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Lưu & Kích hoạt Key",
+   "x": 357,
+   "y": 619,
+   "w": 280,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Lấy key Google",
+   "x": 645,
+   "y": 627,
+   "w": 96,
+   "h": 16
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Gemini 3.5 Flash Lite (gemini-3.5-flash-lite)",
+   "x": 357,
+   "y": 704,
+   "w": 384,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Kiểm tra Key",
+   "x": 1032,
+   "y": 474,
+   "w": 106,
+   "h": 24
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1144,
+   "y": 474,
+   "w": 24,
+   "h": 24
+  },
+  {
+   "tag": "INPUT",
+   "text": "gsk_...",
+   "x": 795,
+   "y": 547,
+   "w": 384,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1145,
+   "y": 549,
+   "w": 28,
+   "h": 28
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Lưu & Kích hoạt Key",
+   "x": 795,
+   "y": 599,
+   "w": 292,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Lấy key Groq",
+   "x": 1095,
+   "y": 607,
+   "w": 84,
+   "h": 16
+  },
+  {
+   "tag": "BUTTON",
+   "text": "openai/gpt-oss-120b",
+   "x": 795,
+   "y": 684,
+   "w": 384,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Kích hoạt Groq làm Động cơ chính",
+   "x": 795,
+   "y": 728,
+   "w": 384,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Open Next.js Dev Tools",
+   "x": 22,
+   "y": 846,
+   "w": 32,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1181,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1197,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1213,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1229,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1239,
+   "y": 853,
+   "w": 8,
+   "h": 11
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1245,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1261,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1281,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  },
+  {
+   "tag": "A",
+   "text": "",
+   "x": 1070,
+   "y": 524,
+   "w": 68,
+   "h": 14
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1214,
+   "y": 521,
+   "w": 21,
+   "h": 21
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Standard",
+   "x": 1175,
+   "y": 561,
+   "w": 60,
+   "h": 19
+  },
+  {
+   "tag": "INPUT",
+   "text": "on",
+   "x": 1212,
+   "y": 593,
+   "w": 23,
+   "h": 15
+  },
+  {
+   "tag": "INPUT",
+   "text": "on",
+   "x": 1212,
+   "y": 623,
+   "w": 23,
+   "h": 15
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1070,
+   "y": 686,
+   "w": 19,
+   "h": 19
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1095,
+   "y": 686,
+   "w": 19,
+   "h": 19
+  }
+ ]
+}

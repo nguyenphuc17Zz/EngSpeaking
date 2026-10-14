@@ -9,6 +9,8 @@ import {
   buildFastPassEvaluation,
   calculateHesitationMetrics,
 } from "./fast-pass.service";
+import { compactSentenceBuilderTaskForEval } from "@/lib/ai/prompts/diversity-engine";
+import { cleanAiJson } from "@/lib/foundation/shared/json-parser";
 import type {
   SentenceBuilderTask,
   SentenceBuilderEvaluation,
@@ -201,20 +203,11 @@ function computeDeterministicEvaluation(
 }
 
 function cleanJson(text: string): unknown {
-  const trimmed = text.trim();
-  const withoutFence = trimmed
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "");
+  const cleaned = cleanAiJson(text);
+  if (!cleaned) return null;
   try {
-    return JSON.parse(withoutFence);
+    return JSON.parse(cleaned);
   } catch {
-    const m = withoutFence.match(/\{[\s\S]*\}/);
-    if (m) {
-      try {
-        return JSON.parse(m[0]);
-      } catch {}
-    }
     return null;
   }
 }
@@ -272,7 +265,7 @@ export async function evaluateSentenceBuilderAttempt(
 
   // TIER 2 & 3: DEEP AI EVALUATION (Gemini/Groq)
   const userPrompt = buildEvaluatorUserPrompt({
-    taskJson: JSON.stringify(params.task),
+    taskJson: compactSentenceBuilderTaskForEval(params.task),
     userTranscript: params.userTranscript,
     latencyMs,
     speechDurationMs,
@@ -288,12 +281,28 @@ export async function evaluateSentenceBuilderAttempt(
         messages: [{ role: "user", content: userPrompt }],
         systemInstruction: EVALUATOR_SYSTEM,
         temperature: 0.2,
-        maxOutputTokens: 800,
+        maxOutputTokens: 550,
       },
     });
 
-    const parsed = cleanJson(res.text);
-    if (!parsed) throw new Error("Could not parse JSON from Evaluator LLM");
+    const parsed = cleanJson(res.text) as Record<string, unknown> | null;
+    if (!parsed || typeof parsed !== "object") throw new Error("Could not parse JSON from Evaluator LLM");
+
+    // Hydrate deterministic & echoed fields so LLM doesn't waste output tokens
+    const independenceScore =
+      hintTierUsed === 0 ? 100 : hintTierUsed === 1 ? 90 : hintTierUsed === 2 ? 75 : hintTierUsed === 3 ? 50 : 15;
+    if (typeof parsed.independenceScore !== "number") parsed.independenceScore = independenceScore;
+    if (typeof parsed.userTranscript !== "string") parsed.userTranscript = params.userTranscript;
+    if (typeof parsed.cleanTranscript !== "string") parsed.cleanTranscript = cleanText(params.userTranscript);
+    if (typeof parsed.latencyMs !== "number") parsed.latencyMs = latencyMs;
+    if (typeof parsed.speechDurationMs !== "number") parsed.speechDurationMs = speechDurationMs;
+    if (typeof parsed.hintTierUsed !== "number") parsed.hintTierUsed = hintTierUsed;
+    if (typeof parsed.attemptNumber !== "number") parsed.attemptNumber = attemptNumber;
+    if (!Array.isArray(parsed.errors)) parsed.errors = [];
+    if (!Array.isArray(parsed.praisePoints)) parsed.praisePoints = ["Đã hoàn thành lượt nói."];
+    if (typeof parsed.betterVersion !== "string" || !parsed.betterVersion) {
+      parsed.betterVersion = params.task.expectedResponses[0] || params.task.targetIntent || params.userTranscript;
+    }
 
     const validated = sentenceBuilderEvaluationSchema.safeParse(parsed);
     if (!validated.success) {

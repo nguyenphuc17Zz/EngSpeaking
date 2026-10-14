@@ -50,10 +50,15 @@ models/**
 !models/README.md
 !models/**/README.md
 
-# local SQLite databases
+# local SQLite databases & runtime keys
 data/*.db
 data/*.db-wal
 data/*.db-shm
+data/*.migrated
+data/.content-banks-migrated
+data/api-keys.json
 
 # IDE & agent artifacts
 .commandcode/
+.playwright-mcp/
+

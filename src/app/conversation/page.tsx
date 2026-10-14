@@ -281,7 +281,7 @@ export default function ConversationModesPage() {
         }),
       });
       const data = await res.json();
-      if (data.scenario) {
+      if (res.ok && data.scenario) {
         const worldState = {
           scenario: data.scenario,
           currentObjective: data.scenario.userGoal,
@@ -311,6 +311,9 @@ export default function ConversationModesPage() {
           localStorage.setItem("conversation_world_id", data.worldId);
         toast.success("Kịch bản sẵn sàng!", `Vào vai đối thoại: ${data.scenario.character.role}`);
         router.push(data.worldId ? `/conversation/session/${data.worldId}` : "/conversation/session");
+      } else {
+        const errMsg = typeof data.error === "string" ? data.error : data.error?.message;
+        toast.error(errMsg || "Không thể khởi tạo kịch bản");
       }
     } catch {
       toast.error("Lỗi khởi tạo", "Không thể tạo kịch bản lúc này. Vui lòng thử lại.");
@@ -526,13 +529,19 @@ export default function ConversationModesPage() {
                   setCustomInputVal(customTopicText || "");
                   setIsTopicModalOpen(true);
                 }}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/10 hover:bg-primary/15 border border-primary/30 text-foreground text-xs font-mono transition-all cursor-pointer"
+                className="w-full flex items-center gap-2 px-3 py-2 bg-accent text-accent-foreground hover:bg-primary hover:text-primary-foreground border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] text-xs font-mono font-extrabold transition-all cursor-pointer"
               >
-                <Compass className="size-3.5 text-primary shrink-0" />
-                <span className="truncate font-medium flex-1 text-left">
-                  {getTopicDisplay(resolveTopicForPrompt(selectedTopicId, customTopicText)).label}
+                <Compass className="size-3.5 shrink-0 stroke-[2.5]" />
+                <span className="truncate flex-1 text-left">
+                  {
+                    getTopicDisplay(
+                      selectedTopicId === "custom" && customTopicText
+                        ? `custom_scenario: ${customTopicText}`
+                        : selectedTopicId
+                    ).label
+                  }
                 </span>
-                <ChevronDown className="size-3.5 text-muted-foreground shrink-0" />
+                <ChevronDown className="size-3.5 shrink-0 stroke-[2.5]" />
               </button>
             </div>
 

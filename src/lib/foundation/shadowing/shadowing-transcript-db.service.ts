@@ -17,6 +17,20 @@ export interface StoredTranscript {
 // In-memory fallback map if IndexedDB is disabled or unavailable (e.g. in certain SSR/test contexts)
 const memoryFallback = new Map<string, StoredTranscript>();
 
+const MAX_MEMORY_FALLBACK_ENTRIES = 10;
+
+function setMemoryFallback(youtubeId: string, entry: StoredTranscript) {
+  if (memoryFallback.has(youtubeId)) {
+    memoryFallback.delete(youtubeId);
+  } else if (memoryFallback.size >= MAX_MEMORY_FALLBACK_ENTRIES) {
+    const oldestKey = memoryFallback.keys().next().value;
+    if (oldestKey !== undefined) {
+      memoryFallback.delete(oldestKey);
+    }
+  }
+  memoryFallback.set(youtubeId, entry);
+}
+
 function isIndexedDbSupported(): boolean {
   return typeof window !== "undefined" && typeof window.indexedDB !== "undefined";
 }
@@ -76,10 +90,10 @@ export async function saveTranscript(
     updatedAt: new Date().toISOString(),
   };
 
-  // Always mirror in memory fallback
-  memoryFallback.set(youtubeId, entry);
-
-  if (!isIndexedDbSupported()) return;
+  if (!isIndexedDbSupported()) {
+    setMemoryFallback(youtubeId, entry);
+    return;
+  }
 
   try {
     const db = await getDb();
@@ -93,6 +107,7 @@ export async function saveTranscript(
     });
   } catch (err) {
     console.warn("IndexedDB saveTranscript warning (using memory fallback):", err);
+    setMemoryFallback(youtubeId, entry);
   }
 }
 
@@ -121,8 +136,6 @@ export async function getTranscript(
     });
 
     if (result && Array.isArray(result.segments) && result.segments.length > 0) {
-      // Also sync into memory fallback
-      memoryFallback.set(youtubeId, result);
       return result.segments;
     }
 

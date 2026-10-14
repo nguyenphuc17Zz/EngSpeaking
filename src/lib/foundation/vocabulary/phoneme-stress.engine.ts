@@ -262,28 +262,70 @@ export function getMinimalPairContrast(word: string): MinimalPairContrast | unde
   };
 }
 
+import { getWordIpa } from "@/lib/foundation/shadowing/ipa-dictionary";
+
 /**
- * Normalizes IPA symbols and English orthography into a unified rough phonetic sequence
+ * Normalizes an IPA string into a canonical ASCII phonetic skeleton.
  */
-export function phoneticNormalize(text: string): string {
-  return text
+function normalizeIpaSequence(ipa: string): string {
+  return ipa
     .toLowerCase()
-    .replace(/[\/\[\]ˈˌ.]/g, "")
+    .replace(/[\/\[\]ˈˌ.\s]/g, "")
     .replace(/tʃ/g, "ch")
     .replace(/dʒ/g, "j")
     .replace(/θ|ð/g, "th")
     .replace(/ʃ/g, "sh")
-    .replace(/ʒ/g, "s")
-    .replace(/[iɪiː]/g, "i")
-    .replace(/[uʊuː]/g, "u")
-    .replace(/[ɔɒɔːɑː]/g, "o")
-    .replace(/[eæ]/g, "e")
-    .replace(/[əʌɜː]/g, "e")
-    .replace(/tion|sion/g, "sen")
+    .replace(/ʒ/g, "zh")
+    .replace(/ŋ/g, "ng")
+    .replace(/eɪ/g, "ey")
+    .replace(/aɪ/g, "ay")
+    .replace(/ɔɪ/g, "oy")
+    .replace(/aʊ/g, "aw")
+    .replace(/əʊ|oʊ/g, "ow")
+    .replace(/iː|ɪ/g, "i")
+    .replace(/uː|ʊ/g, "u")
+    .replace(/ɔː|ɒ|ɑː/g, "o")
+    .replace(/ɜː|ə|ʌ/g, "e")
+    .replace(/æ/g, "e")
+    .replace(/ː/g, "");
+}
+
+/**
+ * Normalizes English orthography into a rough phonetic sequence without corrupting letters via IPA character classes.
+ */
+function normalizeOrthographicSequence(word: string): string {
+  return word
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, "")
+    .trim()
+    .replace(/tion|sion/g, "shen")
+    .replace(/tch/g, "ch")
+    .replace(/dge/g, "j")
     .replace(/ck/g, "k")
     .replace(/ph/g, "f")
+    .replace(/qu/g, "kw")
     .replace(/c(?=[eiy])/g, "s")
-    .replace(/c/g, "k");
+    .replace(/c/g, "k")
+    .replace(/ee|ea/g, "i")
+    .replace(/oo/g, "u")
+    .replace(/e$/g, "");
+}
+
+/**
+ * Normalizes IPA symbols or English orthography into a unified rough phonetic sequence.
+ * Automatically detects whether the input contains IPA markers/symbols or plain English orthography.
+ */
+export function phoneticNormalize(text: string): string {
+  if (!text) return "";
+  const isLikelyIpa = /[\/\[\]ˈˌɪʊɔɒæəʌɜθðʃʒŋː]/.test(text);
+  if (isLikelyIpa) {
+    return normalizeIpaSequence(text);
+  }
+  const lookedUpIpa = getWordIpa(text);
+  if (lookedUpIpa) {
+    return normalizeIpaSequence(lookedUpIpa);
+  }
+  return normalizeOrthographicSequence(text);
 }
 
 /**
@@ -299,15 +341,27 @@ export function calculateWeightedPhonemeScore(
   stressScore: number;
   isCloseMatch: boolean;
 } {
-  const normTarget = phoneticNormalize(targetIpa);
-  const normUser = phoneticNormalize(userSpokenWord);
+  const normTarget = normalizeIpaSequence(targetIpa);
+
+  // Resolve spoken word(s) to authentic IPA via ipa-dictionary when available, else orthographic normalization
+  const cleanSpoken = userSpokenWord.trim().toLowerCase();
+  const spokenTokens = cleanSpoken.split(/\s+/).filter(Boolean);
+  const normUser =
+    spokenTokens.length > 0
+      ? spokenTokens
+          .map((tok) => {
+            const ipa = getWordIpa(tok);
+            return ipa ? normalizeIpaSequence(ipa) : phoneticNormalize(tok);
+          })
+          .join("")
+      : "";
 
   if (normUser === "" || normTarget === "") {
     return { similarityScore: 0, codaScore: 0, stressScore: 0, isCloseMatch: false };
   }
 
   // If exact orthographic match with targetWord
-  if (options.targetWord && userSpokenWord.trim().toLowerCase() === options.targetWord.trim().toLowerCase()) {
+  if (options.targetWord && cleanSpoken === options.targetWord.trim().toLowerCase()) {
     return { similarityScore: 95, codaScore: 95, stressScore: 92, isCloseMatch: true };
   }
 

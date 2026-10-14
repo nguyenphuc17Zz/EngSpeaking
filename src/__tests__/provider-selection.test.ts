@@ -26,7 +26,7 @@ describe("Model registry & capability filtering §7 §37", () => {
   it("auto resolver picks gemini for conversation (preference)", () => {
     const res = resolveAutoModel("conversation", { configuredProviders: ["gemini", "groq", "browser"] });
     expect(res.providerId).toBe("gemini");
-    expect(res.modelId).toBe("gemini-3.7-flash");
+    expect(res.modelId).toBe("gemini-2.5-flash");
   });
 
   it("auto resolver picks browser for transcription when browser available", () => {

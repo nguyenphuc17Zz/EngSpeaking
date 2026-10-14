@@ -4,8 +4,10 @@
 import { generateTextWithRouting } from "@/lib/ai";
 import { latencyTaskSchema } from "@/lib/validation/latency-schemas";
 import { LATENCY_GENERATOR_SYSTEM, buildLatencyTaskUserPrompt } from "@/lib/ai/prompts/latency-prompts";
+import { hydrateStandardFiveTierHints } from "@/lib/ai/prompts/diversity-engine";
 import { sampleBankTask, saveBankTask, recordUserExposure } from "@/lib/foundation/services/content-bank.service";
 import { resolveTopicForPrompt } from "@/lib/foundation/sentence-builder/topics";
+import { cleanAiJson } from "@/lib/foundation/shared/json-parser";
 import type { LatencyTask, LatencyDrillMode } from "@/types/latency-training";
 
 export interface GenerateLatencyTaskOptions {
@@ -57,22 +59,11 @@ function getTestMockTask(options: GenerateLatencyTaskOptions): LatencyTask {
 }
 
 function cleanJson(text: string): unknown {
-  const trimmed = text.trim();
-  const withoutFence = trimmed
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "");
+  const cleaned = cleanAiJson(text);
+  if (!cleaned) return null;
   try {
-    return JSON.parse(withoutFence);
+    return JSON.parse(cleaned);
   } catch {
-    const m = withoutFence.match(/\{[\s\S]*\}/);
-    if (m) {
-      try {
-        return JSON.parse(m[0]);
-      } catch {
-        return null;
-      }
-    }
     return null;
   }
 }
@@ -85,7 +76,7 @@ export async function generateLatencyTask(
   const targetDifficulty = options.targetDifficulty || 3;
   const provider = options.provider || "gemini";
   const model = options.model || "auto";
-  const effectiveTopic = resolveTopicForPrompt(options.topic);
+  const effectiveTopic = resolveTopicForPrompt(options.topic, options.recentPrompts);
 
   if (provider === "mock") {
     return getTestMockTask({ ...options, drillMode, targetLatencyMs, targetDifficulty, topic: effectiveTopic });
@@ -128,8 +119,8 @@ export async function generateLatencyTask(
         input: {
           messages: [{ role: "user", content: userPrompt }],
           systemInstruction: LATENCY_GENERATOR_SYSTEM,
-          temperature: 0.7,
-          maxOutputTokens: 1000, // Sufficient tokens to prevent JSON truncation
+          temperature: 0.75,
+          maxOutputTokens: 700,
         },
       });
 
@@ -140,36 +131,36 @@ export async function generateLatencyTask(
         parsed.id = `lat_task_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
       }
 
-      // Sanitize 4-Tier hints if missing
-      if (!Array.isArray(parsed.hints) || parsed.hints.length === 0) {
-        const kws = Array.isArray(parsed.expectedKeywords) ? (parsed.expectedKeywords as string[]).join(" / ") : "";
-        const buffer = String(parsed.bufferPhraseSuggestion || "Well, to be honest...");
-        const sample = Array.isArray(parsed.sampleResponses) && parsed.sampleResponses[0] ? String(parsed.sampleResponses[0]) : "Sample answer...";
-        parsed.hints = [
-          { tier: 0, title: "Không gợi ý", content: "Tự bật câu trả lời ngay." },
-          { tier: 1, title: "Từ khoá cốt lõi", content: kws || "Trả lời trực tiếp vào ý chính" },
-          { tier: 2, title: "Cụm từ đệm mở đầu", content: buffer },
-          { tier: 3, title: "Khung câu", content: `${buffer} I ______ .` },
-          { tier: 4, title: "Câu mẫu hoàn chỉnh", content: sample },
-        ];
-      }
-
-      // Clean prefixes from hints
-      if (Array.isArray(parsed.hints)) {
-        parsed.hints = (parsed.hints as any[]).map((h) => ({
-          ...h,
-          content: String(h?.content || "")
-            .replace(/^(câu mẫu hoàn chỉnh|câu trả lời mẫu|câu mẫu|sample response|model answer):\s*/i, "")
-            .trim(),
-        }));
-      }
-
       if (Array.isArray(parsed.sampleResponses)) {
         parsed.sampleResponses = (parsed.sampleResponses as any[]).map((s) =>
           String(s || "")
             .replace(/^(câu mẫu hoàn chỉnh|câu trả lời mẫu|câu mẫu|sample response|model answer):\s*/i, "")
             .trim()
         );
+      }
+
+      // Deterministically hydrate 5-Tier hints when omitted by compact LLM schema
+      if (!Array.isArray(parsed.hints) || parsed.hints.length === 0) {
+        const kws = Array.isArray(parsed.expectedKeywords) ? (parsed.expectedKeywords as string[]) : [];
+        const buffer = String(parsed.bufferPhraseSuggestion || "Well, to be honest...");
+        const sample =
+          Array.isArray(parsed.sampleResponses) && parsed.sampleResponses[0]
+            ? String(parsed.sampleResponses[0])
+            : "Well, to be honest, I would handle that right away.";
+        parsed.hints = hydrateStandardFiveTierHints({
+          modelAnswer: sample,
+          keywords: kws,
+          starterOrGrammarCue: buffer,
+          tier0Content: "Tự bật câu trả lời ngay lập tức.",
+          tier2Title: "Cụm từ đệm mở đầu",
+        });
+      } else {
+        parsed.hints = (parsed.hints as any[]).map((h) => ({
+          ...h,
+          content: String(h?.content || "")
+            .replace(/^(câu mẫu hoàn chỉnh|câu trả lời mẫu|câu mẫu|sample response|model answer):\s*/i, "")
+            .trim(),
+        }));
       }
 
       if (!Array.isArray(parsed.suggestedVocabulary)) {

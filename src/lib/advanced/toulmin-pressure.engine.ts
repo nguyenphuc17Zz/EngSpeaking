@@ -19,14 +19,22 @@ import type {
  * - Rebuttal (Anticipation / Refutation of counterarguments)
  * - Backing & Qualifier (Bonus nuances)
  */
-export function analyzeToulminArgumentation(text: string): ToulminAnalysis {
+export function analyzeToulminArgumentation(
+  text: string,
+  requiredElements?: ToulminElement[]
+): ToulminAnalysis {
+  const corePillars: ToulminElement[] =
+    requiredElements && requiredElements.length > 0
+      ? requiredElements
+      : ["claim", "data", "warrant", "rebuttal"];
+
   const clean = text.trim();
   if (!clean) {
     return {
       elementsFound: [],
       toulminScore: 0,
       feedbackVi: "Chưa có nội dung nói để phân tích lập luận.",
-      missingKeyElements: ["claim", "data", "warrant", "rebuttal"],
+      missingKeyElements: [...corePillars],
     };
   }
 
@@ -86,32 +94,28 @@ export function analyzeToulminArgumentation(text: string): ToulminAnalysis {
     elementsFound.push("qualifier");
   }
 
-  // Calculate Missing Key Elements among the 4 pillars
-  const corePillars: ToulminElement[] = ["claim", "data", "warrant", "rebuttal"];
+  // Calculate Missing Key Elements against requiredElements (or the 4 pillars by default)
   const missingKeyElements = corePillars.filter((p) => !elementsFound.includes(p));
 
-  // Score Calculation (Core = 25 pts each, +5 bonus for backing/qualifier up to 100)
-  let rawScore = 0;
-  if (elementsFound.includes("claim")) rawScore += 25;
-  if (elementsFound.includes("data")) rawScore += 25;
-  if (elementsFound.includes("warrant")) rawScore += 25;
-  if (elementsFound.includes("rebuttal")) rawScore += 25;
-  if (elementsFound.includes("backing")) rawScore += 5;
-  if (elementsFound.includes("qualifier")) rawScore += 5;
+  // Score Calculation against requiredElements, +5 bonus for backing/qualifier up to 100
+  const matchedRequiredCount = corePillars.filter((p) => elementsFound.includes(p)).length;
+  let rawScore = Math.round((matchedRequiredCount / corePillars.length) * 100);
+  if (elementsFound.includes("backing") && !corePillars.includes("backing")) rawScore += 5;
+  if (elementsFound.includes("qualifier") && !corePillars.includes("qualifier")) rawScore += 5;
 
   const toulminScore = Math.min(100, rawScore);
 
   // Vietnamese Coaching Feedback Generation
   let feedbackVi = "";
-  if (toulminScore === 100) {
-    feedbackVi = "Xuất sắc! Lập luận đạt chuẩn Toulmin toàn diện 4 trụ cột: Luận điểm (Claim), Dẫn chứng (Data), Lý lẽ nối (Warrant) và Phản biện phòng ngừa (Rebuttal).";
-  } else if (!elementsFound.includes("claim")) {
+  if (missingKeyElements.length === 0) {
+    feedbackVi = `Xuất sắc! Lập luận đạt chuẩn Toulmin toàn diện (${corePillars.join(" → ")}).`;
+  } else if (missingKeyElements.includes("claim")) {
     feedbackVi = "Chưa nhận diện rõ Luận điểm cốt lõi (Claim). Hãy mở đầu bằng lập trường rõ ràng (ví dụ: 'In my view...', 'I strongly argue that...').";
-  } else if (!elementsFound.includes("data")) {
+  } else if (missingKeyElements.includes("data")) {
     feedbackVi = "Thiếu Dẫn chứng xác thực (Data). Hãy đưa thêm ví dụ cụ thể hoặc số liệu ('For instance...', 'Statistics indicate...').";
-  } else if (!elementsFound.includes("warrant")) {
+  } else if (missingKeyElements.includes("warrant")) {
     feedbackVi = "Thiếu Lý lẽ kết nối (Warrant). Hãy giải thích tại sao dẫn chứng lại củng cố luận điểm ('This implies that...', 'Consequently...').";
-  } else if (!elementsFound.includes("rebuttal")) {
+  } else if (missingKeyElements.includes("rebuttal")) {
     feedbackVi = "Lập luận chắc chắn, nhưng cần thêm Phản biện phòng ngừa (Rebuttal) ('While critics argue..., however...') để đạt đẳng cấp C1/C2.";
   } else {
     feedbackVi = `Đã xây dựng được ${elementsFound.length} thành tố Toulmin (${elementsFound.join(", ")}). Tiếp tục phát huy!`;

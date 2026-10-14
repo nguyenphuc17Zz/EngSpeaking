@@ -39,7 +39,7 @@ export function GlobalAiSelector({ className = "", size = "default" }: Props) {
   const activeProvider = settings.activeProvider || "gemini";
   const activeModel =
     activeProvider === "gemini"
-      ? settings.preferredGeminiModel || "gemini-3.5-flash-lite"
+      ? settings.preferredGeminiModel || "gemini-2.5-flash"
       : settings.preferredGroqModel || "openai/gpt-oss-120b";
 
   // Draft states inside dialog
@@ -58,12 +58,12 @@ export function GlobalAiSelector({ className = "", size = "default" }: Props) {
       const res = await fetch(`/api/ai/models?provider=${provider}&capability=textGeneration&live=true`);
       const data = await res.json();
       if (Array.isArray(data.models) && data.models.length > 0) {
-        // Prioritize gemini-3.5-flash-lite and openai/gpt-oss-120b at the top
+        // Prioritize gemini-2.5-flash, gemini-2.5-flash-lite and openai/gpt-oss-120b at the top
         const prioritized = [...data.models].sort((a: AIModel, b: AIModel) => {
-          if (a.id === "gemini-3.5-flash-lite" || a.id === "openai/gpt-oss-120b") return -1;
-          if (b.id === "gemini-3.5-flash-lite" || b.id === "openai/gpt-oss-120b") return 1;
-          if (a.id === "gemini-3.7-flash" || a.id === "qwen/qwen3.6-27b") return -1;
-          if (b.id === "gemini-3.7-flash" || b.id === "qwen/qwen3.6-27b") return 1;
+          if (a.id === "gemini-2.5-flash" || a.id === "openai/gpt-oss-120b") return -1;
+          if (b.id === "gemini-2.5-flash" || b.id === "openai/gpt-oss-120b") return 1;
+          if (a.id === "gemini-2.5-flash-lite" || a.id === "qwen/qwen3.6-27b") return -1;
+          if (b.id === "gemini-2.5-flash-lite" || b.id === "qwen/qwen3.6-27b") return 1;
           return 0;
         });
         setModels(prioritized);
@@ -82,9 +82,10 @@ export function GlobalAiSelector({ className = "", size = "default" }: Props) {
       // Offline fallback models
       if (provider === "gemini") {
         setModels([
-          { id: "gemini-3.5-flash-lite", displayName: "Gemini 3.5 Flash Lite (Siêu tốc - Khuyên dùng)" } as AIModel,
-          { id: "gemini-3.6-flash", displayName: "Gemini 3.6 Flash (Cân bằng)" } as AIModel,
-          { id: "gemini-3.7-flash", displayName: "Gemini 3.7 Flash (Chất lượng cao)" } as AIModel,
+          { id: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash (Cân bằng - Khuyên dùng)" } as AIModel,
+          { id: "gemini-2.5-flash-lite", displayName: "Gemini 2.5 Flash Lite (Siêu tốc)" } as AIModel,
+          { id: "gemini-2.0-flash", displayName: "Gemini 2.0 Flash" } as AIModel,
+          { id: "gemini-2.5-pro", displayName: "Gemini 2.5 Pro (Chất lượng cao)" } as AIModel,
         ]);
       } else {
         setModels([
@@ -105,7 +106,7 @@ export function GlobalAiSelector({ className = "", size = "default" }: Props) {
       const currentProv = settings.activeProvider || "gemini";
       const currentM =
         currentProv === "gemini"
-          ? settings.preferredGeminiModel || "gemini-3.5-flash-lite"
+          ? settings.preferredGeminiModel || "gemini-2.5-flash"
           : settings.preferredGroqModel || "llama-3.3-70b-versatile";
       setSelectedProvider(currentProv);
       setSelectedModel(currentM);
@@ -176,15 +177,15 @@ export function GlobalAiSelector({ className = "", size = "default" }: Props) {
         variant="outline"
         size={size === "sm" ? "sm" : "default"}
         onClick={() => setOpen(true)}
-        className={`rounded-full h-9 px-2.5 sm:px-3 gap-1.5 text-xs font-mono font-medium border-border/80 hover:border-primary/40 hover:bg-primary/5 btn-spring shadow-2xs text-muted-foreground hover:text-foreground ${className}`}
+        className={`h-8 px-2.5 gap-1.5 text-[11px] font-mono font-bold border-2 border-border bg-card text-foreground shadow-[2px_2px_0px_var(--industrial-shadow-color)] hover:bg-accent hover:text-accent-foreground ${className}`}
         title={`Động cơ AI toàn hệ thống: ${activeProvider.toUpperCase()} (${activeModel}) - Bấm để chuyển đổi`}
         aria-label="Chuyển đổi Động cơ AI toàn hệ thống"
       >
-        <Zap className={`size-3.5 shrink-0 ${isGemini ? "text-amber-500" : "text-orange-500"}`} />
-        <span className="font-semibold text-foreground hidden md:inline">
-          {isGemini ? "Gemini" : "Groq"}:
+        <Zap className={`size-3.5 shrink-0 ${isGemini ? "text-primary" : "text-orange-500"}`} />
+        <span className="font-bold text-foreground hidden md:inline uppercase">
+          {isGemini ? "GEMINI" : "GROQ"}:
         </span>
-        <span className="font-bold text-foreground truncate max-w-[120px] sm:max-w-[160px]">
+        <span className="font-black text-foreground truncate max-w-[110px] sm:max-w-[150px]">
           {activeModel}
         </span>
         <ChevronDown className="size-3 text-muted-foreground ml-0.5 shrink-0" />
@@ -224,7 +225,7 @@ export function GlobalAiSelector({ className = "", size = "default" }: Props) {
                   <Sparkles className="size-4 text-primary" />
                   <div className="text-left">
                     <div className="font-bold">Google Gemini</div>
-                    <div className="text-[10px] font-normal text-muted-foreground">3.5 Lite, 3.6, 3.7</div>
+                    <div className="text-[10px] font-normal text-muted-foreground">2.5 Flash, 2.5 Lite, 2.5 Pro</div>
                   </div>
                 </Button>
 

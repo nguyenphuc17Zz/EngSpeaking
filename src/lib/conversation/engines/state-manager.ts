@@ -27,7 +27,7 @@ export function applyStateUpdate(
     next.unresolvedThreads = next.unresolvedThreads.filter((t) => !toResolve.has(t));
     next.resolvedThreads = [...(next.resolvedThreads || []), ...upd.resolvedThreads].slice(-20);
   }
-  if (aiResponse.event) next.activeEvents.push(aiResponse.event);
+  if (aiResponse.event) next.activeEvents = [...next.activeEvents, aiResponse.event].slice(-5);
   // Character state deltas
   next.activeCharacter = { ...next.activeCharacter };
   if (aiResponse.pragmaticAct) {

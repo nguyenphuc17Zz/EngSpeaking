@@ -22,35 +22,21 @@ import {
 } from "./seed-survival";
 import { generateTabooVariations } from "./aristotelian-evaluator.engine";
 import { resolveTopicForPrompt } from "@/lib/foundation/sentence-builder/topics";
+import { buildCreativeAngleDirective, formatAntiRepetitionList } from "@/lib/ai/prompts/diversity-engine";
 import { difficultyNumberToLabel } from "./adaptive-engine";
 export {
   SEED_CIRCUMLOCUTION_TASKS,
   SEED_SURVIVAL_SCENARIOS,
 };
 
+import { cleanAiJson } from "@/lib/foundation/shared/json-parser";
+
 function cleanJson(text: string): unknown {
-  let cleaned = text.trim()
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "");
-
-  // Clean invalid assignments like "var_name = " inside arrays/objects
-  cleaned = cleaned.replace(/\b[a-zA-Z0-9_]+\s*=\s*(")/g, "$1");
-  // Clean trailing commas before closing braces/brackets
-  cleaned = cleaned.replace(/,\s*([}\]])/g, "$1");
-
+  const cleaned = cleanAiJson(text);
+  if (!cleaned) return null;
   try {
     return JSON.parse(cleaned);
   } catch {
-    const m = cleaned.match(/\{[\s\S]*\}/);
-    if (m) {
-      try {
-        const candidate = m[0]
-          .replace(/\b[a-zA-Z0-9_]+\s*=\s*(")/g, "$1")
-          .replace(/,\s*([}\]])/g, "$1");
-        return JSON.parse(candidate);
-      } catch {}
-    }
     return null;
   }
 }
@@ -68,14 +54,14 @@ export async function generateCircumlocutionTask(options: {
   forceSource?: "bank" | "ai" | "auto";
 } = {}): Promise<CircumlocutionTask> {
   const provider = options.provider || "gemini";
-  const model = options.model && options.model !== "auto" ? options.model : "gemini-3.5-flash-lite";
+  const model = options.model || "auto";
 
   const diff = options.difficulty || difficultyNumberToLabel(options.targetDifficulty ?? 5);
   const numDiff = Math.min(
     10,
     Math.max(1, Math.round(options.targetDifficulty ?? (diff === "easy" ? 3 : diff === "hard" ? 8 : 5)))
   );
-  const effectiveTopic = resolveTopicForPrompt(options.topic);
+  const effectiveTopic = resolveTopicForPrompt(options.topic, options.recentPrompts);
   const prepTimeSec = options.prepTimeSec ?? (numDiff <= 3 ? 3.0 : numDiff <= 6 ? 2.5 : 2.0);
 
   if (provider === "mock") {
@@ -107,24 +93,27 @@ export async function generateCircumlocutionTask(options: {
   }
 
   const domains = [
-    "Household & Appliances",
-    "Workplace & Office Tools",
-    "Digital Technology & Software",
-    "Travel, Flight & Luggage",
-    "Food, Cooking & Restaurant",
-    "Business & Finance Terms",
-    "Medical & Health Equipment",
-    "Social & Emotional Concepts",
+    "Household & Smart Appliances",
+    "Workplace, SaaS & Office Tools",
+    "Digital Technology & Cybersecurity",
+    "Travel, Aviation & Transit",
+    "Culinary, Dining & Specialty Equipment",
+    "Finance, Contracts & Commerce",
+    "Medical, Fitness & Biometrics",
+    "Social Dynamics & Behavioral Concepts",
+    "Architecture, Urban & Co-working Spaces",
+    "Media, Photography & Audio Gear",
   ];
   const chosenDomain = domains[Math.floor(Math.random() * domains.length)];
-  const avoidList = (options.recentPrompts || []).slice(-8).join(" | ").slice(0, 400);
+  const creativeAngle = buildCreativeAngleDirective();
+  const avoidBlock = formatAntiRepetitionList(options.recentPrompts, 12);
 
-  const userPrompt = `Generate an authentic Circumlocution Speaking task in domain "${chosenDomain}" with difficulty "${diff}" (${numDiff}/10).
-Topic grounding: "${effectiveTopic}". Invent a fresh target word fitting this topic when possible.
-Avoid repeating these recent targets: ${avoidList || "(none)"}.
-${options.recentErrors?.length ? `Learner recurring errors to reinforce: ${options.recentErrors.slice(0, 5).join(", ")}.` : ""}
-${options.pedagogicalConstraint ? `\n${options.pedagogicalConstraint}` : ""}
-The learner must describe this concept without using the forbidden target word.
+  const userPrompt = `Generate 1 Circumlocution Speaking task:
+- Domain: "${chosenDomain}" | Difficulty: "${diff}" (${numDiff}/10)
+- Topic grounding: "${effectiveTopic}" (invent a fresh, specific targetWord fitting this context)
+- ${creativeAngle}${avoidBlock}
+${options.recentErrors?.length ? `- Learner recurring errors to reinforce: ${options.recentErrors.slice(0, 5).join(", ")}.` : ""}
+${options.pedagogicalConstraint ? `- ${options.pedagogicalConstraint}` : ""}
 Set difficultyOverall=${numDiff}, topic="${effectiveTopic}", prepTimeSec=${prepTimeSec}. Return strict JSON.`;
 
   let lastErrorMsg = "";
@@ -137,8 +126,8 @@ Set difficultyOverall=${numDiff}, topic="${effectiveTopic}", prepTimeSec=${prepT
         input: {
           messages: [{ role: "user", content: userPrompt }],
           systemInstruction: CIRCUMLOCUTION_TASK_SYSTEM,
-          temperature: 0.7,
-          maxOutputTokens: 1000,
+          temperature: 0.78,
+          maxOutputTokens: 750,
         },
       });
 
@@ -188,14 +177,6 @@ Set difficultyOverall=${numDiff}, topic="${effectiveTopic}", prepTimeSec=${prepT
         parsed.tabooLemmas = Array.from(generated);
       }
 
-      // Auto-generate semanticKeyAnchors if missing
-      if (!Array.isArray(parsed.semanticKeyAnchors) || parsed.semanticKeyAnchors.length === 0) {
-        const diffWords = String(parsed.differentia || "").split(/[^a-zA-Z]+/).filter((w) => w.length >= 4);
-        const starterWords = String(hObj.starterHint || "").split(/[^a-zA-Z]+/).filter((w) => w.length >= 4);
-        const combined = Array.from(new Set([...diffWords, ...starterWords])).slice(0, 5);
-        parsed.semanticKeyAnchors = combined.length > 0 ? combined : ["use", "item", "function"];
-      }
-
       parsed.difficulty = diff;
       parsed.difficultyOverall = numDiff;
       parsed.topic = typeof parsed.topic === "string" && parsed.topic ? parsed.topic : effectiveTopic;
@@ -232,8 +213,11 @@ Set difficultyOverall=${numDiff}, topic="${effectiveTopic}", prepTimeSec=${prepT
 
       // Sanitize semanticKeyAnchors
       if (!Array.isArray(parsed.semanticKeyAnchors) || parsed.semanticKeyAnchors.length === 0) {
-        const words = `${parsed.genus} ${parsed.differentia}`.toLowerCase().split(/\W+/).filter((w) => w.length > 3);
-        parsed.semanticKeyAnchors = words.slice(0, 5);
+        const diffWords = String(parsed.differentia || "").split(/[^a-zA-Z]+/).filter((w) => w.length >= 4);
+        const starterWords = String(hObj.starterHint || "").split(/[^a-zA-Z]+/).filter((w) => w.length >= 4);
+        const genusWords = `${parsed.genus} ${parsed.differentia}`.toLowerCase().split(/\W+/).filter((w) => w.length > 3);
+        const combined = Array.from(new Set([...diffWords, ...starterWords, ...genusWords])).slice(0, 5);
+        parsed.semanticKeyAnchors = combined.length > 0 ? combined : ["use", "item", "function"];
       }
 
       // Sanitize suggestedVocabulary
@@ -312,10 +296,10 @@ export async function generateSurvivalScenarioTask(options: {
   forceSource?: "bank" | "ai" | "auto";
 } = {}): Promise<SurvivalScenarioTask> {
   const provider = options.provider || "gemini";
-  const model = options.model && options.model !== "auto" ? options.model : "gemini-3.5-flash-lite";
+  const model = options.model || "auto";
 
   const numDiff = Math.min(10, Math.max(1, Math.round(options.targetDifficulty ?? 5)));
-  const effectiveTopic = resolveTopicForPrompt(options.topic);
+  const effectiveTopic = resolveTopicForPrompt(options.topic, options.recentPrompts);
   const prepTimeSec = options.prepTimeSec ?? (numDiff <= 3 ? 2.5 : numDiff <= 6 ? 2.0 : 1.5);
 
   if (provider === "mock") {
@@ -338,7 +322,7 @@ export async function generateSurvivalScenarioTask(options: {
   if (options.forceSource !== "ai") {
     const bankSample = await sampleBankTask<SurvivalScenarioTask>({
       module: "survival_scenario",
-      topic: options.context,
+      topic: options.context || options.topic,
       forceSource: options.forceSource,
     });
 
@@ -351,21 +335,24 @@ export async function generateSurvivalScenarioTask(options: {
   const contexts = [
     "Job Interview (interviewer speaks too fast or uses tough terminology)",
     "Workplace & Team Meeting (boss asks unexpected opinion on budget/strategy)",
-    "Client Presentation (client asks tricky question or disagrees)",
-    "Airport & Immigration (officer asks for unexpected paperwork)",
-    "Restaurant & Dining (wrong order or bill dispute)",
-    "Technical Discussion (complex technical term you forgot)",
-    "Phone & Video Call (audio cutting out, need 5 seconds to find info)",
+    "Client Presentation (client challenges a metric or interrupts)",
+    "Airport, Customs & Transit (agent asks for unexpected documentation)",
+    "Restaurant, Hotel & Service Dispute (wrong order, billing error, or booking mix-up)",
+    "Live Technical Demo (system glitches mid-demo or forgotten terminology)",
+    "Remote Video Call (audio drops out during a critical question)",
+    "Cross-Cultural Negotiation (counterpart uses an unfamiliar idiom or rapid-fire follow-up)",
   ];
   const chosenContext = options.context || contexts[Math.floor(Math.random() * contexts.length)];
-  const avoidList = (options.recentPrompts || []).slice(-8).join(" | ").slice(0, 400);
+  const creativeAngle = buildCreativeAngleDirective();
+  const avoidBlock = formatAntiRepetitionList(options.recentPrompts, 12);
 
-  const userPrompt = `Generate an authentic Real-Life Survival Communication Scenario in context: "${chosenContext}" (${numDiff}/10).
-Topic grounding: "${effectiveTopic}". Prefer a fresh situation fitting this topic.
-Avoid repeating these recent prompts: ${avoidList || "(none)"}.
-${options.recentErrors?.length ? `Learner recurring errors to reinforce: ${options.recentErrors.slice(0, 5).join(", ")}.` : ""}
-${options.pedagogicalConstraint ? `\n${options.pedagogicalConstraint}` : ""}
-Create a real problem where the speaker must immediately react and repair the conversation within 5 seconds.
+  const userPrompt = `Generate 1 Real-Life Survival Communication Scenario:
+- Context: "${chosenContext}" | Difficulty: ${numDiff}/10
+- Topic grounding: "${effectiveTopic}"
+- ${creativeAngle}${avoidBlock}
+${options.recentErrors?.length ? `- Learner recurring errors to reinforce: ${options.recentErrors.slice(0, 5).join(", ")}.` : ""}
+${options.pedagogicalConstraint ? `- ${options.pedagogicalConstraint}` : ""}
+Create an urgent conversational moment where the learner must immediately react and repair communication within 5 seconds.
 Set difficultyOverall=${numDiff}, topic="${effectiveTopic}", prepTimeSec=${prepTimeSec}. Return strict JSON.`;
 
   let lastErrorMsg = "";
@@ -378,8 +365,8 @@ Set difficultyOverall=${numDiff}, topic="${effectiveTopic}", prepTimeSec=${prepT
         input: {
           messages: [{ role: "user", content: userPrompt }],
           systemInstruction: SURVIVAL_SCENARIO_SYSTEM,
-          temperature: 0.7,
-          maxOutputTokens: 1000,
+          temperature: 0.78,
+          maxOutputTokens: 750,
         },
       });
 
@@ -402,15 +389,27 @@ Set difficultyOverall=${numDiff}, topic="${effectiveTopic}", prepTimeSec=${prepT
         parsed.skills = [String(parsed.recommendedSkill || "buying_time"), "spoken_retrieval"];
       }
 
-      // Sanitize 5-tier hints (aligned with SB/VN-EN)
+      // Deterministically hydrate 5-tier hints
       const penaltyByTier = [0, 0.1, 0.25, 0.5, 0.85];
+      const strategyCue =
+        typeof parsed.strategyCueVi === "string" && parsed.strategyCueVi.trim()
+          ? parsed.strategyCueVi.trim()
+          : "Dùng câu đệm xin nhắc lại hoặc câu giờ lịch sự để làm rõ ý.";
+      const primaryPhrase = phrases[0] || "Sorry, I didn't catch that. Could you say it again?";
+      const phraseWords = primaryPhrase.split(/\s+/).filter(Boolean);
+      const opener = phraseWords.slice(0, Math.min(4, phraseWords.length)).join(" ") + "...";
+      const skeleton =
+        phraseWords.length >= 4
+          ? phraseWords.map((w, idx) => (idx >= Math.floor(phraseWords.length * 0.45) && idx < phraseWords.length - 1 ? "______" : w)).join(" ")
+          : `${primaryPhrase.slice(0, 20)} ______ ?`;
+
       if (!Array.isArray(parsed.tierHints) || parsed.tierHints.length === 0) {
         parsed.tierHints = [
           { tier: 0, title: "Không gợi ý", content: "Tự phản xạ và xử lý tình huống ngay lập tức.", penaltyWeight: 0 },
-          { tier: 1, title: "Chiến lược", content: "Dùng câu đệm xin nhắc lại hoặc làm rõ ý.", penaltyWeight: 0.1 },
-          { tier: 2, title: "Cụm từ cứu cánh", content: phrases[0] ? `${phrases[0].slice(0, 20)}...` : "Could you...", penaltyWeight: 0.25 },
-          { tier: 3, title: "Khung câu ứng biến", content: phrases[0] ? `${phrases[0].slice(0, 30)} ______ ?` : "Could you ______ ?", penaltyWeight: 0.5 },
-          { tier: 4, title: "Câu mẫu", content: phrases[0] || "Sorry, I didn't catch that. Could you say it again?", penaltyWeight: 0.85 },
+          { tier: 1, title: "Chiến lược", content: strategyCue, penaltyWeight: 0.1 },
+          { tier: 2, title: "Cụm từ cứu cánh", content: opener, penaltyWeight: 0.25 },
+          { tier: 3, title: "Khung câu ứng biến", content: skeleton, penaltyWeight: 0.5 },
+          { tier: 4, title: "Câu mẫu", content: primaryPhrase, penaltyWeight: 0.85 },
         ];
       } else {
         parsed.tierHints = (parsed.tierHints as any[]).map((h: any) => ({

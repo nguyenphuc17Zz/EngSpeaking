@@ -97,6 +97,7 @@ interface ConvStore {
   setThinking: (v: boolean) => void;
   setGeneratingWorld: (v: boolean) => void;
   pushEvent: (e: DynamicEvent) => void;
+  updateTurnPedagogy: (turnId: string, pedagogy: ConversationTurn["pedagogy"]) => void;
   reset: () => void;
 
   // SB/VN-EN/Survival/Drill aligned session model
@@ -145,28 +146,94 @@ export const useConversationStore = create<ConvStore>()(
       setSummary: (summary) => set({ summary }),
       setTurns: (turns) => set({ turns }),
       addTurn: (t) => {
-        const { sessionHistory, attemptCount } = get();
-        set((s) => ({ turns: [...s.turns, t] }));
-        if (t.role === "user") {
+        set((s) => {
+          const nextTurns = [...s.turns, t];
+          if (t.role !== "user") {
+            return { turns: nextTurns };
+          }
           const entry: ConversationTurnHistoryEntry = {
             turn: t,
             evaluationSource: t.pedagogy?.evaluationSource,
-            attemptsCount: t.pedagogy?.attemptNumber ?? attemptCount,
+            attemptsCount: t.pedagogy?.attemptNumber ?? s.attemptCount,
           };
-          set({ sessionHistory: [...sessionHistory, entry] });
-          // Adaptive + mastery per user turn (aligned SB/VN/Survival/Drill)
+          const nextHistory = [...s.sessionHistory, entry];
+          const nextCompleted = nextTurns.filter((turn) => turn.role === "user").length;
+          let nextAdaptive = s.adaptiveState;
+          let nextMastery = s.skillMastery;
+          if (t.pedagogy?.turnScore !== undefined) {
+            try {
+              const scenarioDifficulty = s.world?.scenario.difficulty ?? 5;
+              nextAdaptive = updateConversationAdaptiveProgression(
+                s.adaptiveState,
+                t.pedagogy,
+                scenarioDifficulty
+              );
+              nextMastery = updateConversationMastery(s.skillMastery, t.pedagogy);
+            } catch {}
+          }
+          return {
+            turns: nextTurns,
+            sessionHistory: nextHistory,
+            completedTurnsCount: nextCompleted,
+            adaptiveState: nextAdaptive,
+            skillMastery: nextMastery,
+          };
+        });
+      },
+      updateTurnPedagogy: (turnId, pedagogy) => {
+        set((s) => {
+          let updatedTurn: ConversationTurn | null = null;
+          const nextTurns = s.turns.map((t) => {
+            if (t.id !== turnId) return t;
+            const mergedPedagogy: ConversationTurn["pedagogy"] = {
+              ...t.pedagogy,
+              ...pedagogy,
+            };
+            updatedTurn = { ...t, pedagogy: mergedPedagogy };
+            return updatedTurn;
+          });
+          if (!updatedTurn) return {};
+          const finalTurn = updatedTurn as ConversationTurn;
+          const hasInHistory = s.sessionHistory.some((h) => h.turn.id === turnId);
+          const nextHistory: ConversationTurnHistoryEntry[] = hasInHistory
+            ? s.sessionHistory.map((h) =>
+                h.turn.id === turnId
+                  ? {
+                      ...h,
+                      turn: finalTurn,
+                      evaluationSource: finalTurn.pedagogy?.evaluationSource ?? h.evaluationSource,
+                      attemptsCount: finalTurn.pedagogy?.attemptNumber ?? h.attemptsCount,
+                    }
+                  : h
+              )
+            : [
+                ...s.sessionHistory,
+                {
+                  turn: finalTurn,
+                  evaluationSource: finalTurn.pedagogy?.evaluationSource,
+                  attemptsCount: finalTurn.pedagogy?.attemptNumber ?? s.attemptCount,
+                },
+              ];
+          const nextCompleted = nextTurns.filter((t) => t.role === "user").length;
+          let nextAdaptive = s.adaptiveState;
+          let nextMastery = s.skillMastery;
           try {
-            const { adaptiveState, skillMastery } = get();
-            const scenarioDifficulty = get().world?.scenario.difficulty ?? 5;
-            const updatedAdaptive = updateConversationAdaptiveProgression(
-              adaptiveState,
-              t.pedagogy || {},
+            const scenarioDifficulty = s.world?.scenario.difficulty ?? 5;
+            nextAdaptive = updateConversationAdaptiveProgression(
+              s.adaptiveState,
+              finalTurn.pedagogy || {},
               scenarioDifficulty
             );
-            const updatedMastery = updateConversationMastery(skillMastery, t.pedagogy || {});
-            set({ adaptiveState: updatedAdaptive, skillMastery: updatedMastery });
+            nextMastery = updateConversationMastery(s.skillMastery, finalTurn.pedagogy || {});
           } catch {}
-        }
+          return {
+            turns: nextTurns,
+            sessionHistory: nextHistory,
+            completedTurnsCount: nextCompleted,
+            adaptiveState: nextAdaptive,
+            skillMastery: nextMastery,
+          };
+        });
       },
       setThinking: (isThinking) => set({ isThinking }),
       setGeneratingWorld: (isGeneratingWorld) => set({ isGeneratingWorld }),
@@ -256,7 +323,25 @@ export const useConversationStore = create<ConvStore>()(
         get().addTurn(turn);
       },
     }),
-    { name: "conversation_store", version: 3, partialize: (s) => ({ world: s.world, summary: s.summary, turns: s.turns.slice(-20), activeEvents: s.activeEvents, skillMastery: s.skillMastery, adaptiveState: s.adaptiveState, autoStartMic: s.autoStartMic, selectedTopicId: s.selectedTopicId, customTopicText: s.customTopicText, sessionMode: s.sessionMode, sessionConfig: s.sessionConfig }),
+    {
+      name: "conversation_store",
+      version: 3,
+      partialize: (s) => ({
+        world: s.world,
+        summary: s.summary,
+        turns: s.turns.slice(-20),
+        activeEvents: s.activeEvents,
+        skillMastery: s.skillMastery,
+        adaptiveState: s.adaptiveState,
+        autoStartMic: s.autoStartMic,
+        selectedTopicId: s.selectedTopicId,
+        customTopicText: s.customTopicText,
+        sessionMode: s.sessionMode,
+        sessionConfig: s.sessionConfig,
+        sessionHistory: s.sessionHistory.slice(-20),
+        sessionStartedAt: s.sessionStartedAt,
+        completedTurnsCount: s.completedTurnsCount,
+      }),
       migrate: (persisted, version) => {
         if ((version as number) < 3) {
           return { ...(persisted as ConvStore), world: null, summary: null, activeEvents: [] } as ConvStore;

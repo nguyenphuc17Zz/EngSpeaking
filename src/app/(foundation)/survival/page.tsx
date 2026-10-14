@@ -59,7 +59,6 @@ import { useSurvivalStore } from "@/stores/survival-store";
 import { useUnifiedSTT } from "@/hooks/useUnifiedSTT";
 import { useBrowserTTS } from "@/hooks/useBrowserTTS";
 import { soundEffects } from "@/lib/audio/audio-chimes";
-import { GlobalAiSelector } from "@/components/common/GlobalAiSelector";
 import { SpeakingController } from "@/components/foundation/sentence-builder/SpeakingController";
 
 import { SurvivalPromptCard } from "@/components/foundation/survival/SurvivalPromptCard";
@@ -133,6 +132,7 @@ export default function SurvivalSpeakingPage() {
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
   const durationTimerRef = useRef<NodeJS.Timeout | null>(null);
   const prepTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isSubmittingRef = useRef(false);
 
   // Zero-Lobby: auto init endless session (chuẩn SB/VN-EN)
   useEffect(() => {
@@ -147,41 +147,27 @@ export default function SurvivalSpeakingPage() {
     }
   }, [selectedTopicId, customTopicText]);
 
-  // Challenge countdown + reset mic on task switch (giữ time-limit 5s cũ)
+  // Reset mic & prompt display time on task switch
   useEffect(() => {
     setPromptDisplayTime(Date.now());
-    setCountdownSeconds(5);
     setPendingSpokenText(null);
     if (unifiedSTTRef.current.isListening) {
       unifiedSTTRef.current.stopListening().catch(() => {});
     }
-
-    if (countdownRef.current) clearInterval(countdownRef.current);
-    countdownRef.current = setInterval(() => {
-      setCountdownSeconds((prev) => {
-        if (prev <= 1) {
-          if (countdownRef.current) clearInterval(countdownRef.current);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => {
-      if (countdownRef.current) clearInterval(countdownRef.current);
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentCircumTask?.id, currentScenarioTask?.id]);
 
-  // Prep countdown for auto-start mic (chuẩn SB/VN-EN)
+  // Unified countdown timer (prepCountdown when autoStartMic is true, 5s challenge countdown otherwise)
   useEffect(() => {
+    if (prepTimerRef.current) clearInterval(prepTimerRef.current);
+    if (countdownRef.current) clearInterval(countdownRef.current);
+
     if (!currentTask || lastEvaluation || isSessionCompleted) {
-      if (prepTimerRef.current) clearInterval(prepTimerRef.current);
       setIsCountingDown(false);
       setPrepCountdown(null);
       return;
     }
-    if (prepTimerRef.current) clearInterval(prepTimerRef.current);
+
     if (autoStartMic) {
       setIsCountingDown(true);
       const prepSec = Math.round(
@@ -189,23 +175,38 @@ export default function SurvivalSpeakingPage() {
       );
       let count = Math.max(1, prepSec);
       setPrepCountdown(count);
+      setCountdownSeconds(count);
       prepTimerRef.current = setInterval(() => {
         count -= 1;
         if (count <= 0) {
           if (prepTimerRef.current) clearInterval(prepTimerRef.current);
           setIsCountingDown(false);
           setPrepCountdown(null);
+          setCountdownSeconds(0);
           handleStartRecordRef.current();
         } else {
           setPrepCountdown(count);
+          setCountdownSeconds(count);
         }
       }, 1000);
     } else {
       setIsCountingDown(false);
       setPrepCountdown(null);
+      setCountdownSeconds(5);
+      countdownRef.current = setInterval(() => {
+        setCountdownSeconds((prev) => {
+          if (prev <= 1) {
+            if (countdownRef.current) clearInterval(countdownRef.current);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
     }
+
     return () => {
       if (prepTimerRef.current) clearInterval(prepTimerRef.current);
+      if (countdownRef.current) clearInterval(countdownRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTask?.id, autoStartMic, lastEvaluation, isSessionCompleted]);
@@ -340,9 +341,14 @@ export default function SurvivalSpeakingPage() {
   }, [recordingStartTime]);
 
   const handleConfirmSubmit = useCallback(async () => {
-    if (!pendingSpokenText) return;
+    if (!pendingSpokenText || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     const measuredLatency = Math.max(500, recordingStartTime - promptDisplayTime);
-    await executeEvaluation(pendingSpokenText, measuredLatency, pendingDurationMs);
+    try {
+      await executeEvaluation(pendingSpokenText, measuredLatency, pendingDurationMs);
+    } finally {
+      isSubmittingRef.current = false;
+    }
   }, [pendingSpokenText, pendingDurationMs, recordingStartTime, promptDisplayTime, executeEvaluation]);
 
   const handleReRecord = useCallback(() => {
@@ -439,20 +445,20 @@ export default function SurvivalSpeakingPage() {
         e.preventDefault();
         handleContinueRef.current();
       } else if (e.code === "Enter") {
-        if (pendingSpokenText && !isEvaluating) {
-          e.preventDefault();
-          handleConfirmSubmitRef.current();
-        } else if (lastEvaluation) {
+        if (lastEvaluation) {
           e.preventDefault();
           handleContinueRef.current();
         }
       } else if (e.code === "Escape") {
-        if (isSummaryOpen) {
-          e.preventDefault();
+        e.preventDefault();
+        if (isTopicModalOpen) {
+          setIsTopicModalOpen(false);
+        } else if (isSummaryOpen) {
           setIsSummaryOpen(false);
         } else if (hintTier > 0) {
-          e.preventDefault();
           setHintTier(0);
+        } else {
+          handleExitStudio();
         }
       }
     };
@@ -465,6 +471,7 @@ export default function SurvivalSpeakingPage() {
     isGenerating,
     lastEvaluation,
     pendingSpokenText,
+    isTopicModalOpen,
     isSummaryOpen,
     hintTier,
     setHintTier,
@@ -525,63 +532,65 @@ export default function SurvivalSpeakingPage() {
   }
 
   return (
-    <div className="w-full h-full max-h-[calc(100vh-5.5rem)] flex flex-col justify-between overflow-hidden rounded-3xl border border-border/80 bg-card p-2.5 sm:p-3.5 shadow-xs animate-in fade-in-0 duration-200">
-      {/* Top Header Bar (chuẩn SB/VN-EN) */}
-      <header className="flex items-center justify-between gap-3 border-b border-border/40 pb-2.5 shrink-0">
-        <div className="flex items-center gap-2.5">
-          <Button
-            variant="ghost"
-            size="sm"
+    <div className="w-full h-full max-h-[calc(100vh-5rem)] flex flex-col justify-between overflow-hidden rounded-none border-2 border-border bg-card p-2.5 sm:p-3.5 shadow-[4px_4px_0px_var(--industrial-shadow-color)] animate-in fade-in-0 duration-200">
+      {/* Top Header Bar (JapSpeak CombatCapsuleHUD Style) */}
+      <header className="flex flex-wrap items-center justify-between gap-2.5 border-b-2 border-border pb-2.5 shrink-0">
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
+          <button
+            type="button"
             onClick={handleExitStudio}
-            className="size-8 p-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
-            title="Thoát phiên luyện tập"
+            className="size-8 shrink-0 bg-foreground text-background hover:bg-primary hover:text-primary-foreground border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] flex items-center justify-center transition-colors cursor-pointer"
+            title="Thoát phiên luyện tập [ESC]"
           >
-            <X className="size-4" />
-          </Button>
+            <X className="size-4 stroke-[2.5]" />
+          </button>
 
-          <div className="flex items-center gap-2">
-            <div className="size-7 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
-              <ShieldAlert className="size-4" />
-            </div>
-            <span className="text-xs md:text-sm font-bold tracking-tight text-foreground hidden sm:inline">
-              Survival Speaking
+          <span className="px-2 py-1 bg-primary text-primary-foreground font-mono text-[10px] font-extrabold border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] uppercase tracking-wider shrink-0">
+            LAB-06 // SURVIVE
+          </span>
+
+          <span className="text-xs md:text-sm font-serif font-extrabold uppercase tracking-tight text-foreground hidden sm:inline">
+            Survival Speaking
+          </span>
+
+          <button
+            type="button"
+            onClick={() => setIsTopicModalOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-accent text-accent-foreground hover:bg-primary hover:text-primary-foreground border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] text-xs font-mono font-extrabold transition-all cursor-pointer group max-w-[200px] sm:max-w-[260px] truncate"
+            title="Bấm để đổi chủ đề luyện tập"
+          >
+            <Compass className="size-3.5 shrink-0 stroke-[2.5] group-hover:rotate-45 transition-transform" />
+            <span className="truncate">
+              {getTopicDisplay(currentTask?.topic || selectedTopicId).label}
             </span>
+            <ChevronDown className="size-3.5 shrink-0 ml-0.5 stroke-[2.5]" />
+          </button>
+
+          {/* Mode Switcher */}
+          <div className="flex items-center border-2 border-border bg-secondary p-0.5 shadow-[2px_2px_0px_var(--industrial-shadow-color)]">
             <button
               type="button"
-              onClick={() => setIsTopicModalOpen(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 hover:bg-primary/20 border border-primary/30 text-foreground text-xs font-mono transition-all cursor-pointer group max-w-[200px] sm:max-w-[260px] truncate"
-              title="Bấm để đổi chủ đề luyện tập"
-            >
-              <Compass className="size-3 text-primary shrink-0 group-hover:rotate-45 transition-transform" />
-              <span className="truncate font-medium">{getTopicDisplay(currentTask?.topic || selectedTopicId).label}</span>
-              <ChevronDown className="size-3 text-muted-foreground shrink-0 ml-0.5" />
-            </button>
-            <GlobalAiSelector size="sm" />
-          </div>
-
-          {/* Mode Switcher (giữ 2 mode riêng) */}
-          <div className="hidden md:flex items-center bg-muted/60 p-0.5 rounded-xl border border-border/60">
-            <button
               onClick={() => {
                 setMode("circumlocution");
                 setPendingSpokenText(null);
               }}
-              className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-all ${
+              className={`text-[10px] sm:text-xs px-2.5 py-0.5 font-mono font-extrabold uppercase transition-all cursor-pointer ${
                 mode === "circumlocution"
-                  ? "bg-primary text-primary-foreground shadow-2xs"
+                  ? "bg-primary text-primary-foreground border border-border"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
               Circumlocution
             </button>
             <button
+              type="button"
               onClick={() => {
                 setMode("scenarios");
                 setPendingSpokenText(null);
               }}
-              className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-all ${
+              className={`text-[10px] sm:text-xs px-2.5 py-0.5 font-mono font-extrabold uppercase transition-all cursor-pointer ${
                 mode === "scenarios"
-                  ? "bg-primary text-primary-foreground shadow-2xs"
+                  ? "bg-primary text-primary-foreground border border-border"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -590,37 +599,33 @@ export default function SurvivalSpeakingPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2 shrink-0">
           <Button
             variant="outline"
             size="sm"
             onClick={handleContinue}
             disabled={isGenerating || isEvaluating}
-            className="h-8 px-2.5 rounded-xl font-bold text-xs gap-1.5 border-primary/40 bg-primary/5 hover:bg-primary hover:text-primary-foreground text-primary transition-all shadow-2xs btn-spring"
+            className="h-8 px-2.5 font-mono font-extrabold text-xs gap-1.5 border-2 border-border bg-secondary hover:bg-accent hover:text-accent-foreground text-foreground shadow-[2px_2px_0px_var(--industrial-shadow-color)] transition-all"
             title="Thử thách tiếp theo (Phím R)"
           >
-            <Sparkles className={`size-3.5 ${isGenerating ? "animate-spin" : ""}`} />
-            <span>Tiếp [R]</span>
+            <Sparkles className={`size-3.5 text-primary ${isGenerating ? "animate-spin" : ""}`} />
+            <span>TIẾP</span>
+            <kbd className="hidden sm:inline-flex">R</kbd>
           </Button>
 
           {skillMastery.streakCount > 1 && (
-            <div className="hidden sm:flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[11px] font-mono font-bold">
-              <Flame className="size-3" />
-              <span>Streak {skillMastery.streakCount}</span>
+            <div className="hidden sm:flex items-center gap-1 px-2 py-1 bg-[#FFB800] text-[#0D0E0D] border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] text-[10px] font-mono font-extrabold uppercase">
+              <Flame className="size-3 fill-current" />
+              <span>STREAK {skillMastery.streakCount}</span>
             </div>
           )}
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono font-bold text-foreground">
+          <div className="hidden md:flex items-center gap-1.5 px-2 py-1 bg-secondary border-2 border-border font-mono text-[10px] font-extrabold text-foreground">
+            <span>
               {sessionConfig.mode === "endless"
-                ? `Thử thách #${currentTaskIndex + 1}`
+                ? `#${currentTaskIndex + 1} · DONE: ${completedTasksCount}`
                 : `${currentTaskIndex + 1}/${sessionConfig.targetCount}`}
             </span>
-            {sessionConfig.mode === "endless" && (
-              <Badge variant="outline" className="text-[10px] font-mono border-primary/30 text-primary">
-                Đã xong {completedTasksCount}
-              </Badge>
-            )}
           </div>
 
           <Button
@@ -628,32 +633,14 @@ export default function SurvivalSpeakingPage() {
             size="sm"
             onClick={handleFinishSession}
             disabled={isGenerating || isEvaluating}
-            className="h-8 px-2.5 rounded-xl font-bold text-xs gap-1.5 border-amber-500/40 bg-amber-500/10 hover:bg-amber-500 hover:text-white text-amber-600 dark:text-amber-400 transition-all shadow-2xs btn-spring"
+            className="h-8 px-2.5 font-mono font-extrabold text-xs gap-1.5 border-2 border-border bg-foreground text-background hover:bg-primary hover:text-primary-foreground shadow-[2px_2px_0px_var(--industrial-shadow-color)] transition-all"
             title="Kết thúc buổi tập và xem báo cáo"
           >
-            <Trophy className="size-3.5" />
-            <span className="hidden sm:inline">Kết thúc</span>
+            <Trophy className="size-3.5 text-accent" />
+            <span className="hidden sm:inline">KẾT THÚC</span>
           </Button>
         </div>
       </header>
-
-      {/* Mobile mode switcher */}
-      <div className="flex md:hidden items-center gap-2 pt-2 shrink-0">
-        <div className="flex items-center bg-muted/60 p-0.5 rounded-xl border border-border/60 w-full">
-          <button
-            onClick={() => setMode("circumlocution")}
-            className={`flex-1 text-xs px-2 py-1 rounded-lg font-bold ${mode === "circumlocution" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-          >
-            Circumlocution
-          </button>
-          <button
-            onClick={() => setMode("scenarios")}
-            className={`flex-1 text-xs px-2 py-1 rounded-lg font-bold ${mode === "scenarios" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-          >
-            Scenarios
-          </button>
-        </div>
-      </div>
 
       {/* Main Studio Body: 3-Column */}
       <main className="flex-1 min-h-0 p-2 sm:p-2.5 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-2.5 lg:gap-3">
@@ -724,33 +711,45 @@ export default function SurvivalSpeakingPage() {
         </div>
       </main>
 
-      {/* Bottom Footer Dock (chuẩn SB/VN-EN) */}
-      <footer className="flex items-center justify-between border-t border-border/40 pt-1.5 shrink-0 text-[11px] font-mono text-muted-foreground">
-        <div className="flex items-center gap-3 overflow-x-auto">
-          <span>[Space]: {lastEvaluation ? "Nói lại" : pendingSpokenText ? "Thu âm lại" : "Thu âm/Dừng"}</span>
-          <span>•</span>
-          <span>[Backspace]: Xoá nói lại</span>
-          <span>•</span>
-          <span>[H]: Gợi ý ({hintTier}/4)</span>
-          <span>•</span>
-          <span>[R]: Tiếp theo</span>
+      {/* Bottom Footer Dock (JapSpeak Mechanical Keycaps Style) */}
+      <footer className="flex flex-wrap items-center justify-between gap-2 border-t-2 border-border pt-2 shrink-0 text-[10px] font-mono font-extrabold text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="flex items-center gap-1">
+            <kbd>SPACE</kbd>
+            <span>{lastEvaluation ? "NÓI LẠI" : pendingSpokenText ? "THU LẠI" : "THU ÂM/DỪNG"}</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <kbd>BKSP</kbd>
+            <span>XOÁ NÓI LẠI</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <kbd>H</kbd>
+            <span>GỢI Ý (T{hintTier}/4)</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <kbd>R</kbd>
+            <span>ĐỔI BÀI</span>
+          </span>
           {pendingSpokenText && !isEvaluating && (
-            <>
-              <span>•</span>
-              <span className="text-primary font-bold">[Enter]: Nộp bài</span>
-            </>
+            <span className="flex items-center gap-1 text-primary">
+              <kbd>ENTER</kbd>
+              <span>NỘP BÀI</span>
+            </span>
           )}
           {lastEvaluation && (
-            <>
-              <span>•</span>
-              <span className="text-primary font-bold">[Enter]: Tiếp tục</span>
-            </>
+            <span className="flex items-center gap-1 text-primary">
+              <kbd>ENTER</kbd>
+              <span>BÀI MỚI</span>
+            </span>
           )}
         </div>
-        <div className="hidden sm:flex items-center gap-2 shrink-0">
-          <span>Mastery: {skillMastery.overallMastery}%</span>
-          <span>·</span>
-          <span>Độ khó: {adaptiveState.currentDifficulty}/10</span>
+        <div className="flex items-center gap-2">
+          <span className="px-2 py-0.5 bg-secondary text-foreground border border-border">
+            MASTERY: {skillMastery.overallMastery}%
+          </span>
+          <span className="px-2 py-0.5 bg-secondary text-foreground border border-border hidden sm:inline">
+            LVL {adaptiveState.currentDifficulty}/10
+          </span>
         </div>
       </footer>
 

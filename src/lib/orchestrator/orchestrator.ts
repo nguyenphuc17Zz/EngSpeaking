@@ -117,34 +117,51 @@ export class AIOrchestrator {
       // 6. Normalize & Validate §39-41
       let output: T;
       if (req.responseSchema) {
+        const schema = req.responseSchema as { safeParse?: (v: unknown) => { success: boolean; data?: unknown; error?: unknown } };
+        const validateWithSchema = (candidate: unknown): { ok: true; data: T } | { ok: false; errorMsg: string } => {
+          if (candidate == null) return { ok: false, errorMsg: "Invalid JSON" };
+          if (schema && typeof schema.safeParse === "function") {
+            const parsed = schema.safeParse(candidate);
+            if (!parsed.success) {
+              return { ok: false, errorMsg: String(parsed.error || "Schema validation failed").slice(0, 300) };
+            }
+            return { ok: true, data: parsed.data as T };
+          }
+          return { ok: true, data: candidate as T };
+        };
+
         const json = extractJson(resultText || "");
-        if (json == null) {
+        const initialValidation = validateWithSchema(json);
+        if (!initialValidation.ok) {
           const repairRes = await withRetry(async () => {
             const provider = createProvider(providerId)!;
             const repair = await provider.generateText({
-              messages: [{ role: "user", content: repairPrompt("Invalid JSON", JSON.stringify(req.responseSchema).slice(0, 500)) }],
+              messages: [
+                {
+                  role: "user",
+                  content: repairPrompt(
+                    initialValidation.errorMsg,
+                    "Return ONLY valid JSON matching the requested schema, no markdown.",
+                    resultText || ""
+                  ),
+                },
+              ],
               systemInstruction: systemInstruction,
               model: modelId,
               temperature: 0.2,
-              maxOutputTokens: 500,
+              maxOutputTokens: req.constraints?.maxOutputTokens || 800,
             });
-            const j = extractJson(repair.text);
-            if (!j) throw new Error("Repair failed");
-            return j as T;
+            const repairedJson = extractJson(repair.text);
+            const repairedValidation = validateWithSchema(repairedJson);
+            if (!repairedValidation.ok) {
+              throw new Error(repairedValidation.errorMsg);
+            }
+            return repairedValidation.data;
           }, 1, () => false);
           if ("error" in repairRes) throw new VoiceEngineError({ code: VoiceErrorCode.INVALID_PROVIDER_RESPONSE, message: "Invalid structured output", provider: providerId });
           output = (repairRes as { result: T }).result;
         } else {
-          const schema = req.responseSchema as { safeParse?: (v: unknown) => { success: boolean; data?: unknown; error?: unknown } };
-          if (schema.safeParse) {
-            const parsed = schema.safeParse(json);
-            if (!parsed.success) {
-              throw new VoiceEngineError({ code: VoiceErrorCode.INVALID_PROVIDER_RESPONSE, message: "Schema validation failed", provider: providerId });
-            }
-            output = parsed.data as T;
-          } else {
-            output = json as T;
-          }
+          output = initialValidation.data;
         }
       } else {
         output = (resultText as unknown) as T;

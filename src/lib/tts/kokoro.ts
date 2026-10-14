@@ -69,7 +69,8 @@ export const DEFAULT_KOKORO_VOICE = "af_heart";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let kokoroModelInstance: any = null;
-let isInitializing = false;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let kokoroInitPromise: Promise<any> | null = null;
 
 /**
  * Khởi tạo hoặc lấy instance KokoroTTS nạp từ thư mục models/tts/kokoro/
@@ -77,34 +78,34 @@ let isInitializing = false;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getKokoroTTSInstance(): Promise<any> {
   if (kokoroModelInstance) return kokoroModelInstance;
-  if (isInitializing) {
-    while (isInitializing) {
-      await new Promise((r) => setTimeout(r, 100));
+  if (kokoroInitPromise) return kokoroInitPromise;
+
+  kokoroInitPromise = (async () => {
+    try {
+      const { KokoroTTS } = require("kokoro-js");
+      const { env } = require("@huggingface/transformers");
+
+      // Cấu hình cache thư mục models/tts/kokoro của project
+      const localModelsDir = path.join(process.cwd(), "models", "tts", "kokoro");
+      env.cacheDir = localModelsDir;
+
+      const instance = await KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-ONNX", {
+        dtype: "q8",
+        device: "cpu",
+        cache_dir: localModelsDir,
+      });
+
+      kokoroModelInstance = instance;
+      return instance;
+    } catch (err) {
+      logger.error({ action: "kokoro_init_error", error: err instanceof Error ? err.message : String(err) });
+      throw err;
+    } finally {
+      kokoroInitPromise = null;
     }
-    if (kokoroModelInstance) return kokoroModelInstance;
-  }
+  })();
 
-  isInitializing = true;
-  try {
-    const { KokoroTTS } = require("kokoro-js");
-    const { env } = require("@huggingface/transformers");
-
-    // Cấu hình cache thư mục models/tts/kokoro của project
-    const localModelsDir = path.join(process.cwd(), "models", "tts", "kokoro");
-    env.cacheDir = localModelsDir;
-
-    kokoroModelInstance = await KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-ONNX", {
-      dtype: "q8",
-      device: "cpu",
-    });
-
-    return kokoroModelInstance;
-  } catch (err) {
-    logger.error({ action: "kokoro_init_error", error: err instanceof Error ? err.message : String(err) });
-    throw err;
-  } finally {
-    isInitializing = false;
-  }
+  return kokoroInitPromise;
 }
 
 /**

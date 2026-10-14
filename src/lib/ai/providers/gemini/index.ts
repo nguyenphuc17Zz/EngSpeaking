@@ -7,12 +7,25 @@ import { getModelsForProvider } from "@/lib/ai/models/catalog";
 
 const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 
+const LEGACY_MODEL_MAP: Record<string, string> = {
+  "gemini-3.7-flash": "gemini-2.5-flash",
+  "gemini-3.6-flash": "gemini-2.5-flash",
+  "gemini-3.5-flash": "gemini-2.5-flash",
+  "gemini-3.5-flash-lite": "gemini-2.5-flash-lite",
+};
+
 function cleanModel(model?: string): string {
-  const m = (model?.trim() || "gemini-2.5-flash").replace(/^models\//, "");
-  return !m || m === "auto" ? "gemini-2.5-flash" : m;
+  const raw = (model?.trim() || "gemini-2.5-flash").replace(/^models\//, "");
+  if (!raw || raw === "auto") return "gemini-2.5-flash";
+  return LEGACY_MODEL_MAP[raw.toLowerCase()] || raw;
 }
 
-function buildPayload(input: TextGenerationInput) {
+function expectsJsonResponse(input: TextGenerationInput): boolean {
+  const combined = `${input.systemInstruction || ""}\n${input.messages.map((m) => m.content).join("\n")}`;
+  return /\bjson\b/i.test(combined);
+}
+
+function buildPayload(input: TextGenerationInput, model: string) {
   const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
   const systemParts: string[] = [];
   if (input.systemInstruction) systemParts.push(input.systemInstruction);
@@ -30,8 +43,11 @@ function buildPayload(input: TextGenerationInput) {
   }
   const genConfig: Record<string, unknown> = { temperature: input.temperature ?? 0.7 };
   if (input.maxOutputTokens) genConfig.maxOutputTokens = input.maxOutputTokens;
-  const modelStr = (input.model || "").toLowerCase();
-  if (modelStr.includes("3.6") || modelStr.includes("3.7") || (modelStr.includes("3.5-flash") && !modelStr.includes("lite"))) {
+  if (expectsJsonResponse(input)) {
+    genConfig.responseMimeType = "application/json";
+  }
+  const modelStr = model.toLowerCase();
+  if (modelStr.includes("2.5-flash") && !modelStr.includes("lite")) {
     genConfig.thinkingConfig = { thinkingBudget: 0 };
   }
   payload.generationConfig = genConfig;
@@ -63,12 +79,15 @@ export class GeminiProvider implements AIProvider {
     try {
       const controller = new AbortController();
       const t = setTimeout(() => controller.abort(), 10000);
-      const url = `${BASE_URL}?key=${encodeURIComponent(this.apiKey)}`;
-      const res = await fetch(url, {
-        headers: { "x-goog-api-key": this.apiKey },
-        signal: controller.signal,
-      });
-      clearTimeout(t);
+      let res: Response;
+      try {
+        res = await fetch(BASE_URL, {
+          headers: { "x-goog-api-key": this.apiKey },
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(t);
+      }
       if (!res.ok) return getModelsForProvider("gemini");
 
       const data = (await res.json()) as {
@@ -125,29 +144,33 @@ export class GeminiProvider implements AIProvider {
     const candidateModels = [
       initialModel,
       "gemini-2.5-flash",
-      "gemini-3.6-flash",
-      "gemini-3.5-flash-lite",
+      "gemini-2.5-flash-lite",
+      "gemini-2.0-flash",
     ].filter((v, i, a) => a.indexOf(v) === i);
 
-    const payload = buildPayload(input);
     const start = Date.now();
     let lastError: unknown = null;
 
     for (const model of candidateModels) {
-      const url = `${BASE_URL}/${model}:generateContent?key=${encodeURIComponent(this.apiKey)}`;
+      const payload = buildPayload(input, model);
+      const url = `${BASE_URL}/${model}:generateContent`;
       try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-        const res = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": this.apiKey,
-          },
-          body: JSON.stringify(payload),
-          signal: controller.signal,
-        });
-        clearTimeout(timer);
+        let res: Response;
+        try {
+          res = await fetch(url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": this.apiKey,
+            },
+            body: JSON.stringify(payload),
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timer);
+        }
 
         if (!res.ok) {
           const body = await res.text().catch(() => "");
@@ -158,6 +181,10 @@ export class GeminiProvider implements AIProvider {
             model,
             statusCode: res.status,
           });
+          const shouldTryNextModel = res.status === 404 || res.status === 429 || res.status >= 500;
+          if (!shouldTryNextModel) {
+            throw lastError;
+          }
           continue;
         }
 
@@ -189,8 +216,13 @@ export class GeminiProvider implements AIProvider {
         };
       } catch (e: unknown) {
         lastError = e;
-        if (e instanceof VoiceEngineError && e.code === VoiceErrorCode.PROVIDER_NOT_CONFIGURED) {
-          throw e;
+        if (e instanceof VoiceEngineError) {
+          if (e.code === VoiceErrorCode.PROVIDER_NOT_CONFIGURED) {
+            throw e;
+          }
+          if (e.statusCode && e.statusCode !== 404 && e.statusCode !== 429 && e.statusCode < 500) {
+            throw e;
+          }
         }
       }
     }

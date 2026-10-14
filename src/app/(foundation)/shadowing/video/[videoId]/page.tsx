@@ -105,6 +105,19 @@ export default function ShadowingVideoStudioPage() {
             ...s,
             segment_id: s.segment_id || `seg_${String(idx + 1).padStart(3, "0")}`,
           })) as CorodomoSegment[];
+
+          // Silently update stored transcript in background if segments were healed/stitched
+          if (
+            matched.youtubeId &&
+            (healed.length !== segments.length ||
+              segments.some((s) => /(?:^|\s)(?:>>|&gt;&gt;|--)/.test(s.text)))
+          ) {
+            saveTranscript(matched.youtubeId, healed).catch(() => {});
+            updateVideoInLibrary(matched.id, {
+              segmentCount: healed.length,
+            });
+          }
+
           if (!isCancelled) {
             setLesson({
               ...matched,

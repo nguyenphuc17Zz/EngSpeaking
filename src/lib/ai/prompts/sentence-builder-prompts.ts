@@ -1,34 +1,37 @@
 // Prompts for Function 1 — Sentence Builder / Controlled Speaking
-// Ultra-compact token-efficient prompts with Infinite Topic Diversity
+// Ultra-compact token-efficient prompts with Combinatorial Diversity & Zero-Anchor Bias
 
-export const TASK_GENERATOR_SYSTEM = `You generate English Speaking Sentence Builder tasks for adult learners.
-Goal: Trigger fast, natural spoken English retrieval.
+import {
+  buildCreativeAngleDirective,
+  formatAntiRepetitionList,
+} from "./diversity-engine";
+
+export const TASK_GENERATOR_SYSTEM = `Generate 1 English Speaking Sentence Builder task for adult Vietnamese learners.
+Goal: Trigger fast, authentic spoken English retrieval in vivid real-world situations.
 
 RULES:
-1. Infinite Real-World Contexts: Generate authentic conversational English across ANY topic (daily life, career, travel, dining, shopping, technology, relationships, fitness, emergencies, negotiations, culture, or custom scenarios). Never be repetitive.
-2. Grounded Topic: If a specific topic or custom scenario is provided, strictly ground the prompt and vocabulary in that scenario. If topic is random or general, invent a novel, realistic, vivid everyday conversation situation.
-3. Control Levels:
-   - "controlled": Clear template with 1-2 blanks (e.g. "I usually ______ in the morning.").
-   - "semi_controlled": 2-3 keywords only (e.g. ["coffee", "work"]), NO template.
-   - "free": Real situation cue only, no keywords or template.
-4. targetIntent: MUST BE the COMPLETE full target English sentence (e.g. "I usually drink coffee in the morning before starting work.").
-5. expectedResponses: Provide 3-4 FULL natural conversational sentences that the learner should say aloud (contracted & uncontracted). DO NOT output only isolated blank-fill phrases or single vocabulary words.
-6. Output STRICT JSON only. No markdown fences.
-
-Schema:
+1. Grounded Context & Angle: Strictly ground the sentence in the given Topic and Creative Angle (Partner, Speech Act, Tone, Frame). Avoid textbook clichés.
+2. Control Levels:
+   - "controlled": Template with 1-2 blanks ("___") + starter + 2-3 keywords.
+   - "semi_controlled": 2-3 keywords + starter only, template=null.
+   - "free": Situational cue only, template=null, keywords=[].
+3. targetIntent: MUST be 1 COMPLETE natural spoken English sentence.
+4. expectedResponses: 3 FULL natural spoken sentences (contracted & conversational variants). Never output isolated blank fragments.
+5. Output STRICT JSON only (no markdown):
 {
-  "id": "sb_task_1",
+  "id": "sb_1",
   "taskType": "translation_output" | "sentence_completion" | "sentence_expansion" | "constraint_speaking",
   "controlLevel": "controlled" | "semi_controlled" | "free",
-  "instruction": string (Vietnamese instruction),
-  "promptVi": string (Vietnamese prompt),
-  "targetIntent": string (COMPLETE target English sentence),
-  "expectedResponses": string[] (3-4 FULL complete English sentences),
-  "requiredElements": string[],
+  "instruction": string (Vietnamese),
+  "promptVi": string (natural spoken Vietnamese thought to express),
+  "targetIntent": string (COMPLETE English sentence),
+  "expectedResponses": string[] (3 FULL English sentences),
+  "requiredElements": string[] (2-3 core meaning chunks),
+  "grammarCueVi": string (concise 1-line Vietnamese structure/tense tip),
   "scaffold": { "level": 1 | 2 | 3, "template": string | null, "keywords": string[], "starter": string | null, "constraints": string[] },
   "suggestedVocabulary": [{ "term": string, "meaningVi": string }],
   "topic": string,
-  "difficulty": { "overall": 3, "grammarComplexity": 2, "retrievalDemand": 0.5, "lengthScore": 2 },
+  "difficulty": { "overall": number, "grammarComplexity": number, "retrievalDemand": number, "lengthScore": number },
   "skills": ["sentence_construction"],
   "prepTimeSec": 3.0
 }`;
@@ -39,81 +42,62 @@ export function buildTaskGeneratorUserPrompt(params: {
   targetDifficulty?: number;
   topic?: string;
   prepTimeSec?: number;
-  // Optional legacy fields ignored for token minimization
   weakSkills?: string[];
   recentErrors?: string[];
   recentPrompts?: string[];
   targetErrorPattern?: unknown;
   pedagogicalConstraint?: string;
 }): string {
-  const topicInstruction = params.topic && params.topic !== "random"
-    ? params.topic
-    : "Pick an engaging, fresh everyday spoken conversation topic (varied across travel, dining, work, shopping, hobbies, or life)";
+  const topicInstruction =
+    params.topic && params.topic !== "random"
+      ? params.topic
+      : "Fresh everyday or professional spoken interaction";
 
-  let prompt = `Generate 1 English Speaking Task:
-- Level: ${params.controlLevel}
-- Difficulty: ${params.targetDifficulty ?? 3}/10
-- Topic/Situation: ${topicInstruction}
-- Preferred Type: ${params.taskType || "auto"}`;
+  const lines: string[] = [
+    `Generate 1 Sentence Builder Task (JSON only):`,
+    `- Control: ${params.controlLevel} | Diff: ${params.targetDifficulty ?? 3}/10 | Type: ${params.taskType || "auto"}`,
+    `- Topic: ${topicInstruction}`,
+    `- ${buildCreativeAngleDirective()}`,
+  ];
 
+  if (params.weakSkills?.length) {
+    lines.push(`- Target Weak Skills: ${params.weakSkills.slice(0, 3).join(", ")}`);
+  }
+  if (params.recentErrors?.length) {
+    lines.push(`- Subtly test error patterns: ${params.recentErrors.slice(0, 4).join(", ")}`);
+  }
+  const antiRep = formatAntiRepetitionList(params.recentPrompts);
+  if (antiRep) {
+    lines.push(`- ${antiRep}`);
+  }
   if (params.pedagogicalConstraint) {
-    prompt += `\n\n${params.pedagogicalConstraint}`;
+    lines.push(params.pedagogicalConstraint);
   }
 
-  prompt += `\nReturn valid JSON only.`;
-  return prompt;
+  return lines.join("\n");
 }
 
-export const EVALUATOR_SYSTEM = `You are the Expert Speaking Evaluator for an AI English Speaking Coach.
-The user has high receptive grammar/vocab but is training SPOKEN RETRIEVAL under time constraints.
-
-EVALUATION PRINCIPLES:
-1. COMMUNICATIVE CORRECTNESS FIRST: If the user conveys the target meaning clearly and naturally, DO NOT fail them for minor non-blocking slips (e.g. slight preposition choice or minor article slip).
-2. MULTI-DIMENSIONAL SCORING (0-100 each):
-   - meaningScore: 100 if core meaning delivered, 70-90 if minor nuance missing, <50 if wrong meaning.
-   - grammarScore: Accuracy of tenses, structures, agreement.
-   - naturalnessScore: Would a native speaker say this in conversational English?
-   - fluencyScore: Smoothness, sentence cohesion.
-   - retrievalScore: How successfully they formulated the spoken sentence independently.
-   - independenceScore: Deduct proportionally based on hint tier used.
-   - overallScore: Weighted composite: meaning (35%), grammar (25%), naturalness (20%), retrieval (20%).
-3. DO NOT OVER-CORRECT: Focus on 1-2 most impactful fixes.
-4. FEEDBACK: In clear, encouraging Vietnamese. Highlight what went well, specific errors with concise reasons, and a more natural spoken native version.
-5. SIMPLIFIED VERSION: If the user struggled (overallScore < 60), provide a simpler spoken alternative.
-
-OUTPUT FORMAT: STRICT JSON ONLY. NO MARKDOWN FENCES.
-Return JSON matching this schema:
+export const EVALUATOR_SYSTEM = `You are the Expert Spoken English Evaluator.
+Principles:
+1. COMMUNICATIVE CORRECTNESS FIRST: Accept natural synonyms, contractions, and paraphrases that convey the core meaning. Do not penalize minor non-blocking slips.
+2. Score 0-100: meaningScore (35%), grammarScore (25%), naturalnessScore (20%), fluencyScore, retrievalScore (20%), overallScore.
+3. Max 2 high-impact errors. Feedback in encouraging, concise Vietnamese.
+4. Output STRICT JSON only (no markdown):
 {
-  "overallScore": number (0-100),
-  "meaningScore": number (0-100),
-  "grammarScore": number (0-100),
-  "naturalnessScore": number (0-100),
-  "fluencyScore": number (0-100),
-  "retrievalScore": number (0-100),
-  "independenceScore": number (0-100),
+  "overallScore": number,
+  "meaningScore": number,
+  "grammarScore": number,
+  "naturalnessScore": number,
+  "fluencyScore": number,
+  "retrievalScore": number,
   "isCommunicativelyValid": boolean,
-  "isSuccessful": boolean (true if overallScore >= 70),
-  "needsRetry": boolean (true if overallScore < 75 or critical error),
-  "userTranscript": string,
-  "cleanTranscript": string,
-  "latencyMs": number,
-  "speechDurationMs": number,
-  "errors": [
-    {
-      "type": "grammar" | "vocabulary" | "naturalness" | "omission" | "word_order",
-      "severity": "minor" | "major",
-      "userText": string,
-      "correction": string,
-      "explanation": string,
-      "patternKey": string
-    }
-  ],
+  "isSuccessful": boolean,
+  "needsRetry": boolean,
+  "errors": [{ "type": "grammar"|"vocabulary"|"naturalness"|"omission"|"word_order", "severity": "minor"|"major", "userText": string, "correction": string, "explanation": string, "patternKey": string }],
   "betterVersion": string,
   "simplifiedVersion": string | null,
   "praisePoints": string[],
-  "actionableFeedback": string,
-  "hintTierUsed": number,
-  "attemptNumber": number
+  "actionableFeedback": string
 }`;
 
 export function buildEvaluatorUserPrompt(params: {
@@ -124,18 +108,8 @@ export function buildEvaluatorUserPrompt(params: {
   hintTierUsed: number;
   attemptNumber: number;
 }): string {
-  return `Evaluate this spoken English attempt:
-TASK SPECIFICATION:
-${params.taskJson}
-
-USER SPOKEN TRANSCRIPT:
-"${params.userTranscript}"
-
-METRICS:
-- Response Latency: ${params.latencyMs} ms
-- Speech Duration: ${params.speechDurationMs} ms
-- Hint Tier Used (0-4): ${params.hintTierUsed}
-- Attempt Number: ${params.attemptNumber}
-
-Evaluate communication, grammar, and naturalness. Return strict JSON.`;
+  return `Task: ${params.taskJson}
+Spoken: "${params.userTranscript}"
+Metrics: latency=${params.latencyMs}ms, duration=${params.speechDurationMs}ms, hintTier=${params.hintTierUsed}, attempt=${params.attemptNumber}
+Evaluate JSON only.`;
 }

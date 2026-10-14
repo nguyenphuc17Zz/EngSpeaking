@@ -6,6 +6,7 @@ import { vnToENTaskSchema } from "@/lib/validation/vn-to-en-schemas";
 import { VN_TO_EN_GENERATOR_SYSTEM, buildVNToENTaskPrompt } from "@/lib/ai/prompts/vn-to-en-prompts";
 import { sampleBankTask, saveBankTask, recordUserExposure } from "@/lib/foundation/services/content-bank.service";
 import { resolveTopicForPrompt } from "@/lib/foundation/sentence-builder/topics";
+import { hydrateStandardFiveTierHints } from "@/lib/ai/prompts/diversity-engine";
 import type { VNToENTask, VNToENRetrievalMode, VNPromptCategory } from "@/types/vn-to-en";
 
 export interface GenerateVNTaskOptions {
@@ -64,102 +65,16 @@ function getTestMockTask(options: GenerateVNTaskOptions): VNToENTask {
   };
 }
 
+import { cleanAiJson } from "@/lib/foundation/shared/json-parser";
+
 export function cleanJson(text: string): unknown {
-  if (!text) return null;
-  // 1. Strip reasoning / thinking tokens (<think> or <thought>)
-  let cleaned = text
-    .replace(/<think>[\s\S]*?<\/think>/gi, "")
-    .replace(/<thought>[\s\S]*?<\/thought>/gi, "")
-    .trim();
-
-  // 2. Extract content from markdown code block if present
-  const codeBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  if (codeBlockMatch && codeBlockMatch[1]) {
-    cleaned = codeBlockMatch[1].trim();
-  }
-
-  // 3. Direct JSON parse attempt
+  const cleaned = cleanAiJson(text);
+  if (!cleaned) return null;
   try {
     return JSON.parse(cleaned);
-  } catch {}
-
-  // 4. Try locating the outermost JSON object { ... }
-  const firstBrace = cleaned.indexOf("{");
-  const lastBrace = cleaned.lastIndexOf("}");
-  if (firstBrace !== -1 && lastBrace > firstBrace) {
-    const candidate = cleaned.slice(firstBrace, lastBrace + 1);
-    try {
-      return JSON.parse(candidate);
-    } catch {
-      // 5. Try fixing common syntax issues like trailing commas before } or ]
-      const withoutTrailingCommas = candidate.replace(/,\s*([}\]])/g, "$1");
-      try {
-        return JSON.parse(withoutTrailingCommas);
-      } catch {}
-    }
+  } catch {
+    return null;
   }
-
-  // 6. Truncated JSON recovery: if output was cut off, attempt auto-closing with a LIFO stack
-  if (firstBrace !== -1) {
-    const text = cleaned.slice(firstBrace).trim();
-    const stack: string[] = [];
-    let inString = false;
-    let isEscaped = false;
-
-    for (let i = 0; i < text.length; i++) {
-      const ch = text[i];
-      if (inString) {
-        if (ch === "\\" && !isEscaped) {
-          isEscaped = true;
-        } else if (ch === '"' && !isEscaped) {
-          inString = false;
-        } else {
-          isEscaped = false;
-        }
-      } else {
-        if (ch === '"') {
-          inString = true;
-        } else if (ch === "{") {
-          stack.push("}");
-        } else if (ch === "[") {
-          stack.push("]");
-        } else if (ch === "}") {
-          if (stack.length > 0 && stack[stack.length - 1] === "}") {
-            stack.pop();
-          }
-        } else if (ch === "]") {
-          if (stack.length > 0 && stack[stack.length - 1] === "]") {
-            stack.pop();
-          }
-        }
-      }
-    }
-
-    let repaired = text;
-    if (inString) {
-      repaired += '"';
-    }
-
-    // Remove any dangling comma before closing
-    repaired = repaired.replace(/,\s*$/, "");
-
-    // If ended with dangling key: e.g. "key": -> add null
-    if (/:\s*$/.test(repaired)) {
-      repaired += '""';
-    }
-
-    // Close remaining in LIFO order
-    while (stack.length > 0) {
-      const closer = stack.pop();
-      if (closer) repaired += closer;
-    }
-
-    try {
-      return JSON.parse(repaired);
-    } catch {}
-  }
-
-  return null;
 }
 
 export async function generateVNToENTask(
@@ -174,12 +89,11 @@ export async function generateVNToENTask(
     return getTestMockTask({ ...options, retrievalMode, targetDifficulty });
   }
 
-  // Resolve dynamic / infinite / custom topic from rich situation pool
-  const effectiveTopic = resolveTopicForPrompt(options.topic);
+  // Resolve dynamic / infinite / custom topic from rich situation pool avoiding recentPrompts
+  const effectiveTopic = resolveTopicForPrompt(options.topic, undefined, options.recentPrompts);
 
-  // 1. Content Bank: Only sampled if explicitly requested via forceSource === "bank"
-  // (Prevents repeating static seed sentences and guarantees boundless topic diversity)
-  if (options.forceSource === "bank") {
+  // 1. Check Content Bank (Hybrid 70/30 Policy: 70% chance to fetch from Bank, skipped if forceSource === "ai")
+  if (options.forceSource !== "ai") {
     const bankSample = await sampleBankTask<VNToENTask>({
       module: "vn_to_en",
       level: retrievalMode,
@@ -223,9 +137,7 @@ export async function generateVNToENTask(
     targetModel = model
   ): Promise<VNToENTask | null> => {
     try {
-      // Gemini can easily handle 1000 output tokens without issue.
-      // Groq uses 750 tokens to guarantee the full schema is never truncated while safely within TPM.
-      const maxOutputTokens = targetProvider === "groq" ? 750 : 1000;
+      const maxOutputTokens = targetProvider === "groq" ? 650 : 750;
 
       const res = await generateTextWithRouting({
         provider: targetProvider,
@@ -233,7 +145,7 @@ export async function generateVNToENTask(
         input: {
           messages: [{ role: "user", content: userPrompt }],
           systemInstruction: VN_TO_EN_GENERATOR_SYSTEM,
-          temperature: 0.7,
+          temperature: 0.78,
           maxOutputTokens,
         },
       });
@@ -265,15 +177,17 @@ export async function generateVNToENTask(
         parsed.requiredMeaningElements = intent ? intent.split(" ").slice(0, 3) : ["communicate intent"];
       }
 
-      // Ensure hints
+      // Deterministic 5-tier hints hydration (saves ~200 output tokens)
       if (!Array.isArray(parsed.hints) || parsed.hints.length === 0) {
-        parsed.hints = [
-          { tier: 0, title: "Không gợi ý", content: "Tự phản xạ và nói ngay.", penaltyWeight: 0 },
-          { tier: 1, title: "Từ khoá chính", content: intent.split(" ").slice(0, 3).join(" "), penaltyWeight: 0.1 },
-          { tier: 2, title: "Cấu trúc gợi ý", content: "Dùng cấu trúc câu tự nhiên diễn đạt ý.", penaltyWeight: 0.25 },
-          { tier: 3, title: "Từ mở đầu", content: intent.split(" ").slice(0, 2).join(" "), penaltyWeight: 0.5 },
-          { tier: 4, title: "Câu mẫu hoàn chỉnh", content: intent, penaltyWeight: 0.9 },
-        ];
+        const grammarCue = typeof parsed.grammarCueVi === "string" ? parsed.grammarCueVi : undefined;
+        const starter = typeof parsed.starter === "string" ? parsed.starter : undefined;
+        parsed.hints = hydrateStandardFiveTierHints({
+          keywords: (parsed.requiredMeaningElements as string[]) || [],
+          grammarCueVi: grammarCue,
+          starterOrSkeleton: starter,
+          fullModelAnswer: intent || (parsed.expectedResponses as string[])[0] || "",
+          tierTitles: ["Không gợi ý", "Từ khoá chính", "Cấu trúc gợi ý", "Từ mở đầu", "Câu mẫu hoàn chỉnh"],
+        });
       }
 
       // Sanitize suggestedVocabulary

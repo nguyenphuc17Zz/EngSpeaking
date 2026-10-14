@@ -43,13 +43,13 @@ export async function POST(req: Request) {
       pedagogicalConstraint,
     });
 
-    // Apply state update deterministically
-    let nextState: ConversationWorldState = applyStateUpdate(worldState, aiResponse);
-    // If event triggered but not in aiResponse, attach
+    // If event triggered but not in aiResponse, attach before applying state update once
     if (possibleEvent && !aiResponse.event) {
       aiResponse.event = possibleEvent;
-      nextState = applyStateUpdate(nextState, { responseText: aiResponse.responseText, event: possibleEvent });
     }
+
+    // Apply state update deterministically once (+1 turnCount)
+    const nextState: ConversationWorldState = applyStateUpdate(worldState, aiResponse);
 
     // Persist turns & events to SQLite
     if (worldId) {
@@ -73,7 +73,7 @@ export async function POST(req: Request) {
       } catch {}
     }
 
-    return NextResponse.json({ response: aiResponse, nextWorldState: nextState });
+    return NextResponse.json({ response: aiResponse, nextWorldState: nextState, worldState: nextState });
   } catch (e: unknown) {
     return NextResponse.json({ error: { message: toUserMessage(e) } }, { status: 500 });
   }

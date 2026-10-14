@@ -1,0 +1,470 @@
+{
+ "url": "http://localhost:3000/shadowing",
+ "title": "EngSpeak — Nghệ Thuật Phản Xạ Khẩu Ngữ Tiếng Anh",
+ "els": [
+  {
+   "tag": "A",
+   "text": "EngSpeak",
+   "x": 16,
+   "y": 14,
+   "w": 129,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Thu gọn menu",
+   "x": 215,
+   "y": 20,
+   "w": 24,
+   "h": 24
+  },
+  {
+   "tag": "A",
+   "text": "Tổng quan",
+   "x": 8,
+   "y": 101,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Sentence Builder",
+   "x": 8,
+   "y": 174,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "VN → EN Speaking",
+   "x": 8,
+   "y": 210,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Spoken Repair Lab",
+   "x": 8,
+   "y": 246,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Response Latency",
+   "x": 8,
+   "y": 282,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Chunk Automaticity",
+   "x": 8,
+   "y": 318,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Survival Speaking",
+   "x": 8,
+   "y": 354,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Spoken Vocabulary",
+   "x": 8,
+   "y": 390,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Shadowing Studio",
+   "x": 8,
+   "y": 426,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Phòng luyện nói Live",
+   "x": 8,
+   "y": 499,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Hội thoại AI",
+   "x": 8,
+   "y": 535,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Thử thách nâng cao",
+   "x": 8,
+   "y": 571,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Cài đặt & API Keys",
+   "x": 8,
+   "y": 644,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Hướng dẫn học",
+   "x": 8,
+   "y": 860,
+   "w": 239,
+   "h": 32
+  },
+  {
+   "tag": "A",
+   "text": "Phòng luyện nói",
+   "x": 640,
+   "y": 14,
+   "w": 150,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Phòng luyện nói",
+   "x": 640,
+   "y": 14,
+   "w": 150,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Gemini:\ngemini-3.5-flash-lite",
+   "x": 798,
+   "y": 14,
+   "w": 274,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "1x",
+   "x": 1080,
+   "y": 14,
+   "w": 60,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "?",
+   "x": 1148,
+   "y": 14,
+   "w": 64,
+   "h": 36
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Chuyển đổi giao diện Sáng / Tối",
+   "x": 1220,
+   "y": 14,
+   "w": 36,
+   "h": 36
+  },
+  {
+   "tag": "A",
+   "text": "",
+   "x": 311,
+   "y": 111,
+   "w": 32,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 311,
+   "y": 111,
+   "w": 32,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Kho bài học\n0",
+   "x": 480,
+   "y": 115,
+   "w": 136,
+   "h": 24
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Lịch sử",
+   "x": 616,
+   "y": 115,
+   "w": 84,
+   "h": 24
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Random Video",
+   "x": 311,
+   "y": 153,
+   "w": 132,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 451,
+   "y": 153,
+   "w": 36,
+   "h": 32
+  },
+  {
+   "tag": "INPUT",
+   "text": "Tìm bài học, kênh...",
+   "x": 495,
+   "y": 153,
+   "w": 208,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Quét video mới",
+   "x": 711,
+   "y": 153,
+   "w": 135,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Thêm video",
+   "x": 854,
+   "y": 153,
+   "w": 113,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Thời lượng",
+   "x": 381,
+   "y": 223,
+   "w": 121,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Mới nhất (YouTube)",
+   "x": 510,
+   "y": 223,
+   "w": 170,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Trạng thái",
+   "x": 687,
+   "y": 223,
+   "w": 117,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Open Next.js Dev Tools",
+   "x": 22,
+   "y": 846,
+   "w": 32,
+   "h": 32
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1181,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1197,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1213,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1229,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1239,
+   "y": 853,
+   "w": 8,
+   "h": 11
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1245,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1261,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1281,
+   "y": 851,
+   "w": 14,
+   "h": 14
+  },
+  {
+   "tag": "A",
+   "text": "",
+   "x": 1070,
+   "y": 524,
+   "w": 68,
+   "h": 14
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1214,
+   "y": 521,
+   "w": 21,
+   "h": 21
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Standard",
+   "x": 1175,
+   "y": 561,
+   "w": 60,
+   "h": 19
+  },
+  {
+   "tag": "INPUT",
+   "text": "on",
+   "x": 1212,
+   "y": 593,
+   "w": 23,
+   "h": 15
+  },
+  {
+   "tag": "INPUT",
+   "text": "on",
+   "x": 1212,
+   "y": 623,
+   "w": 23,
+   "h": 15
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1070,
+   "y": 686,
+   "w": 19,
+   "h": 19
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1095,
+   "y": 686,
+   "w": 19,
+   "h": 19
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1119,
+   "y": 686,
+   "w": 19,
+   "h": 19
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1143,
+   "y": 686,
+   "w": 19,
+   "h": 19
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1167,
+   "y": 686,
+   "w": 19,
+   "h": 19
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1191,
+   "y": 686,
+   "w": 19,
+   "h": 19
+  },
+  {
+   "tag": "BUTTON",
+   "text": "",
+   "x": 1216,
+   "y": 686,
+   "w": 19,
+   "h": 19
+  },
+  {
+   "tag": "INPUT",
+   "text": "on",
+   "x": 1070,
+   "y": 729,
+   "w": 13,
+   "h": 13
+  },
+  {
+   "tag": "INPUT",
+   "text": "on",
+   "x": 1070,
+   "y": 759,
+   "w": 13,
+   "h": 13
+  },
+  {
+   "tag": "BUTTON",
+   "text": "Manage MCP & Webhooks",
+   "x": 1070,
+   "y": 793,
+   "w": 164,
+   "h": 23
+  }
+ ]
+}

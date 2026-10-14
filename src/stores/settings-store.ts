@@ -83,15 +83,15 @@ export interface SettingsState {
 
 const DEFAULTS = {
   activeProvider: "gemini" as const,
-  preferredGeminiModel: "gemini-3.5-flash-lite",
+  preferredGeminiModel: "gemini-2.5-flash",
   preferredGroqModel: "openai/gpt-oss-120b",
-  sentenceBuilderGen: { provider: "gemini", model: "gemini-3.5-flash-lite" },
-  sentenceBuilderEval: { provider: "gemini", model: "gemini-3.5-flash-lite" },
-  shadowing: { provider: "gemini", model: "gemini-3.5-flash-lite" },
-  survivalSpeaking: { provider: "gemini", model: "gemini-3.5-flash-lite" },
-  conversation: { provider: "gemini", model: "gemini-3.5-flash-lite" },
-  evaluation: { provider: "gemini", model: "gemini-3.5-flash-lite" },
-  generation: { provider: "gemini", model: "gemini-3.5-flash-lite" },
+  sentenceBuilderGen: { provider: "gemini", model: "gemini-2.5-flash" },
+  sentenceBuilderEval: { provider: "gemini", model: "gemini-2.5-flash" },
+  shadowing: { provider: "gemini", model: "gemini-2.5-flash" },
+  survivalSpeaking: { provider: "gemini", model: "gemini-2.5-flash" },
+  conversation: { provider: "gemini", model: "gemini-2.5-flash" },
+  evaluation: { provider: "gemini", model: "gemini-2.5-flash" },
+  generation: { provider: "gemini", model: "gemini-2.5-flash" },
   stt: { provider: "browser", model: "browser-stt" },
   tts: { provider: "edge-tts", model: "en-US-JennyNeural" },
   ttsSpeed: 1.0,
@@ -206,12 +206,30 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: "english-speaking-settings",
-      version: 6,
+      version: 7,
       migrate: (persisted, _version) => {
         const p = persisted as Partial<SettingsState>;
+        const normalizeModel = (m?: string) => {
+          if (!m) return "gemini-2.5-flash";
+          if (m === "gemini-3.5-flash-lite") return "gemini-2.5-flash-lite";
+          if (m.startsWith("gemini-3.")) return "gemini-2.5-flash";
+          return m;
+        };
+        const normalizeSel = (sel?: ProviderSelectionState, fallback?: ProviderSelectionState): ProviderSelectionState => {
+          const base = sel || fallback || { provider: "gemini", model: "gemini-2.5-flash" };
+          return base.provider === "gemini" ? { ...base, model: normalizeModel(base.model) } : base;
+        };
         return {
           ...DEFAULTS,
           ...p,
+          preferredGeminiModel: normalizeModel(p.preferredGeminiModel),
+          sentenceBuilderGen: normalizeSel(p.sentenceBuilderGen, DEFAULTS.sentenceBuilderGen),
+          sentenceBuilderEval: normalizeSel(p.sentenceBuilderEval, DEFAULTS.sentenceBuilderEval),
+          shadowing: normalizeSel(p.shadowing, DEFAULTS.shadowing),
+          survivalSpeaking: normalizeSel(p.survivalSpeaking, DEFAULTS.survivalSpeaking),
+          conversation: normalizeSel(p.conversation, DEFAULTS.conversation),
+          evaluation: normalizeSel(p.evaluation, DEFAULTS.evaluation),
+          generation: normalizeSel(p.generation, DEFAULTS.generation),
           vocabularyKeybindings: {
             ...DEFAULTS.vocabularyKeybindings,
             ...(p.vocabularyKeybindings || {}),

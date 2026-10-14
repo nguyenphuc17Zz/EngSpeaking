@@ -29,7 +29,14 @@ export function getSupportedMimeType(): string {
   return "audio/webm";
 }
 
-export function createAudioRecorder(stream: MediaStream): AudioRecorder {
+export interface CreateAudioRecorderOptions {
+  keepStreamAlive?: boolean;
+}
+
+export function createAudioRecorder(
+  stream: MediaStream,
+  options?: CreateAudioRecorderOptions
+): AudioRecorder {
   const mimeType = getSupportedMimeType();
   let recorder: MediaRecorder | null = null;
   let chunks: Blob[] = [];
@@ -77,13 +84,17 @@ export function createAudioRecorder(stream: MediaStream): AudioRecorder {
         const finish = (b: Blob) => {
           if (settled) return;
           settled = true;
-          stopStream(stream);
+          if (!options?.keepStreamAlive) {
+            stopStream(stream);
+          }
           resolve(b);
         };
         const fail = (err: unknown) => {
           if (settled) return;
           settled = true;
-          stopStream(stream);
+          if (!options?.keepStreamAlive) {
+            stopStream(stream);
+          }
           reject(err);
         };
 
@@ -130,7 +141,9 @@ export function createAudioRecorder(stream: MediaStream): AudioRecorder {
       try {
         recorder?.stop();
       } catch {}
-      stopStream(stream);
+      if (!options?.keepStreamAlive) {
+        stopStream(stream);
+      }
       recorder = null;
       chunks = [];
       state = "inactive";

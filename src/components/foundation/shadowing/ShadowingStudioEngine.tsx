@@ -48,7 +48,8 @@ import {
   fetchDictionaryDefinition,
 } from "@/lib/foundation/vocabulary/lexicon-db.service";
 import { SessionCompletedModal } from "@/components/voice/SessionCompletedModal";
-import { mergeFragmentedSegments } from "@/lib/foundation/shadowing/transcript-stitcher";
+import { mergeFragmentedSegments, cleanSegmentText } from "@/lib/foundation/shadowing/transcript-stitcher";
+import { translateTranscriptSegments } from "@/lib/foundation/shadowing/shadowing-translation.service";
 import { useUiStore } from "@/stores/ui-store";
 import { cn } from "@/lib/utils";
 import {
@@ -179,20 +180,52 @@ export function ShadowingStudioEngine({
   const initialResumeTimeRef = useRef<number>(0);
   const lastSavedProgressTimeRef = useRef<number>(0);
 
-  // Auto-heal fragmented segments
+  // Auto-heal fragmented segments and background-sync to storage
+  const hasAutoHealedRef = useRef<string>("");
   useEffect(() => {
     if (!activeLesson?.segments || activeLesson.segments.length <= 1) return;
+    const cacheKey = `${activeLesson.id}_${activeLesson.segments.length}_${activeLesson.segments[0]?.text}`;
+    if (hasAutoHealedRef.current === cacheKey) return;
+
+    const hasRawArtifacts = activeLesson.segments.some((s) =>
+      /(?:^|\s)(?:>>|&gt;&gt;|--)/.test(s.text)
+    );
+    const hasShortSentences = activeLesson.segments.some((s) => {
+      const words = s.text.split(/\s+/).filter(Boolean);
+      const dur = s.end_time - s.start_time;
+      return words.length < 4 || dur < 2.0;
+    });
+
+    if (!hasRawArtifacts && !hasShortSentences) {
+      hasAutoHealedRef.current = cacheKey;
+      return;
+    }
+
     const healed = mergeFragmentedSegments(activeLesson.segments).map((s, idx) => ({
       ...s,
       segment_id: s.segment_id || `seg_${String(idx + 1).padStart(3, "0")}`,
     })) as CorodomoSegment[];
-    if (healed.length !== activeLesson.segments.length) {
+
+    hasAutoHealedRef.current = `${activeLesson.id}_${healed.length}_${healed[0]?.text}`;
+
+    const isDifferent =
+      healed.length !== activeLesson.segments.length ||
+      healed.some((s, i) => s.text !== activeLesson.segments[i]?.text);
+
+    if (isDifferent) {
       setActiveLesson((prev) => ({
         ...prev,
         segments: healed,
       }));
+      if (activeLesson.youtubeId) {
+        saveTranscript(activeLesson.youtubeId, healed).catch(() => {});
+        updateVideoInLibrary(activeLesson.id, {
+          segments: healed,
+          segmentCount: healed.length,
+        });
+      }
     }
-  }, [activeLesson?.id]);
+  }, [activeLesson?.id, activeLesson?.segments]);
 
   // ─── Playback & Sync State ───────────────────────────────────────────
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
@@ -211,12 +244,17 @@ export function ShadowingStudioEngine({
   const [isAutoPaused, setIsAutoPaused] = useState(false);
   const seekToSegmentRef = useRef<(index: number, autoPlay?: boolean) => void>(() => {});
 
-  const [currentTime, setCurrentTime] = useState(0);
+  const currentTimeRef = useRef(0);
+  const hasStartedPlaybackRef = useRef(false);
+  const [hasStartedPlayback, setHasStartedPlayback] = useState(false);
   const [isVideoHidden, setIsVideoHidden] = useState(false);
 
   // ─── Subtitle Toggles ────────────────────────────────────────────────
   const [showSubtitle, setShowSubtitle] = useState(true);
-  const [showTranslation, setShowTranslation] = useState(true);
+  const [showTranslation, setShowTranslation] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translateProgress, setTranslateProgress] = useState<string | null>(null);
+  const translateAbortControllerRef = useRef<AbortController | null>(null);
 
   // ─── Recording & Scoring State (Phát âm mode) ────────────────────────
   const [recordingStatus, setRecordingStatus] = useState<
@@ -224,6 +262,17 @@ export function ShadowingStudioEngine({
   >("idle");
   const [score, setScore] = useState<ShadowingScoreResult | null>(null);
   const [userAudioUrl, setUserAudioUrl] = useState<string | null>(null);
+  const userAudioUrlRef = useRef<string | null>(null);
+  const updateUserAudioUrl = useCallback((nextUrl: string | null) => {
+    if (userAudioUrlRef.current && userAudioUrlRef.current !== nextUrl) {
+      try {
+        URL.revokeObjectURL(userAudioUrlRef.current);
+      } catch {}
+    }
+    userAudioUrlRef.current = nextUrl;
+    setUserAudioUrl(nextUrl);
+  }, []);
+
   const [spokenTranscript, setSpokenTranscript] = useState<string>("");
   const [isPlayingUserAudio, setIsPlayingUserAudio] = useState(false);
   const userAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -233,33 +282,24 @@ export function ShadowingStudioEngine({
   // ─── Shadowing Mode Voice Recording & Preview State ──────────────────
   const [shadowingRecordStatus, setShadowingRecordStatus] = useState<"idle" | "recording">("idle");
   const [shadowingAudioUrl, setShadowingAudioUrl] = useState<string | null>(null);
+  const shadowingAudioUrlRef = useRef<string | null>(null);
+  const updateShadowingAudioUrl = useCallback((nextUrl: string | null) => {
+    if (shadowingAudioUrlRef.current && shadowingAudioUrlRef.current !== nextUrl) {
+      try {
+        URL.revokeObjectURL(shadowingAudioUrlRef.current);
+      } catch {}
+    }
+    shadowingAudioUrlRef.current = nextUrl;
+    setShadowingAudioUrl(nextUrl);
+  }, []);
+
   const [isPlayingShadowingAudio, setIsPlayingShadowingAudio] = useState(false);
   const [shadowingTranscript, setShadowingTranscript] = useState("");
   const [showShadowingPreview, setShowShadowingPreview] = useState(true);
   const shadowingAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  // ─── Subtitle Lead-time Sync Offset ──────────────────────────────────
-  const [subtitleSyncOffset, setSubtitleSyncOffset] = useState<number>(0.35);
+  // ─── Subtitle Lead-time Sync Offset (Chuẩn ngầm 0.35s) ───────────────
   const subtitleSyncOffsetRef = useRef<number>(0.35);
-  subtitleSyncOffsetRef.current = subtitleSyncOffset;
-
-  const handleAdjustSyncOffset = useCallback((delta: number) => {
-    setSubtitleSyncOffset((prev) => {
-      const next = Math.round((prev + delta) * 100) / 100;
-      subtitleSyncOffsetRef.current = next;
-      toast.info(
-        "Căn chỉnh phụ đề",
-        `Lệch: ${next > 0 ? `+${next}s (Hiện sớm hơn)` : next < 0 ? `${next}s (Hiện muộn hơn)` : "0s (Khớp gốc)"}`
-      );
-      return next;
-    });
-  }, []);
-
-  const handleResetSyncOffset = useCallback(() => {
-    setSubtitleSyncOffset(0.35);
-    subtitleSyncOffsetRef.current = 0.35;
-    toast.success("Căn chỉnh phụ đề", "Đã đặt về mức bù chuẩn (+0.35s)");
-  }, []);
 
   // ─── UI & Input State ────────────────────────────────────────────────
   const [showAddVideoModal, setShowAddVideoModal] = useState(false);
@@ -369,7 +409,7 @@ export function ShadowingStudioEngine({
 
   const currentSentenceTokens: WordIpaToken[] = useMemo(() => {
     if (!currentSegment?.text) return [];
-    return getSentenceWordsWithIpa(currentSegment.text);
+    return getSentenceWordsWithIpa(cleanSegmentText(currentSegment.text));
   }, [currentSegment?.text]);
 
   // ─── Load YouTube IFrame API ──────────────────────────────────────────
@@ -510,10 +550,15 @@ export function ShadowingStudioEngine({
   );
 
   useEffect(() => {
+    currentTimeRef.current = 0;
+    hasStartedPlaybackRef.current = false;
+    setHasStartedPlayback(false);
     if (activeLesson?.youtubeId) {
       initYouTubePlayer(activeLesson.youtubeId);
     }
     return () => {
+      translateAbortControllerRef.current?.abort();
+      translateAbortControllerRef.current = null;
       if (playerRef.current) {
         try {
           playerRef.current.destroy();
@@ -528,6 +573,18 @@ export function ShadowingStudioEngine({
       if (shadowingAudioRef.current) {
         shadowingAudioRef.current.pause();
         shadowingAudioRef.current = null;
+      }
+      if (userAudioUrlRef.current) {
+        try {
+          URL.revokeObjectURL(userAudioUrlRef.current);
+        } catch {}
+        userAudioUrlRef.current = null;
+      }
+      if (shadowingAudioUrlRef.current) {
+        try {
+          URL.revokeObjectURL(shadowingAudioUrlRef.current);
+        } catch {}
+        shadowingAudioUrlRef.current = null;
       }
       try {
         recorderRef.current?.cancel();
@@ -551,7 +608,7 @@ export function ShadowingStudioEngine({
     setIsPlayingVideo(false);
 
     if (activeLessonRef.current?.youtubeId && activeLessonRef.current.youtubeId !== "custom") {
-      let curTime = 0;
+      let curTime = currentTimeRef.current;
       if (playerRef.current && typeof playerRef.current.getCurrentTime === "function") {
         try {
           const t = playerRef.current.getCurrentTime();
@@ -582,7 +639,7 @@ export function ShadowingStudioEngine({
             if (typeof time === "number" && !isNaN(time)) {
               if (Date.now() < seekGraceUntilRef.current) {
                 const target = seekTargetTimeRef.current;
-                const isNearTarget = Math.abs(time - target) <= 0.6 || time >= target - 0.2;
+                const isNearTarget = Math.abs(time - target) <= 0.6;
                 if (!isNearTarget) {
                   animId = requestAnimationFrame(syncLoop);
                   return;
@@ -596,7 +653,11 @@ export function ShadowingStudioEngine({
                 }
               }
               lastReportedTimeRef.current = time;
-              setCurrentTime(time);
+              currentTimeRef.current = time;
+              if (time > 2 && !hasStartedPlaybackRef.current) {
+                hasStartedPlaybackRef.current = true;
+                setHasStartedPlayback(true);
+              }
 
               // Periodic progress auto-save
               const wallNow = Date.now();
@@ -617,44 +678,152 @@ export function ShadowingStudioEngine({
                 const curIdx = activeSegmentIndexRef.current;
                 const currentSeg = segments[curIdx];
 
-                // 1. Loop sentence mode
+                // ── 1. Loop sentence mode ─────────────────────────────────────
                 if (playModeRef.current === "loop_sentence" && currentSeg) {
-                  const loopThreshold = currentSeg.end_time - 0.15;
-                  if (time >= loopThreshold) {
-                    if (!isLoopSeekingRef.current) {
-                      isLoopSeekingRef.current = true;
-                      seekGraceUntilRef.current = Date.now() + 500;
-                      seekTargetTimeRef.current = currentSeg.start_time;
+                  if (Date.now() < seekGraceUntilRef.current) {
+                    animId = requestAnimationFrame(syncLoop);
+                    return;
+                  }
+
+                  const nextSeg = segments[curIdx + 1];
+                  const prevSeg = segments[curIdx - 1];
+                  const speed = playbackSpeedRef.current || 1.0;
+                  const leadCompensation = Math.max(0.08, 0.08 * speed);
+                  let stopThreshold = currentSeg.end_time - leadCompensation;
+
+                  if (nextSeg) {
+                    stopThreshold = Math.min(stopThreshold, nextSeg.start_time - 0.08);
+                  }
+
+                  const isAtEndOfSentence = time >= stopThreshold;
+                  if (isAtEndOfSentence && !isLoopSeekingRef.current) {
+                    isLoopSeekingRef.current = true;
+                    const minBound = prevSeg ? prevSeg.end_time : 0;
+                    const loopSeekTime = Math.max(minBound, Math.max(0, currentSeg.start_time - 0.18));
+                    seekGraceUntilRef.current = Date.now() + 800;
+                    seekTargetTimeRef.current = loopSeekTime;
+                    try {
+                      playerRef.current?.seekTo(loopSeekTime, true);
+                    } catch {}
+                    setTimeout(() => {
+                      isLoopSeekingRef.current = false;
+                    }, 400);
+                    animId = requestAnimationFrame(syncLoop);
+                    return;
+                  }
+
+                  // Auto catch-up ONLY if user explicitly dragged/scrubbed timeline far away
+                  if (!isLoopSeekingRef.current && Date.now() >= seekGraceUntilRef.current) {
+                    if (time >= currentSeg.end_time + 1.5 || time < currentSeg.start_time - 2.0) {
+                      const matchedIdx = segments.findIndex(
+                        (seg) => time >= seg.start_time - 0.1 && time < seg.end_time + 0.1
+                      );
+                      if (matchedIdx !== -1 && matchedIdx !== curIdx) {
+                        isSeekingJumpRef.current = true;
+                        activeSegmentIndexRef.current = matchedIdx;
+                        setActiveSegmentIndex(matchedIdx);
+                        animId = requestAnimationFrame(syncLoop);
+                        return;
+                      }
+                    }
+                  }
+
+                  // Lock sync engine to currently looping sentence, NEVER advance automatically!
+                  animId = requestAnimationFrame(syncLoop);
+                  return;
+                }
+
+                // ── 2. Pause after sentence mode ──────────────────────────────
+                if (playModeRef.current === "pause_after_sentence" && currentSeg) {
+                  const nextSeg = segments[curIdx + 1];
+                  const speed = playbackSpeedRef.current || 1.0;
+                  const leadCompensation = Math.max(0.08, 0.08 * speed);
+                  let stopThreshold = currentSeg.end_time - leadCompensation;
+
+                  if (nextSeg) {
+                    stopThreshold = Math.min(stopThreshold, nextSeg.start_time - 0.08);
+                  }
+
+                  // 1. If already paused at sentence end -> enforce lockdown & freeze at stopThreshold
+                  if (justPausedSegRef.current === curIdx) {
+                    let isPlayerStillPlaying = false;
+                    try {
+                      if (playerRef.current && typeof playerRef.current.getPlayerState === "function") {
+                        const state = playerRef.current.getPlayerState();
+                        isPlayerStillPlaying = state === 1 || state === 3;
+                      }
+                    } catch {}
+
+                    if (isPlayerStillPlaying || time > stopThreshold + 0.15) {
                       try {
-                        playerRef.current?.seekTo(currentSeg.start_time, true);
+                        playerRef.current?.pauseVideo();
+                        playerRef.current?.seekTo(stopThreshold, false);
                       } catch {}
-                      setTimeout(() => {
-                        isLoopSeekingRef.current = false;
-                      }, 400);
+                    }
+
+                    // Crucial: return immediately so continuous sync NEVER runs and changes segment!
+                    animId = requestAnimationFrame(syncLoop);
+                    return;
+                  }
+
+                  // 2. Seek grace window
+                  if (Date.now() < seekGraceUntilRef.current) {
+                    animId = requestAnimationFrame(syncLoop);
+                    return;
+                  }
+
+                  const isAtEndOfSentence = time >= stopThreshold;
+
+                  // 3. Reached sentence end -> Trigger pause!
+                  if (isAtEndOfSentence) {
+                    justPausedSegRef.current = curIdx;
+                    setIsAutoPaused(true);
+                    isAutoPausingRef.current = true;
+                    if (autoPauseTimerRef.current) {
+                      clearTimeout(autoPauseTimerRef.current);
+                      autoPauseTimerRef.current = null;
+                    }
+                    try {
+                      playerRef.current?.pauseVideo();
+                      playerRef.current?.seekTo(stopThreshold, false);
+                    } catch {}
+                    setIsPlayingVideo(false);
+                    if (typeof window !== "undefined") {
+                      try {
+                        window.focus();
+                        if (document.activeElement && (document.activeElement as HTMLElement).blur) {
+                          (document.activeElement as HTMLElement).blur();
+                        }
+                      } catch {}
                     }
                     animId = requestAnimationFrame(syncLoop);
                     return;
                   }
-                }
 
-                // 2. Pause after sentence mode
-                if (playModeRef.current === "pause_after_sentence" && currentSeg) {
-                  const endThreshold = currentSeg.end_time - 0.15;
-                  if (time >= endThreshold && justPausedSegRef.current !== curIdx) {
-                    justPausedSegRef.current = curIdx;
-                    isAutoPausingRef.current = true;
-                    try {
-                      playerRef.current?.pauseVideo();
-                    } catch {}
-                    setIsPlayingVideo(false);
-                    setIsAutoPaused(true);
-                    toast.info("Tạm dừng", "Nhấn Phím Cách (Space) để học tiếp");
-                    animId = requestAnimationFrame(syncLoop);
-                    return;
+                  // 4. Backward seek catch-up only (e.g. user manually clicked back in timeline)
+                  if (
+                    Date.now() >= seekGraceUntilRef.current &&
+                    time < currentSeg.start_time - 1.5 &&
+                    justPausedSegRef.current === -1
+                  ) {
+                    const matchedIdx = segments.findIndex(
+                      (seg) => time >= seg.start_time - 0.1 && time < seg.end_time + 0.1
+                    );
+                    if (matchedIdx !== -1 && matchedIdx !== curIdx) {
+                      isSeekingJumpRef.current = true;
+                      activeSegmentIndexRef.current = matchedIdx;
+                      setActiveSegmentIndex(matchedIdx);
+                      animId = requestAnimationFrame(syncLoop);
+                      return;
+                    }
                   }
+
+                  // While playing inside current sentence, KEEP activeSegment locked to curIdx!
+                  animId = requestAnimationFrame(syncLoop);
+                  return;
                 }
 
-                // 3. Continuous sync
+                // ── 3. Continuous sync ────────────────────────────────────────
                 const compTime = time + subtitleSyncOffsetRef.current;
                 const currentStillMatches =
                   currentSeg &&
@@ -706,6 +875,31 @@ export function ShadowingStudioEngine({
       activeSegmentIndexRef.current = index;
       setIsDetachedFromActive(false);
 
+      setScore(null);
+      updateUserAudioUrl(null);
+      setSpokenTranscript("");
+      if (userAudioRef.current) {
+        userAudioRef.current.pause();
+        userAudioRef.current = null;
+      }
+      setIsPlayingUserAudio(false);
+
+      updateShadowingAudioUrl(null);
+      setShadowingTranscript("");
+      setShowShadowingPreview(false);
+      if (shadowingAudioRef.current) {
+        shadowingAudioRef.current.pause();
+        shadowingAudioRef.current = null;
+      }
+      setIsPlayingShadowingAudio(false);
+      setShadowingRecordStatus("idle");
+      setRecordingStatus("idle");
+      speechRecRef.current?.stopListening();
+      speechRecRef.current?.resetTranscript();
+      try {
+        recorderRef.current?.cancel();
+      } catch {}
+
       if (playerRef.current && typeof playerRef.current.seekTo === "function") {
         seekGraceUntilRef.current = Date.now() + 800;
         seekTargetTimeRef.current = seg.start_time;
@@ -729,7 +923,7 @@ export function ShadowingStudioEngine({
         });
       }
     },
-    [activeLesson?.segments]
+    [activeLesson?.segments, updateShadowingAudioUrl, updateUserAudioUrl]
   );
   seekToSegmentRef.current = seekToSegment;
 
@@ -739,12 +933,14 @@ export function ShadowingStudioEngine({
       resetVideoProgress(targetId);
     }
     initialResumeTimeRef.current = 0;
+    currentTimeRef.current = 0;
+    hasStartedPlaybackRef.current = false;
+    setHasStartedPlayback(false);
     seekGraceUntilRef.current = Date.now() + 600;
     seekToSegment(0, false);
     if (playerRef.current && typeof playerRef.current.seekTo === "function") {
       playerRef.current.seekTo(0, true);
     }
-    toast.success("Đã quay về đầu video", "Bắt đầu học lại từ câu 1.");
   }, [seekToSegment]);
 
   const handleConfirmResume = useCallback(() => {
@@ -841,6 +1037,13 @@ export function ShadowingStudioEngine({
             ...s,
             segment_id: s.segment_id || `seg_${String(idx + 1).padStart(3, "0")}`,
           })) as CorodomoSegment[];
+          if (
+            activeLesson.youtubeId &&
+            (healed.length !== dbSegments.length ||
+              dbSegments.some((s) => /(?:^|\s)(?:>>|&gt;&gt;|--)/.test(s.text)))
+          ) {
+            saveTranscript(activeLesson.youtubeId, healed).catch(() => {});
+          }
           const resolvedLesson: CorodomoVideoLesson = {
             ...activeLessonRef.current,
             segments: healed,
@@ -869,12 +1072,37 @@ export function ShadowingStudioEngine({
     if (isPlayingVideo) {
       pauseVideo();
     } else {
-      justPausedSegRef.current = -1;
-      isAutoPausingRef.current = false;
-      setIsAutoPaused(false);
-      playVideo();
+      const cur = activeSegmentIndexRef.current;
+      const currentSeg = activeLesson?.segments?.[cur];
+      let curTime = 0;
+      try {
+        if (playerRef.current && typeof playerRef.current.getCurrentTime === "function") {
+          curTime = playerRef.current.getCurrentTime() || 0;
+        }
+      } catch {}
+
+      if (
+        (playModeRef.current === "pause_after_sentence" &&
+          (justPausedSegRef.current !== -1 ||
+            isAutoPaused ||
+            (currentSeg && curTime >= currentSeg.end_time - 0.25))) ||
+        (playModeRef.current === "loop_sentence" &&
+          currentSeg &&
+          curTime >= currentSeg.end_time - 0.25)
+      ) {
+        // Paused at end of sentence -> Replay current sentence from the beginning!
+        justPausedSegRef.current = -1;
+        isAutoPausingRef.current = false;
+        setIsAutoPaused(false);
+        seekToSegment(cur, true);
+      } else {
+        justPausedSegRef.current = -1;
+        isAutoPausingRef.current = false;
+        setIsAutoPaused(false);
+        playVideo();
+      }
     }
-  }, [isPlayingVideo, pauseVideo, playVideo, reclaimFocus]);
+  }, [isPlayingVideo, isAutoPaused, pauseVideo, playVideo, reclaimFocus, activeLesson?.segments, seekToSegment]);
 
   const handleChangePlaybackSpeed = useCallback((newSpeed: number) => {
     setPlaybackSpeed(newSpeed);
@@ -884,7 +1112,6 @@ export function ShadowingStudioEngine({
         playerRef.current.setPlaybackRate(newSpeed);
       } catch {}
     }
-    toast.info("Tốc độ phát", `${newSpeed}x`);
   }, []);
 
   const handleSelectPlayMode = useCallback((mode: ShadowingPlayMode) => {
@@ -893,7 +1120,27 @@ export function ShadowingStudioEngine({
     justPausedSegRef.current = -1;
     isAutoPausingRef.current = false;
     setIsAutoPaused(false);
-  }, []);
+
+    if (mode === "loop_sentence") {
+      const cur = activeSegmentIndexRef.current;
+      const currentSeg = activeLesson?.segments?.[cur];
+      let curTime = 0;
+      try {
+        if (playerRef.current && typeof playerRef.current.getCurrentTime === "function") {
+          curTime = playerRef.current.getCurrentTime() || 0;
+        }
+      } catch {}
+      if (
+        currentSeg &&
+        (curTime >= currentSeg.end_time - 0.25 ||
+          curTime < currentSeg.start_time - 0.5 ||
+          isAutoPaused ||
+          !isPlayingVideo)
+      ) {
+        seekToSegment(cur, true);
+      }
+    }
+  }, [activeLesson?.segments, isAutoPaused, isPlayingVideo, seekToSegment]);
 
   const cyclePlayMode = useCallback(() => {
     setPlayMode((prev) => {
@@ -907,51 +1154,85 @@ export function ShadowingStudioEngine({
       isAutoPausingRef.current = false;
       setIsAutoPaused(false);
 
-      if (next === "continuous") {
-        toast.info("Chế độ phát", "▶ Phát liên tục");
-      } else if (next === "pause_after_sentence") {
-        toast.info("Chế độ phát", "⏸ Dừng sau mỗi câu");
-      } else {
-        toast.info("Chế độ phát", "🔁 Lặp lại câu hiện tại");
+      if (next === "loop_sentence") {
+        const cur = activeSegmentIndexRef.current;
+        const currentSeg = activeLesson?.segments?.[cur];
+        let curTime = 0;
+        try {
+          if (playerRef.current && typeof playerRef.current.getCurrentTime === "function") {
+            curTime = playerRef.current.getCurrentTime() || 0;
+          }
+        } catch {}
+        if (
+          currentSeg &&
+          (curTime >= currentSeg.end_time - 0.25 ||
+            curTime < currentSeg.start_time - 0.5 ||
+            isAutoPaused ||
+            !isPlayingVideo)
+        ) {
+          seekToSegment(cur, true);
+        }
       }
+
       return next;
     });
-  }, []);
+  }, [activeLesson?.segments, isAutoPaused, isPlayingVideo, seekToSegment]);
 
   const handleNextSegment = useCallback(() => {
     reclaimFocus();
     const cur = activeSegmentIndexRef.current;
     const total = activeLesson?.segments?.length || 0;
     if (cur < total - 1) {
-      seekToSegment(cur + 1, isPlayingVideo);
+      seekToSegment(cur + 1, true);
     } else {
       setShowCompletedModal(true);
       triggerConfetti();
     }
-  }, [activeLesson?.segments?.length, isPlayingVideo, seekToSegment, reclaimFocus]);
+  }, [activeLesson?.segments?.length, seekToSegment, reclaimFocus]);
 
   const handlePrevSegment = useCallback(() => {
     reclaimFocus();
     const cur = activeSegmentIndexRef.current;
     if (cur > 0) {
-      seekToSegment(cur - 1, isPlayingVideo);
+      seekToSegment(cur - 1, true);
     }
-  }, [isPlayingVideo, seekToSegment, reclaimFocus]);
+  }, [seekToSegment, reclaimFocus]);
 
   // ─── Recording & Scoring (Phát âm mode) ──────────────────────────────
   const handleStartRecord = useCallback(async () => {
     if (isPlayingVideo) pauseVideo();
+    setPopupWord(null);
+    setPopupAnchor(null);
+    soundEffects.playMicStart();
     setScore(null);
-    setUserAudioUrl(null);
+    updateUserAudioUrl(null);
     setSpokenTranscript("");
+    if (userAudioRef.current) {
+      userAudioRef.current.pause();
+      userAudioRef.current = null;
+    }
+    setIsPlayingUserAudio(false);
     setRecordingStatus("recording");
     setRecordingStartMs(Date.now());
     speechRec.resetTranscript();
-    speechRec.startListening();
-    await recorder.start();
-  }, [isPlayingVideo, pauseVideo, recorder, speechRec]);
+
+    const settings = useSettingsStore.getState();
+    const rawStt = settings.stt?.provider;
+    const sttProvider = !rawStt || rawStt === "auto" ? "whisper-local" : rawStt;
+
+    try {
+      await recorder.start();
+      if (sttProvider === "browser") {
+        speechRec.startListening();
+      }
+    } catch {
+      toast.error("Lỗi Microphone", "Vui lòng cho phép quyền truy cập micro.");
+      setRecordingStatus("idle");
+    }
+  }, [isPlayingVideo, pauseVideo, recorder, speechRec, updateUserAudioUrl]);
 
   const handleStopRecord = useCallback(async () => {
+    soundEffects.playMicStop();
     setRecordingStatus("evaluating");
     speechRec.stopListening();
     const recording = await recorder.stop();
@@ -964,14 +1245,17 @@ export function ShadowingStudioEngine({
 
     const audioBlob = recording.blob;
     const url = URL.createObjectURL(audioBlob);
-    setUserAudioUrl(url);
+    updateUserAudioUrl(url);
 
-    let recognizedText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
     const settings = useSettingsStore.getState();
-    if (!recognizedText || recognizedText.length < 2 || settings.stt?.provider !== "browser") {
+    const rawStt = settings.stt?.provider;
+    const sttProvider = !rawStt || rawStt === "auto" ? "whisper-local" : rawStt;
+    let recognizedText = "";
+
+    if (sttProvider !== "browser") {
       try {
         const serverResult = await transcribeViaServer(audioBlob, {
-          provider: settings.stt?.provider || "groq",
+          provider: sttProvider,
           model: settings.stt?.model || "whisper-large-v3-turbo",
           language: "en-US",
           prompt: currentSegment.text,
@@ -979,7 +1263,12 @@ export function ShadowingStudioEngine({
         if (serverResult?.text) {
           recognizedText = serverResult.text.trim();
         }
-      } catch {}
+      } catch {
+        recognizedText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
+      }
+    } else {
+      await new Promise((r) => setTimeout(r, 200));
+      recognizedText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
     }
 
     setSpokenTranscript(recognizedText);
@@ -1005,7 +1294,7 @@ export function ShadowingStudioEngine({
     }
 
     setRecordingStatus("idle");
-  }, [currentSegment, recordingStartMs, recorder, speechRec]);
+  }, [currentSegment, recordingStartMs, recorder, speechRec, updateUserAudioUrl]);
 
   const handlePlayNative = useCallback(() => {
     if (currentSegment?.text) {
@@ -1035,26 +1324,69 @@ export function ShadowingStudioEngine({
 
   // ─── Shadowing Record Preview ────────────────────────────────────────
   const handleToggleShadowingRecord = useCallback(async () => {
+    const settings = useSettingsStore.getState();
+    const rawStt = settings.stt?.provider;
+    const sttProvider = !rawStt || rawStt === "auto" ? "whisper-local" : rawStt;
+
     if (shadowingRecordStatus === "recording") {
+      soundEffects.playMicStop();
       speechRec.stopListening();
       const recording = await recorder.stop();
       setShadowingRecordStatus("idle");
       if (recording && recording.blob && recording.blob.size > 0) {
         const url = URL.createObjectURL(recording.blob);
-        setShadowingAudioUrl(url);
-        setShadowingTranscript(speechRec.fullTranscript.trim() || speechRec.transcript.trim());
+        updateShadowingAudioUrl(url);
+
+        let spokenText = "";
+        if (sttProvider !== "browser") {
+          try {
+            const res = await transcribeViaServer(recording.blob, {
+              provider: sttProvider,
+              model: settings.stt?.model || "whisper-large-v3-turbo",
+              language: "en-US",
+              prompt: currentSegment.text,
+            });
+            spokenText = res?.text?.trim() || "";
+          } catch {
+            spokenText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
+          }
+        } else {
+          await new Promise((r) => setTimeout(r, 200));
+          spokenText = speechRec.fullTranscript.trim() || speechRec.transcript.trim();
+        }
+
+        setShadowingTranscript(spokenText);
+        setShowShadowingPreview(true);
         toast.success("Đã ghi lại giọng Shadowing", "Nhấn Play để nghe lại giọng bạn nhại âm!");
       }
     } else {
-      setShadowingAudioUrl(null);
+      pauseVideo();
+      setPopupWord(null);
+      setPopupAnchor(null);
+      if (shadowingAudioRef.current) {
+        shadowingAudioRef.current.pause();
+        shadowingAudioRef.current = null;
+      }
+      setIsPlayingShadowingAudio(false);
+      updateShadowingAudioUrl(null);
       setShadowingTranscript("");
+      setShowShadowingPreview(true);
       speechRec.resetTranscript();
-      speechRec.startListening();
-      await recorder.start();
-      setShadowingRecordStatus("recording");
-      toast.info("Đang thu giọng Shadowing...", "Nói đuổi song song cùng video");
+
+      try {
+        await recorder.start();
+        if (sttProvider === "browser") {
+          speechRec.startListening();
+        }
+        soundEffects.playMicStart();
+        setShadowingRecordStatus("recording");
+        toast.info("Đang thu giọng Shadowing...", "Nói đuổi song song cùng video");
+      } catch {
+        toast.error("Lỗi Microphone", "Vui lòng cho phép quyền truy cập micro.");
+        setShadowingRecordStatus("idle");
+      }
     }
-  }, [recorder, shadowingRecordStatus, speechRec]);
+  }, [currentSegment.text, pauseVideo, recorder, shadowingRecordStatus, speechRec, updateShadowingAudioUrl]);
 
   const handleTogglePlayShadowingAudio = useCallback(() => {
     if (!shadowingAudioUrl) return;
@@ -1311,7 +1643,7 @@ export function ShadowingStudioEngine({
   const handleBack = useCallback(() => {
     pauseVideo();
     if (activeLessonRef.current?.youtubeId && activeLessonRef.current.youtubeId !== "custom") {
-      let curTime = 0;
+      let curTime = currentTimeRef.current;
       if (playerRef.current && typeof playerRef.current.getCurrentTime === "function") {
         try {
           const t = playerRef.current.getCurrentTime();
@@ -1329,6 +1661,87 @@ export function ShadowingStudioEngine({
     setCornerResumePrompt(null);
     onBackToHub();
   }, [onBackToHub, pauseVideo]);
+
+  // ─── Auto-Translate Segments via Free Google Translate (EN → VI) ───
+  const handleToggleTranslation = useCallback(async () => {
+    const nextShow = !showTranslation;
+    setShowTranslation(nextShow);
+
+    if (nextShow && activeLesson?.segments && activeLesson.segments.length > 0) {
+      const missingCount = activeLesson.segments.filter(
+        (s) => !s.translationVi
+      ).length;
+
+      if (missingCount > 0 && !isTranslating) {
+        translateAbortControllerRef.current?.abort();
+        const abortController = new AbortController();
+        translateAbortControllerRef.current = abortController;
+
+        setIsTranslating(true);
+        setTranslateProgress(`0/${missingCount}`);
+        toast.info("Đang tự động dịch phụ đề tiếng Việt qua Google Dịch...");
+
+        try {
+          const curIdx = activeSegmentIndexRef.current;
+          let unFlushedCount = 0;
+
+          const translatedSegments = await translateTranscriptSegments(
+            activeLesson.segments,
+            {
+              priorityIndex: curIdx,
+              signal: abortController.signal,
+              onProgress: (done, total) => {
+                if (abortController.signal.aborted) return;
+                setTranslateProgress(`${done}/${total}`);
+              },
+              onSegmentDone: (updatedSegments, translatedIdx) => {
+                if (abortController.signal.aborted) return;
+                unFlushedCount++;
+                if (translatedIdx === curIdx || unFlushedCount >= 8) {
+                  unFlushedCount = 0;
+                  setActiveLesson((prev) => ({
+                    ...prev,
+                    segments: [...updatedSegments],
+                  }));
+                }
+              },
+            }
+          );
+
+          if (abortController.signal.aborted) return;
+
+          setActiveLesson((prev) => ({
+            ...prev,
+            segments: translatedSegments,
+          }));
+
+          onLessonUpdated?.({
+            ...activeLesson,
+            segments: translatedSegments,
+          });
+
+          // Save to IndexedDB so future visits load instantly
+          if (activeLesson.youtubeId && activeLesson.youtubeId !== "custom") {
+            saveTranscript(activeLesson.youtubeId, translatedSegments).catch(() => {});
+            updateVideoInLibrary(activeLesson.id, {
+              segments: translatedSegments,
+            });
+          }
+
+          toast.success("Đã hoàn tất dịch phụ đề tiếng Việt!");
+        } catch (err) {
+          if (abortController.signal.aborted) return;
+          console.error("Lỗi dịch phụ đề:", err);
+          toast.error("Không thể dịch toàn bộ phụ đề. Vui lòng thử lại.");
+        } finally {
+          if (translateAbortControllerRef.current === abortController) {
+            setIsTranslating(false);
+            setTranslateProgress(null);
+          }
+        }
+      }
+    }
+  }, [showTranslation, activeLesson, isTranslating, onLessonUpdated]);
 
   // ─── Transcript Downloads & Copying ──────────────────────────────────
   const handleDownloadTranscript = () => {
@@ -1352,6 +1765,11 @@ export function ShadowingStudioEngine({
   };
 
   // ─── Sidebar Filtering & Auto-scroll ─────────────────────────────────
+  const segmentIndexById = useMemo(
+    () => new Map(activeLesson.segments.map((s, idx) => [s.segment_id, idx])),
+    [activeLesson.segments]
+  );
+
   const filteredSegments = useMemo(() => {
     if (!transcriptSearch.trim()) return activeLesson.segments;
     const q = transcriptSearch.toLowerCase();
@@ -1469,29 +1887,13 @@ export function ShadowingStudioEngine({
                   ))}
                 </div>
               )}
-
-              {showTranslation && currentSegment.translationVi && (
-                <p className="text-xs text-foreground/90 font-bold leading-tight mt-1 max-w-2xl line-clamp-2">
-                  {currentSegment.translationVi}
-                </p>
-              )}
             </>
           )}
 
-          {/* Listen & Repeat Status Banner */}
-          {playMode === "pause_after_sentence" && (justPausedSegRef.current === activeSegmentIndex || isAutoPaused) && !isPlayingVideo && (
-            <div className="mt-1 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-semibold animate-in fade-in-0 zoom-in-95 shadow-xs">
-              <PauseCircle className="size-3.5 animate-pulse shrink-0" />
-              <span>Đã dừng cuối câu • Bấm phím [→] hoặc [Enter] để sang câu sau • Bấm [Space] để nghe lại</span>
-            </div>
-          )}
-
-          {/* Loop 1 Sentence Paused Status Banner */}
-          {playMode === "loop_sentence" && !isPlayingVideo && (
-            <div className="mt-1 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-indigo-600 dark:text-indigo-400 text-xs font-semibold animate-in fade-in-0 zoom-in-95 shadow-xs">
-              <Repeat1 className="size-3.5 animate-pulse shrink-0" />
-              <span>Đang tạm dừng • Bấm phím [→] hoặc [Enter] để sang câu sau • Bấm [Space] để tiếp tục lặp</span>
-            </div>
+          {showTranslation && currentSegment.translationVi && (
+            <p className="text-xs text-foreground/90 font-bold leading-tight mt-1 max-w-2xl line-clamp-2 text-center">
+              {currentSegment.translationVi}
+            </p>
           )}
         </div>
 
@@ -1647,50 +2049,28 @@ export function ShadowingStudioEngine({
             </button>
 
             <button
-              onClick={() => setShowTranslation(!showTranslation)}
+              type="button"
+              onClick={handleToggleTranslation}
+              disabled={isTranslating}
               className={cn(
-                "px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1",
+                "px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer select-none",
                 showTranslation
                   ? "bg-primary/10 text-primary border border-primary/40"
-                  : "bg-muted/40 text-muted-foreground border border-border/60"
+                  : "bg-muted/40 text-muted-foreground border border-border/60 hover:text-foreground"
               )}
             >
-              <Check className={cn("size-3", showTranslation ? "opacity-100" : "opacity-0")} />
-              <span>Bản dịch</span>
+              {isTranslating ? (
+                <>
+                  <Loader2 className="size-3 animate-spin text-primary" />
+                  <span>{translateProgress ? `Dịch (${translateProgress})` : "Đang dịch..."}</span>
+                </>
+              ) : (
+                <>
+                  <Check className={cn("size-3", showTranslation ? "opacity-100" : "opacity-0")} />
+                  <span>Bản dịch</span>
+                </>
+              )}
             </button>
-
-            {/* Sync calibration */}
-            <div className="hidden sm:flex items-center gap-1 pl-1.5 border-l border-border/50">
-              <span className="text-[10px] font-mono font-bold text-muted-foreground select-none">
-                Sync:
-              </span>
-              <button
-                onClick={() => handleAdjustSyncOffset(-0.25)}
-                className="size-5 rounded bg-muted/40 hover:bg-muted text-[10px] font-mono font-bold text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors select-none cursor-pointer"
-                title="Hiện phụ đề muộn hơn 0.25s (-0.25s)"
-              >
-                -
-              </button>
-              <button
-                onClick={handleResetSyncOffset}
-                className={cn(
-                  "px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border transition-colors select-none cursor-pointer",
-                  subtitleSyncOffset === 0.35
-                    ? "bg-primary/10 text-primary border-primary/30"
-                    : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
-                )}
-                title="Click để reset về mức bù chuẩn (+0.35s)"
-              >
-                {subtitleSyncOffset > 0 ? `+${subtitleSyncOffset}s` : `${subtitleSyncOffset}s`}
-              </button>
-              <button
-                onClick={() => handleAdjustSyncOffset(0.25)}
-                className="size-5 rounded bg-muted/40 hover:bg-muted text-[10px] font-mono font-bold text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors select-none cursor-pointer"
-                title="Hiện phụ đề sớm hơn 0.25s (+0.25s)"
-              >
-                +
-              </button>
-            </div>
           </div>
 
           {/* Center: Play, Navigation & 3-Mode Playback Switcher */}
@@ -1952,9 +2332,7 @@ export function ShadowingStudioEngine({
             </div>
           ) : (
             filteredSegments.map((seg) => {
-              const originalIndex = activeLesson.segments.findIndex(
-                (s) => s.segment_id === seg.segment_id
-              );
+              const originalIndex = segmentIndexById.get(seg.segment_id) ?? 0;
               const isActive = originalIndex === activeSegmentIndex;
 
               return (
@@ -1993,10 +2371,9 @@ export function ShadowingStudioEngine({
                         isActive ? "font-bold text-foreground" : "text-foreground/90 font-medium"
                       )}
                     >
-                      {seg.text}
+                      {cleanSegmentText(seg.text)}
                     </p>
-
-                    {seg.translationVi && (
+                    {showTranslation && seg.translationVi && (
                       <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">
                         {seg.translationVi}
                       </p>
@@ -2133,7 +2510,7 @@ export function ShadowingStudioEngine({
                   <p className="text-xs font-semibold text-foreground leading-snug">
                     {seg.text}
                   </p>
-                  {seg.translationVi && (
+                  {showTranslation && seg.translationVi && (
                     <p className="text-[11px] text-muted-foreground mt-0.5 italic">
                       {seg.translationVi}
                     </p>
@@ -2217,11 +2594,15 @@ export function ShadowingStudioEngine({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setShowTranslation(!showTranslation)}
-              className="size-6 p-0 rounded-md text-muted-foreground hover:text-foreground"
-              title="Ẩn/Hiện dịch nghĩa"
+              onClick={handleToggleTranslation}
+              disabled={isTranslating}
+              className={cn(
+                "size-6 p-0 rounded-md cursor-pointer",
+                showTranslation ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
+              )}
+              title="Ẩn/Hiện dịch nghĩa tiếng Việt"
             >
-              <Languages className="size-3" />
+              {isTranslating ? <Loader2 className="size-3 animate-spin text-primary" /> : <Languages className="size-3" />}
             </Button>
           </div>
         </div>
@@ -2609,7 +2990,7 @@ export function ShadowingStudioEngine({
           </div>
 
           {/* Restart from beginning button */}
-          {(currentTime > 2 || activeSegmentIndex > 0) && (
+          {(hasStartedPlayback || activeSegmentIndex > 0) && (
             <Button
               variant="ghost"
               size="sm"

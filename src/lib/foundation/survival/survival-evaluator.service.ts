@@ -15,27 +15,14 @@ import {
   normalizeSpokenText,
 } from "./fast-pass.service";
 
+import { cleanAiJson } from "@/lib/foundation/shared/json-parser";
+
 function cleanJson(text: string): unknown {
-  let cleaned = text.trim()
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "");
-
-  cleaned = cleaned.replace(/\b[a-zA-Z0-9_]+\s*=\s*(")/g, "$1");
-  cleaned = cleaned.replace(/,\s*([}\]])/g, "$1");
-
+  const cleaned = cleanAiJson(text);
+  if (!cleaned) return null;
   try {
     return JSON.parse(cleaned);
   } catch {
-    const m = cleaned.match(/\{[\s\S]*\}/);
-    if (m) {
-      try {
-        const candidate = m[0]
-          .replace(/\b[a-zA-Z0-9_]+\s*=\s*(")/g, "$1")
-          .replace(/,\s*([}\]])/g, "$1");
-        return JSON.parse(candidate);
-      } catch {}
-    }
     return null;
   }
 }
@@ -51,7 +38,7 @@ export async function evaluateCircumlocutionAttempt(params: {
   model?: string;
 }): Promise<SurvivalEvaluationResult> {
   const provider = params.provider || "gemini";
-  const model = params.model && params.model !== "auto" ? params.model : "gemini-3.5-flash-lite";
+  const model = params.model || "auto";
   const hintTierUsed = params.hintTierUsed ?? 0;
   const attemptNumber = params.attemptNumber ?? 1;
   const speechDurationMs = params.speechDurationMs ?? 2800;
@@ -158,25 +145,13 @@ export async function evaluateCircumlocutionAttempt(params: {
     return buildDeterministicFallback();
   }
 
-  const userPrompt = `Evaluate this Circumlocution Attempt according to Aristotelian Definition Paradigm:
-TARGET WORD (FORBIDDEN): "${params.task.targetWord}"
-FORBIDDEN TABOO LIST: ${JSON.stringify(params.task.forbiddenWords)}
-EXPECTED GENUS (CATEGORY): "${params.task.genus || params.task.category}"
-EXPECTED DIFFERENTIA (FUNCTION): "${params.task.differentia || params.task.hints.functionHint || ""}"
-SEMANTIC ANCHORS: ${JSON.stringify(params.task.semanticKeyAnchors || [])}
-USER SPOKEN TRANSCRIPT: "${params.userTranscript}"
-MEASURED LATENCY: ${params.responseLatencyMs} ms
-SPEECH DURATION: ${speechDurationMs} ms
-HINT TIER USED (0-4): ${hintTierUsed}
-ATTEMPT NUMBER: ${attemptNumber}
-
-DETERMINISTIC PRE-ANALYSIS:
-- Taboo Violated: ${analysis.tabooViolated ? `YES ("${analysis.violatedWord}")` : "NO"}
-- Genus Detected: ${analysis.genusDetected ? "YES" : "NO"}
-- Differentia Detected: ${analysis.differentiaDetected ? "YES" : "NO"}
-
-Evaluate the LISTENER GUESS TEST: Based strictly on the user's transcript, what would an English native speaker guess?
-Return strict JSON only.`;
+  const userPrompt = `CIRCUMLOCUTION EVAL:
+TARGET(FORBIDDEN): "${params.task.targetWord}" | TABOO: ${JSON.stringify(params.task.forbiddenWords)}
+GENUS: "${params.task.genus || params.task.category}" | DIFFERENTIA: "${params.task.differentia || params.task.hints.functionHint || ""}"
+ANCHORS: ${JSON.stringify(params.task.semanticKeyAnchors || [])}
+SPOKEN: "${params.userTranscript}" (latency=${params.responseLatencyMs}ms, duration=${speechDurationMs}ms, hintTier=${hintTierUsed}, attempt=${attemptNumber})
+PRE-CHECK: tabooViolated=${analysis.tabooViolated ? `YES("${analysis.violatedWord}")` : "NO"}, genus=${analysis.genusDetected}, differentia=${analysis.differentiaDetected}
+Return strict JSON.`;
 
   const attemptEvaluate = async (): Promise<SurvivalEvaluationResult | null> => {
     try {
@@ -187,7 +162,7 @@ Return strict JSON only.`;
           messages: [{ role: "user", content: userPrompt }],
           systemInstruction: SURVIVAL_EVALUATOR_SYSTEM,
           temperature: 0.2,
-          maxOutputTokens: 900,
+          maxOutputTokens: 650,
         },
       });
 
@@ -265,7 +240,7 @@ export async function evaluateSurvivalScenarioAttempt(params: {
   model?: string;
 }): Promise<SurvivalEvaluationResult> {
   const provider = params.provider || "gemini";
-  const model = params.model && params.model !== "auto" ? params.model : "gemini-3.5-flash-lite";
+  const model = params.model || "auto";
   const hintTierUsed = params.hintTierUsed ?? 0;
   const attemptNumber = params.attemptNumber ?? 1;
   const speechDurationMs = params.speechDurationMs ?? 2500;
@@ -331,17 +306,10 @@ export async function evaluateSurvivalScenarioAttempt(params: {
     return buildDeterministic(isSuccessful);
   }
 
-  const userPrompt = `Evaluate this Real-Life Survival Scenario Attempt:
-SCENARIO CONTEXT: ${params.task.contextTitleVi}
-PROBLEM: ${params.task.problemDescriptionVi}
-AUDIO PROMPT: "${params.task.audioPromptText}"
-RECOMMENDED SKILL: ${params.task.recommendedSkill}
-USER REPAIR ATTEMPT: "${params.userTranscript}"
-MEASURED LATENCY: ${params.responseLatencyMs} ms
-SPEECH DURATION: ${speechDurationMs} ms
-HINT TIER USED (0-4): ${hintTierUsed}
-ATTEMPT NUMBER: ${attemptNumber}
-
+  const userPrompt = `SURVIVAL SCENARIO EVAL:
+CONTEXT: ${params.task.contextTitleVi} — ${params.task.problemDescriptionVi}
+PROMPT: "${params.task.audioPromptText}" | SKILL: ${params.task.recommendedSkill}
+SPOKEN: "${params.userTranscript}" (latency=${params.responseLatencyMs}ms, duration=${speechDurationMs}ms, hintTier=${hintTierUsed}, attempt=${attemptNumber})
 Return strict JSON.`;
 
   const attemptEvaluate = async (): Promise<SurvivalEvaluationResult | null> => {
@@ -353,7 +321,7 @@ Return strict JSON.`;
           messages: [{ role: "user", content: userPrompt }],
           systemInstruction: SURVIVAL_EVALUATOR_SYSTEM,
           temperature: 0.2,
-          maxOutputTokens: 900,
+          maxOutputTokens: 650,
         },
       });
 

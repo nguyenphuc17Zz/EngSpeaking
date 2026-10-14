@@ -25,8 +25,12 @@ export class GroqProvider implements AIProvider {
     try {
       const controller = new AbortController();
       const t = setTimeout(() => controller.abort(), 8000);
-      const res = await fetch(MODELS_URL, { headers: { Authorization: `Bearer ${this.apiKey}` }, signal: controller.signal });
-      clearTimeout(t);
+      let res: Response;
+      try {
+        res = await fetch(MODELS_URL, { headers: { Authorization: `Bearer ${this.apiKey}` }, signal: controller.signal });
+      } finally {
+        clearTimeout(t);
+      }
       if (!res.ok) return getModelsForProvider("groq");
       const data = (await res.json()) as { data?: Array<{ id: string; active?: boolean; context_window?: number }> };
       const models: AIModel[] = [];
@@ -61,12 +65,12 @@ export class GroqProvider implements AIProvider {
     if (input.systemInstruction) messages.push({ role: "system", content: input.systemInstruction });
     for (const m of input.messages) messages.push({ role: m.role, content: m.content });
     if (!messages.length) messages.push({ role: "user", content: "Hello" });
-    const isReasoningModel = model.includes("gpt-oss") || model.includes("deepseek-r1");
+    const combinedText = `${input.systemInstruction || ""}\n${messages.map((m) => m.content).join("\n")}`;
+    const wantsJson = /\bjson\b/i.test(combinedText);
+    const isReasoningModel = model.includes("gpt-oss") || model.includes("deepseek-r1") || model.includes("qwen3");
     let maxTokens = input.maxOutputTokens || 600;
-    if (isReasoningModel && maxTokens < 3500) {
-      // Groq reasoning models (e.g. openai/gpt-oss-120b) generate 500-1100 reasoning tokens internally,
-      // which count against max_tokens. Ensure at least 3500 tokens headroom so output is not cut off.
-      maxTokens = 3500;
+    if (isReasoningModel && maxTokens < 1800) {
+      maxTokens = 1800;
     }
     const payload: Record<string, unknown> = {
       model,
@@ -76,22 +80,29 @@ export class GroqProvider implements AIProvider {
       max_tokens: maxTokens,
       max_completion_tokens: maxTokens,
     };
+    if (model.includes("gpt-oss") || model.includes("qwen3")) {
+      payload.reasoning_effort = "low";
+    }
+    if (wantsJson && !model.includes("deepseek-r1")) {
+      payload.response_format = { type: "json_object" };
+    }
     const start = Date.now();
     let res: Response;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
       res = await fetch(CHAT_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.apiKey}` },
         body: JSON.stringify(payload),
         signal: controller.signal,
       });
-      clearTimeout(timer);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.toLowerCase().includes("abort")) throw new VoiceEngineError({ code: VoiceErrorCode.TIMEOUT, message: `Groq timeout`, provider: "groq" });
       throw new VoiceEngineError({ code: VoiceErrorCode.NETWORK_ERROR, message: msg, provider: "groq" });
+    } finally {
+      clearTimeout(timer);
     }
     const latencyMs = Date.now() - start;
     if (!res.ok) {
@@ -124,14 +135,15 @@ export class GroqProvider implements AIProvider {
     }
     form.append("temperature", "0");
     let res: Response;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
       res = await fetch(TRANSCRIBE_URL, { method: "POST", headers: { Authorization: `Bearer ${this.apiKey}` }, body: form, signal: controller.signal });
-      clearTimeout(timer);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       throw new VoiceEngineError({ code: VoiceErrorCode.NETWORK_ERROR, message: msg, provider: "groq", model });
+    } finally {
+      clearTimeout(timer);
     }
     if (!res.ok) {
       const body = await res.text().catch(() => "");

@@ -109,7 +109,7 @@ export default function SpokenRepairLabPage() {
   const [elapsedDurationMs, setElapsedDurationMs] = useState(0);
   const [promptDisplayTime, setPromptDisplayTime] = useState(Date.now());
   const durationTimerRef = useRef<NodeJS.Timeout | null>(null);
-
+  const isSubmittingRef = useRef(false);
   const autoLaunchedRef = useRef(false);
 
   // Zero-Lobby: Auto-launch first challenge on mount
@@ -210,20 +210,25 @@ export default function SpokenRepairLabPage() {
 
   // Confirm submit speech attempt
   const handleConfirmSubmit = useCallback(async () => {
-    if (!pendingSpokenText || !activeSession) return;
+    if (!pendingSpokenText || !activeSession || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     const responseLatency = Math.max(400, recordingStartTime ? recordingStartTime - promptDisplayTime : 1500);
 
-    const result = await submitRepairSpokenAttempt({
-      spokenTranscript: pendingSpokenText,
-      responseLatencyMs: responseLatency,
-      speechDurationMs: pendingDurationMs,
-      expectedSentence: activeSession.targetCorrection.betterSentence,
-    });
+    try {
+      const result = await submitRepairSpokenAttempt({
+        spokenTranscript: pendingSpokenText,
+        responseLatencyMs: responseLatency,
+        speechDurationMs: pendingDurationMs,
+        expectedSentence: activeSession.targetCorrection.betterSentence,
+      });
 
-    if (result?.isSuccessful) {
-      soundEffects.playAIReady();
+      if (result?.isSuccessful) {
+        soundEffects.playAIReady();
+      }
+      setPendingSpokenText(null);
+    } finally {
+      isSubmittingRef.current = false;
     }
-    setPendingSpokenText(null);
   }, [pendingSpokenText, activeSession, recordingStartTime, promptDisplayTime, pendingDurationMs, submitRepairSpokenAttempt]);
 
   // Re-record
@@ -231,6 +236,18 @@ export default function SpokenRepairLabPage() {
     setPendingSpokenText(null);
     handleStartRecord();
   }, [handleStartRecord]);
+
+  // Exit Studio
+  const handleExitStudio = useCallback(() => {
+    if (durationTimerRef.current) clearInterval(durationTimerRef.current);
+    if (unifiedSTTRef.current.isListening) {
+      unifiedSTTRef.current.stopListening().catch(() => {});
+    }
+    setPendingSpokenText(null);
+    setCurrentHintTier(0);
+    resetSession();
+    router.push("/");
+  }, [resetSession, router]);
 
   // Next challenge
   const handleNextChallenge = useCallback(() => {
@@ -299,16 +316,18 @@ export default function SpokenRepairLabPage() {
           setPendingSpokenText(null);
         }
       } else if (e.key === "Enter") {
-        if (pendingSpokenText && !isEvaluatingRepair) {
-          e.preventDefault();
-          handleConfirmSubmit();
-        } else if (lastRepairResult) {
+        if (lastRepairResult) {
           e.preventDefault();
           handleNextChallenge();
         }
       } else if (e.key === "Escape") {
+        e.preventDefault();
         if (isTopicModalOpen) {
           setIsTopicModalOpen(false);
+        } else if (currentHintTier > 0) {
+          setCurrentHintTier(0);
+        } else {
+          handleExitStudio();
         }
       }
     };
@@ -317,6 +336,7 @@ export default function SpokenRepairLabPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
     isTopicModalOpen,
+    currentHintTier,
     lastRepairResult,
     pendingSpokenText,
     isEvaluatingRepair,
@@ -326,6 +346,7 @@ export default function SpokenRepairLabPage() {
     handleReRecord,
     handleConfirmSubmit,
     handleNextChallenge,
+    handleExitStudio,
   ]);
 
   const liveText = pendingSpokenText || unifiedSTT.transcript || unifiedSTT.interimTranscript;
@@ -348,58 +369,55 @@ export default function SpokenRepairLabPage() {
     );
   }
 
-  // 2. Main Studio View (Professional 3-Column Zero-Scroll Layout)
+  // 2. Main Studio View (Professional 3-Column Zero-Scroll Layout — JapSpeak CombatCapsuleHUD Style)
   return (
-    <div className="w-full h-full max-h-[calc(100vh-5.5rem)] flex flex-col justify-between overflow-hidden rounded-3xl border border-border/80 bg-card p-2.5 sm:p-3.5 shadow-xs animate-in fade-in-0 duration-200">
-      {/* Studio Top Header */}
-      <header className="flex items-center justify-between border-b border-border/40 pb-2.5 shrink-0 gap-3">
-        {/* Left: Exit button & Inline Topic Selector */}
-        <div className="flex items-center gap-2.5">
-          <Link href="/">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="size-8 p-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
-              title="Thoát về Trang chủ"
-            >
-              <X className="size-4" />
-            </Button>
-          </Link>
+    <div className="w-full h-full max-h-[calc(100vh-5rem)] flex flex-col justify-between overflow-hidden rounded-none border-2 border-border bg-card p-2.5 sm:p-3.5 shadow-[4px_4px_0px_var(--industrial-shadow-color)] animate-in fade-in-0 duration-200">
+      {/* Studio Top Header (JapSpeak CombatCapsuleHUD Style) */}
+      <header className="flex flex-wrap items-center justify-between gap-2.5 border-b-2 border-border pb-2.5 shrink-0">
+        {/* Left: Exit button + Lab Badge + Volt Lime Topic Selector */}
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
+          <button
+            type="button"
+            onClick={handleExitStudio}
+            className="size-8 shrink-0 bg-foreground text-background hover:bg-primary hover:text-primary-foreground border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] flex items-center justify-center transition-colors cursor-pointer"
+            title="Thoát phiên luyện tập [ESC]"
+          >
+            <X className="size-4 stroke-[2.5]" />
+          </button>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs md:text-sm font-bold tracking-tight text-foreground flex items-center gap-1.5">
-              <RotateCcw className="size-3.5 text-amber-500" />
-              <span>Spoken Repair Lab</span>
+          <span className="px-2 py-1 bg-primary text-primary-foreground font-mono text-[10px] font-extrabold border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] uppercase tracking-wider shrink-0">
+            LAB-03 // REPAIR #{String(currentChallengeIndex + 1).padStart(2, "0")}
+          </span>
+
+          <span className="text-xs md:text-sm font-serif font-extrabold uppercase tracking-tight text-foreground hidden sm:inline">
+            Sửa lỗi khi nói
+          </span>
+
+          {/* In-Studio Topic Selector Badge */}
+          <button
+            type="button"
+            onClick={() => setIsTopicModalOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-accent text-accent-foreground hover:bg-primary hover:text-primary-foreground border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] text-xs font-mono font-extrabold transition-all cursor-pointer group max-w-[200px] sm:max-w-[260px] truncate"
+            title="Bấm để đổi chủ đề luyện tập"
+          >
+            <Compass className="size-3.5 shrink-0 stroke-[2.5] group-hover:rotate-45 transition-transform" />
+            <span className="truncate">
+              {getTopicDisplay(activeSession.topic || selectedTopicId).label}
             </span>
-
-            {/* In-Studio Topic Selector Badge */}
-            <button
-              type="button"
-              onClick={() => setIsTopicModalOpen(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-foreground text-xs font-mono transition-all cursor-pointer group max-w-[200px] sm:max-w-[260px] truncate"
-              title="Bấm để đổi chủ đề luyện tập"
-            >
-              <Compass className="size-3 text-amber-500 shrink-0 group-hover:rotate-45 transition-transform" />
-              <span className="truncate font-medium">
-                {getTopicDisplay(activeSession.topic || selectedTopicId).label}
-              </span>
-              <ChevronDown className="size-3 text-muted-foreground shrink-0 ml-0.5" />
-            </button>
-
-            <GlobalAiSelector size="sm" />
-          </div>
+            <ChevronDown className="size-3.5 shrink-0 ml-0.5 stroke-[2.5]" />
+          </button>
         </div>
 
         {/* Center: Preparation Countdown Badge */}
         {prepSecondsLeft !== null && prepSecondsLeft > 0 ? (
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-mono font-bold animate-pulse">
+          <div className="flex items-center gap-1.5 px-3 py-1 bg-primary text-primary-foreground border-2 border-border shadow-[2px_2px_0px_var(--industrial-shadow-color)] text-xs font-mono font-extrabold animate-pulse">
             <Clock className="size-3.5" />
-            <span>Nói sau {prepSecondsLeft.toFixed(1)}s...</span>
+            <span>NÓI SAU {prepSecondsLeft.toFixed(1)}S...</span>
           </div>
         ) : null}
 
         {/* Right Actions: Next challenge, Counter & Finish */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2 shrink-0">
           {/* Next Task Button */}
           <Button
             type="button"
@@ -407,29 +425,21 @@ export default function SpokenRepairLabPage() {
             size="sm"
             onClick={handleNextChallenge}
             disabled={isGeneratingChallenge || isEvaluatingRepair}
-            className="h-8 px-2.5 rounded-xl font-bold text-xs gap-1.5 border-primary/40 bg-primary/5 hover:bg-primary hover:text-primary-foreground text-primary transition-all shadow-2xs btn-spring"
+            className="h-8 px-2.5 font-mono font-extrabold text-xs gap-1.5 border-2 border-border bg-secondary hover:bg-accent hover:text-accent-foreground text-foreground shadow-[2px_2px_0px_var(--industrial-shadow-color)] transition-all"
             title="Đổi sang câu sửa lỗi tiếp theo (phím R)"
           >
             {isGeneratingChallenge ? (
-              <Loader2 className="size-3.5 animate-spin" />
+              <Loader2 className="size-3.5 animate-spin text-primary" />
             ) : (
               <Sparkles className="size-3.5 text-primary" />
             )}
-            <span className="hidden sm:inline">Câu tiếp theo</span>
-            <span className="text-[9px] font-mono opacity-60 hidden sm:inline">[R]</span>
+            <span>BÀI TIẾP</span>
+            <kbd className="hidden sm:inline-flex">R</kbd>
           </Button>
 
           {/* Endless Progress Indicator */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono font-bold text-foreground">
-              Câu #{currentChallengeIndex + 1}
-            </span>
-            <Badge
-              variant="outline"
-              className="text-[10px] font-mono border-amber-500/30 text-amber-600 dark:text-amber-400"
-            >
-              Đã sửa {completedChallengesCount}
-            </Badge>
+          <div className="hidden md:flex items-center gap-1.5 px-2 py-1 bg-secondary border-2 border-border font-mono text-[10px] font-extrabold text-foreground">
+            <span>DONE: {completedChallengesCount}</span>
           </div>
 
           {/* Finish & View Summary Button */}
@@ -438,12 +448,11 @@ export default function SpokenRepairLabPage() {
             size="sm"
             onClick={finishSessionManually}
             disabled={isGeneratingChallenge || isEvaluatingRepair}
-            className="h-8 px-2.5 rounded-xl font-bold text-xs gap-1.5 border-amber-500/40 bg-amber-500/10 hover:bg-amber-500 hover:text-white text-amber-600 dark:text-amber-400 transition-all shadow-2xs btn-spring"
+            className="h-8 px-2.5 font-mono font-extrabold text-xs gap-1.5 border-2 border-border bg-foreground text-background hover:bg-primary hover:text-primary-foreground shadow-[2px_2px_0px_var(--industrial-shadow-color)] transition-all"
             title="Kết thúc buổi tập và xem báo cáo tổng kết"
           >
-            <Trophy className="size-3.5" />
-            <span className="hidden sm:inline">Kết thúc & Xem kết quả</span>
-            <span className="sm:hidden">Nghỉ tập</span>
+            <Trophy className="size-3.5 text-accent" />
+            <span className="hidden sm:inline">KẾT THÚC</span>
           </Button>
         </div>
       </header>
@@ -493,6 +502,8 @@ export default function SpokenRepairLabPage() {
             session={activeSession}
             currentHintTier={currentHintTier}
             onSelectHintTier={setCurrentHintTier}
+            attemptIndex={currentChallengeIndex}
+            totalAttempts={10}
             onRegenerateWithAI={handleRegenerateWithAI}
             isRegeneratingAI={isGeneratingChallenge}
           />
@@ -559,35 +570,43 @@ export default function SpokenRepairLabPage() {
         </div>
       </main>
 
-      {/* Studio Footer Keybindings Dock */}
-      <footer className="flex items-center justify-between border-t border-border/40 pt-1.5 shrink-0 text-[11px] font-mono text-muted-foreground">
-        <div className="flex items-center gap-3 overflow-x-auto py-0.5">
-          <span>
-            [Space]: {lastRepairResult ? "Nói lại" : pendingSpokenText ? "Thu âm lại" : "Thu âm/Dừng"}
+      {/* Bottom Footer Dock (JapSpeak Mechanical Keycaps Style) */}
+      <footer className="flex flex-wrap items-center justify-between gap-2 border-t-2 border-border pt-2 shrink-0 text-[10px] font-mono font-extrabold text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="flex items-center gap-1">
+            <kbd>SPACE</kbd>
+            <span>{lastRepairResult ? "NÓI LẠI" : pendingSpokenText ? "THU LẠI" : "THU ÂM/DỪNG"}</span>
           </span>
-          <span>•</span>
-          <span className="hidden sm:inline">[Backspace]: Xóa nói lại</span>
-          <span className="hidden sm:inline">•</span>
-          <span>[H]: Gợi ý ({currentHintTier}/4)</span>
-          <span>•</span>
-          <span>[R]: Câu tiếp</span>
+          <span className="flex items-center gap-1">
+            <kbd>BKSP</kbd>
+            <span>XOÁ NÓI LẠI</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <kbd>H</kbd>
+            <span>GỢI Ý (T{currentHintTier}/4)</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <kbd>R</kbd>
+            <span>ĐỔI BÀI</span>
+          </span>
           {pendingSpokenText && !isEvaluatingRepair && (
-            <>
-              <span>•</span>
-              <span className="text-primary font-bold">[Enter]: Nộp bài</span>
-            </>
+            <span className="flex items-center gap-1 text-primary">
+              <kbd>ENTER</kbd>
+              <span>NỘP BÀI</span>
+            </span>
           )}
           {lastRepairResult && (
-            <>
-              <span>•</span>
-              <span className="text-primary font-bold">[Enter]: Câu tiếp theo</span>
-            </>
+            <span className="flex items-center gap-1 text-primary">
+              <kbd>ENTER</kbd>
+              <span>BÀI MỚI</span>
+            </span>
           )}
         </div>
 
-        <div className="flex items-center gap-2 font-mono text-[10px]">
-          <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="hidden md:inline">Spoken Repair Studio Active</span>
+        <div className="flex items-center gap-2">
+          <span className="px-2 py-0.5 bg-secondary text-foreground border border-border">
+            REPAIR LOOP ACTIVE
+          </span>
         </div>
       </footer>
 
